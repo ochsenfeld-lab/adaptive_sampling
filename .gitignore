@@ -1,0 +1,10 @@
+__pychage__
+*.pyc
+/venv/
+.idea
+
+# output files
+.npz
+.npy
+.out
+.dat
