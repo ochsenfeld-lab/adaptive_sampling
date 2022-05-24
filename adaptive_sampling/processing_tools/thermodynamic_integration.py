@@ -1,5 +1,6 @@
 import numpy as np
 
+
 def integrate(
     mean_force: np.ndarray,
     dx: float,
