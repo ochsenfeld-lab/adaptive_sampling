@@ -110,22 +110,19 @@ def write_us_data(
     traj_list, _, meta_f = get_us_windows(centers, xi, la, sigma, T=T)
 
     for i in range(len(centers)):
-        out = open("cv_meta.dat", "a")
-        out.write("umbrella_%d.dat\t%14.6f\t%14.6f\n" % (i, meta_f[i, 1], meta_f[i, 2]))
-        out.close()
+        with open("cv_meta.dat", "a") as fout:
+            fout.write("umbrella_%d.dat\t%14.6f\t%14.6f\n" % (i, meta_f[i, 1], meta_f[i, 2]))
 
-        timeseries = open("umbrella_%d.dat" % i, "w")
-        for t, cv in enumerate(traj_list[i]):
-            timeseries.write("%d\t%14.6f\n" % (t, cv))
-        timeseries.close()
+        with open("umbrella_%d.dat" % i, "w") as timeseries:
+            for t, cv in enumerate(traj_list[i]):
+                timeseries.write("%d\t%14.6f\n" % (t, cv))
 
     if E_pot is not None:
         E_list, _, _ = get_us_windows(centers, E_pot, la, sigma, T=T)
         for i in range(len(centers)):
-            e_series = open("epot_%d.dat" % i, "w")
-            for t, epot in enumerate(E_list[i]):
-                e_series.write("%d\t%14.6f\n" % (t, epot))
-            e_series.close()
+            with open("epot_%d.dat" % i, "w") as e_series:
+                for t, epot in enumerate(E_list[i]):
+                    e_series.write("%d\t%14.6f\n" % (t, epot))
 
 
 def welford_var(

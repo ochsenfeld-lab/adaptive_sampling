@@ -100,22 +100,22 @@ class EnhancedSampling(ABC):
                 print(f"\n Initialize {self.cv[i]} as collective variable:")
                 if self.cv_type[i] == "angle":
                     output_dat = (
-                        self.minx[i] / np.pi / 180.0, 
-                        self.maxx[i] / np.pi / 180.0, 
-                        self.dx[i] / np.pi / 180.0, 
+                        self.minx[i] / np.pi / 180.0,
+                        self.maxx[i] / np.pi / 180.0,
+                        self.dx[i] / np.pi / 180.0,
                         'Degree'
                     )
                 elif self.cv_type[i] == "distance":
                     output_dat = (
-                        self.minx[i]  * 0.52917721092e0, 
-                        self.maxx[i]  * 0.52917721092e0, 
+                        self.minx[i]  * 0.52917721092e0,
+                        self.maxx[i]  * 0.52917721092e0,
                         self.dx[i] * 0.52917721092e0,
                         'Angstrom'
                     )
                 else:
                     output_dat = (
-                        self.minx[i], 
-                        self.maxx[i], 
+                        self.minx[i],
+                        self.maxx[i],
                         self.dx[i],
                         ''
                     )
@@ -268,29 +268,28 @@ class EnhancedSampling(ABC):
                 grid /= 0.52917721092e0  # Bohr to Angstrom
 
         # head of data columns
-        out = open(filename, "w")
-        for i in range(self.ncoords):
-            out.write("%14s\t" % "CV{dim}".format(dim=i))
-        for kw in data.keys():
-            out.write("%14s\t" % kw)
-        out.write("\n")
+        with open(filename, "w") as fout:
+            for i in range(self.ncoords):
+                fout.write("%14s\t" % "CV{dim}".format(dim=i))
+            for kw in data.keys():
+                fout.write("%14s\t" % kw)
+            fout.write("\n")
 
-        # write data to columns
-        if self.ncoords == 1:
-            for i in range(self.nbins):
-                out.write("%14.6f\t" % grid[0][i])
-                for dat in data.values():
-                    out.write("%14.6f\t" % dat[0][i])
-                out.write("\n")
-
-        if self.ncoords == 2:
-            for i in range(self.nbins_per_dim[1]):
-                for j in range(self.nbins_per_dim[0]):
-                    out.write("%14.6f\t%14.6f\t" % (grid[1][i], grid[0][j]))
+            # write data to columns
+            if self.ncoords == 1:
+                for i in range(self.nbins):
+                    fout.write("%14.6f\t" % grid[0][i])
                     for dat in data.values():
-                        out.write("%14.6f\t" % dat[i, j])
-                    out.write("\n")
-        out.close()
+                        fout.write("%14.6f\t" % dat[0][i])
+                    fout.write("\n")
+
+            if self.ncoords == 2:
+                for i in range(self.nbins_per_dim[1]):
+                    for j in range(self.nbins_per_dim[0]):
+                        fout.write("%14.6f\t%14.6f\t" % (grid[1][i], grid[0][j]))
+                        for dat in data.values():
+                            fout.write("%14.6f\t" % dat[i, j])
+                        fout.write("\n")
 
     def _write_traj(self, data: dict = {}):
         """write trajectory of extended or normal ABF at output times
@@ -312,41 +311,39 @@ class EnhancedSampling(ABC):
         if not os.path.isfile("CV_traj.dat") and step == 0:
             # start new file in first step
 
-            traj_out = open("CV_traj.dat", "w")
-            traj_out.write("%14s\t" % "time [fs]")
-            for i in range(len(self.traj[0])):
-                traj_out.write("%14s\t" % f"Xi{i}")
-            for kw in data.keys():
-                traj_out.write("%14s\t" % kw)
-            if self.kinetics:
-                traj_out.write("%14s\t" % "m_xi [a.u.]")
-                traj_out.write("%14s\t" % "|dU| [a.u.]")
-                traj_out.write("%14s\t" % "|dxi| [a.u.]")
-                traj_out.write("%14s\t" % "dU*dxi [a.u.]")
-            traj_out.close()
+            with open("CV_traj.dat", "w") as traj_out:
+                traj_out.write("%14s\t" % "time [fs]")
+                for i in range(len(self.traj[0])):
+                    traj_out.write("%14s\t" % f"Xi{i}")
+                for kw in data.keys():
+                    traj_out.write("%14s\t" % kw)
+                if self.kinetics:
+                    traj_out.write("%14s\t" % "m_xi [a.u.]")
+                    traj_out.write("%14s\t" % "|dU| [a.u.]")
+                    traj_out.write("%14s\t" % "|dxi| [a.u.]")
+                    traj_out.write("%14s\t" % "dU*dxi [a.u.]")
 
         elif step > 0:
             # append new steps of trajectory since last output
-            traj_out = open("CV_traj.dat", "a")
-            for n in range(self.out_freq):
-                traj_out.write(
-                    "\n%14.6f\t"
-                    % (
-                        (self.the_md.step - self.out_freq + n)
-                        * self.the_md.dt
-                        * 1.0327503e0
-                    )
-                )  # time in fs
-                for i in range(len(self.traj[0])):
-                    traj_out.write("%14.6f\t" % (self.traj[-self.out_freq + n][i]))
-                for val in data.values():
-                    traj_out.write("%14.6f\t" % (val[-self.out_freq + n]))
-                if self.kinetics:
-                    traj_out.write("%14.6f\t" % (self.mass_traj[-self.out_freq + n]))
-                    traj_out.write("%14.6f\t" % (self.abs_forces[-self.out_freq + n]))
-                    traj_out.write("%14.6f\t" % (self.abs_grad_xi[-self.out_freq + n]))
-                    traj_out.write("%14.6f\t" % (self.CV_crit_traj[-self.out_freq + n]))
-            traj_out.close()
+            with open("CV_traj.dat", "a") as traj_out:
+                for n in range(self.out_freq):
+                    traj_out.write(
+                        "\n%14.6f\t"
+                        % (
+                            (self.the_md.step - self.out_freq + n)
+                            * self.the_md.dt
+                            * 1.0327503e0
+                        )
+                    )  # time in fs
+                    for i in range(len(self.traj[0])):
+                        traj_out.write("%14.6f\t" % (self.traj[-self.out_freq + n][i]))
+                    for val in data.values():
+                        traj_out.write("%14.6f\t" % (val[-self.out_freq + n]))
+                    if self.kinetics:
+                        traj_out.write("%14.6f\t" % (self.mass_traj[-self.out_freq + n]))
+                        traj_out.write("%14.6f\t" % (self.abs_forces[-self.out_freq + n]))
+                        traj_out.write("%14.6f\t" % (self.abs_grad_xi[-self.out_freq + n]))
+                        traj_out.write("%14.6f\t" % (self.CV_crit_traj[-self.out_freq + n]))
 
     def _write_restart(self, filename, **kwargs):
         np.savez(filename, **kwargs)

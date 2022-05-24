@@ -331,11 +331,10 @@ class CV:
         Args:
             our (str): name of output file
         """
-        traj_out = open(out, "a")
-        for lc in self.lc_contribs:
-            traj_out.write("%14.6f\t" % lc)
-        traj_out.write("\n")
-        traj_out.close()
+        with open(out, "a") as traj_out:
+            for lc in self.lc_contribs:
+                traj_out.write("%14.6f\t" % lc)
+            traj_out.write("\n")
 
     def distorted_distance(self, cv_def: list, r_0: float = 3.0) -> float:
         """distorted distance between two mass centers in range(0, inf)
