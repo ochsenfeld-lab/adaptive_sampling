@@ -32,8 +32,19 @@ the_md = MD(
     target_temp_in=target_temp,
     seed_in=seed,
 )
-the_abm = MetaeABF([2.0], [20.0], 2.0, [4.0], the_md, ats, update_freq=100, output_freq=10, f_conf=100, equil_temp=300.0)
-#the_abm.restart()
+the_abm = MetaeABF(
+    [2.0],
+    [20.0],
+    2.0,
+    [4.0],
+    the_md,
+    ats,
+    update_freq=100,
+    output_freq=10,
+    f_conf=100,
+    equil_temp=300.0,
+)
+# the_abm.restart()
 
 the_md.calc_init()
 the_abm.step_bias()

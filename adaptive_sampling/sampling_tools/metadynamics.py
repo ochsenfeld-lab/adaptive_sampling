@@ -56,7 +56,7 @@ class MtD(EnhancedSampling):
             for i in range(self.ncoords):
                 bias_force += mtd_force[i] * delta_xi[i]
 
-        bias_force += self.harmonic_walls(xi, delta_xi , self.hill_std)
+        bias_force += self.harmonic_walls(xi, delta_xi, self.hill_std)
 
         # correction for kinetics
         if self.kinetics:
@@ -127,7 +127,7 @@ class MtD(EnhancedSampling):
             bias = [self.bias[i][bink[1], bink[0]] for i in range(self.ncoords)]
 
         else:
-            
+
             # compute bias from sum of gaussians if out of grid
             local_pot = 0.0
             bias = [0 for _ in range(self.ncoords)]

@@ -119,7 +119,9 @@ class MetaeABF(EnhancedSampling):
                     self.m2_force[i][bink[1], bink[0]],
                     self.ext_k[i] * diff(self.ext_coords[i], xi[i], self.cv_type[i]),
                 )
-                self.ext_forces -= ramp * self.abf_forces[i][bink[1], bink[0]] - mtd_forces[i]
+                self.ext_forces -= (
+                    ramp * self.abf_forces[i][bink[1], bink[0]] - mtd_forces[i]
+                )
 
         else:
             bias_force += self._extended_dynamics(xi, delta_xi, self.ext_sigma)
@@ -162,7 +164,6 @@ class MetaeABF(EnhancedSampling):
                     output[f"czar force {i}"] = self.czar_force[i]
                 output[f"metapot"] = self.metapot
 
-
                 self.write_output(output, filename="metaeabf.out")
                 self.write_restart()
 
@@ -198,9 +199,7 @@ class MetaeABF(EnhancedSampling):
             self.czar_force[0] = -kB_a * self.equil_temp * der_log_rho[1] + avg_force[0]
             self.czar_force[1] = -kB_a * self.equil_temp * der_log_rho[0] + avg_force[1]
             if self.verbose:
-                print(
-                    " >>> Info: On-the-fly integration only for 1D coordinates"
-                )
+                print(" >>> Info: On-the-fly integration only for 1D coordinates")
 
     def shared_bias(self):
         """TODO"""
@@ -243,7 +242,7 @@ class MetaeABF(EnhancedSampling):
             bias = [self.bias[i][bink[1], bink[0]] for i in range(self.ncoords)]
 
         else:
-            
+
             # compute bias from sum of gaussians if out of grid
             local_pot = 0.0
             bias = [0 for _ in range(self.ncoords)]
@@ -365,7 +364,7 @@ class MetaeABF(EnhancedSampling):
             czar_corr=self.correction_czar,
             abf_force=self.abf_forces,
             center=self.center,
-            metapot=self.metapot
+            metapot=self.metapot,
         )
 
     def restart(self, filename: str = "restart_metaabf"):
