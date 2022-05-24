@@ -20,7 +20,7 @@ class Reference(EnhancedSampling):
         self.epot.append(md_state.epot)
 
         bias_force = np.zeros_like(md_state.forces)
-        
+
         if (xi <= self.maxx).all() and (xi >= self.minx).all():
 
             bink = self.get_index(xi)
@@ -39,7 +39,7 @@ class Reference(EnhancedSampling):
         if self.kinetics:
             self.kinetics(delta_xi)
 
-        if self.the_md.step % self.out_freq == 0:
+        if md_state % self.out_freq == 0:
             # write output
 
             if write_traj:
@@ -72,7 +72,7 @@ class Reference(EnhancedSampling):
         self, filename: str = "./shared_bias", sync_interval: int = 100, trial: int = 10
     ):
         """sync histogram between multiple walkers
-        
+
         TODO: fix me
 
         args:
@@ -85,8 +85,8 @@ class Reference(EnhancedSampling):
             if not os.access(filename, os.W_OK):
 
                 # deny access for other walkers during sync
-                os.chmod(filename + '.npz', 0o644)
-                sb = np.load(filename + '.npz', allow_pickle=True)
+                os.chmod(filename + ".npz", 0o644)
+                sb = np.load(filename + ".npz", allow_pickle=True)
                 try:
                     diff = self._last_sync_histogram - self.histogram
                 except:
@@ -95,7 +95,7 @@ class Reference(EnhancedSampling):
                     self._local_histogram = np.copy(self.histogram)
                     self._last_sync_histogram = np.copy(self.histogram)
                     diff = np.copy(self.histogram)
-                os.chmod(filename + '.npz', 0o444)
+                os.chmod(filename + ".npz", 0o444)
 
                 self._local_histogram += diff
                 self.histogram += diff
@@ -114,7 +114,7 @@ class Reference(EnhancedSampling):
                 print(f" >>> Info: created shared-bias buffer {filename}!")
             self.write_restart(filename=filename)
             self.write_restart(filename=filename + "_local")
-            os.chmod(filename + '.npz', 0o444)
+            os.chmod(filename + ".npz", 0o444)
 
     def write_restart(self, filename: str = "restart_ref"):
         """write restart file

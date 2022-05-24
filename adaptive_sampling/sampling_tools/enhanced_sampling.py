@@ -16,7 +16,7 @@ class EnhancedSampling(ABC):
         self,
         md: MDInterface,
         cv_def: list,
-        equil_temp: float=300.0,
+        equil_temp: float = 300.0,
         verbose: bool = True,
         kinetics: bool = False,
         f_conf: float = 100,
@@ -100,25 +100,20 @@ class EnhancedSampling(ABC):
                 print(f"\n Initialize {self.cv[i]} as collective variable:")
                 if self.cv_type[i] == "angle":
                     output_dat = (
-                        self.minx[i] / np.pi / 180.0, 
-                        self.maxx[i] / np.pi / 180.0, 
-                        self.dx[i] / np.pi / 180.0, 
-                        'Degree'
+                        self.minx[i] / np.pi / 180.0,
+                        self.maxx[i] / np.pi / 180.0,
+                        self.dx[i] / np.pi / 180.0,
+                        "Degree",
                     )
                 elif self.cv_type[i] == "distance":
                     output_dat = (
-                        self.minx[i]  * 0.52917721092e0, 
-                        self.maxx[i]  * 0.52917721092e0, 
+                        self.minx[i] * 0.52917721092e0,
+                        self.maxx[i] * 0.52917721092e0,
                         self.dx[i] * 0.52917721092e0,
-                        'Angstrom'
+                        "Angstrom",
                     )
                 else:
-                    output_dat = (
-                        self.minx[i], 
-                        self.maxx[i], 
-                        self.dx[i],
-                        ''
-                    )
+                    output_dat = (self.minx[i], self.maxx[i], self.dx[i], "")
                 print(f"\t Minimum{i}:\t\t\t{output_dat[0]} {output_dat[3]}")
                 print(f"\t Maximum{i}:\t\t\t{output_dat[1]} {output_dat[3]}")
                 print(f"\t Bin width{i}:\t\t\t{output_dat[2]} {output_dat[3]}")

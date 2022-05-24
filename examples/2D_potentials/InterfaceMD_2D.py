@@ -217,6 +217,7 @@ class MD:
 
     # -----------------------------------------------------------------------------------------------------
     def get_sampling_data(self):
+        """interface to adaptive_sampling"""
         return SamplingData(
             self.masses,
             self.coords,
@@ -225,5 +226,5 @@ class MD:
             self.temp,
             self.natoms,
             self.step,
-            self.dt,
+            self.dt_fs,
         )

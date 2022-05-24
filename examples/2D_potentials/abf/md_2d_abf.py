@@ -3,7 +3,7 @@ import time
 import sys
 from adaptive_sampling.sampling_tools.abf import ABF
 
-sys.path.insert(1, '../')
+sys.path.insert(1, "../")
 from InterfaceMD_2D import *
 
 bohr2angs = 0.52917721092e0
@@ -32,7 +32,9 @@ the_md = MD(
     target_temp_in=target_temp,
     seed_in=seed,
 )
-the_abm = ABF(the_md, ats, output_freq=1000, f_conf=100, equil_temp=300.0, kinetics=True)
+the_abm = ABF(
+    the_md, ats, output_freq=1000, f_conf=100, equil_temp=300.0, kinetics=True
+)
 the_abm.restart()
 
 the_md.calc_init()

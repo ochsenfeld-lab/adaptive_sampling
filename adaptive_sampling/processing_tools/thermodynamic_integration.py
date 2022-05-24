@@ -1,7 +1,11 @@
 import numpy as np
 
+
 def integrate(
-    mean_force: np.ndarray, dx: float, equil_temp: float = 300.0, method: str = "trapezoid"
+    mean_force: np.ndarray,
+    dx: float,
+    equil_temp: float = 300.0,
+    method: str = "trapezoid",
 ) -> tuple:
     """numeric integration of thermodynamic force by simpson, trapezoid or rectangle rule
 
@@ -40,7 +44,11 @@ def integrate(
 
 
 def czar(
-    grid: np.ndarray, xi: np.ndarray, la: np.ndarray, sigma: float, equil_temp: float = 300.0
+    grid: np.ndarray,
+    xi: np.ndarray,
+    la: np.ndarray,
+    sigma: float,
+    equil_temp: float = 300.0,
 ) -> np.ndarray:
     """Corrected z-averaged restrained (Lesage et al. 2016)
 

@@ -3,8 +3,9 @@ from .enhanced_sampling import EnhancedSampling
 from .utils import welford_var
 from ..processing_tools.thermodynamic_integration import integrate
 
+
 class ABF(EnhancedSampling):
-    def __init__(self, *args, nfull: int=100, **kwargs):
+    def __init__(self, *args, nfull: int = 100, **kwargs):
         super().__init__(*args, **kwargs)
         self.nfull = nfull
         self.var_force = np.zeros_like(self.bias)
@@ -29,29 +30,33 @@ class ABF(EnhancedSampling):
             for i in range(self.ncoords):
 
                 # linear ramp function
-                Rk = 1.0  if self.histogram[bink[1], bink[0]] > self.nfull else self.histogram[bink[1], bink[0]] / self.nfull
+                ramp = (
+                    1.0
+                    if self.histogram[bink[1], bink[0]] > self.nfull
+                    else self.histogram[bink[1], bink[0]] / self.nfull
+                )
 
                 # inverse gradient v_i
                 delta_xi_n = np.linalg.norm(delta_xi[i])
                 v_i = delta_xi[i] / (delta_xi_n * delta_xi_n)
 
                 # apply bias force
-                force_sample = np.dot(md_state.forces, v_i) \
-                    - kB_a * self.equil_temp * self.divergence_xi(xi[i], self.cv_type[i])
-                self.bias[i][bink[1], bink[0]], self.m2_force[i][bink[1], bink[0]], self.var_force[i][bink[1], bink[0]] = \
-                    welford_var(self.histogram[bink[1], bink[0]], 
-                                self.bias[i][bink[1], bink[0]], 
-                                self.m2_force[i][bink[1], bink[0]], 
-                                force_sample
-                    )
+                force_sample = np.dot(
+                    md_state.forces, v_i
+                ) - kB_a * self.equil_temp * self.divergence_xi(xi[i], self.cv_type[i])
 
-                bias_force -= Rk * self.bias[i][bink[1], bink[0]] * delta_xi[i]
+                (
+                    self.bias[i][bink[1], bink[0]],
+                    self.m2_force[i][bink[1], bink[0]],
+                    self.var_force[i][bink[1], bink[0]],
+                ) = welford_var(
+                    self.histogram[bink[1], bink[0]],
+                    self.bias[i][bink[1], bink[0]],
+                    self.m2_force[i][bink[1], bink[0]],
+                    force_sample,
+                )
 
-            if self.kinetics:
-                for i in range(self.ncoords):
-                    self.cv_crit[i][bink[1], bink[0]] += abs(
-                        np.dot(delta_xi[i], md_state.forces)
-                    )
+                bias_force -= ramp * self.bias[i][bink[1], bink[0]] * delta_xi[i]
 
         else:
             bias_force += self.harmonic_walls(xi, delta_xi)
@@ -72,34 +77,37 @@ class ABF(EnhancedSampling):
                 for i in range(self.ncoords):
                     output[f"bias force {i}"] = self.bias[i]
                     output[f"var force {i}"] = self.var_force[i]
-                   
+
                 self.write_output(output, filename="abf.out")
                 self.write_restart()
 
         return bias_force
 
-    def get_pmf(self, method: str='trapezoid'):
-        
+    def get_pmf(self, method: str = "trapezoid"):
+
         if self.ncoords == 1:
-            self.pmf[0,:], _ = integrate(self.bias[0][0], self.dx, equil_temp=self.equil_temp, method=method)
+            self.pmf[0, :], _ = integrate(
+                self.bias[0][0], self.dx, equil_temp=self.equil_temp, method=method
+            )
             self.pmf *= 2625.499639  # Hartree to kJ/mol
         elif self.verbose:
-            print(' >>> Info: On-the-fly integration only available for 1D coordinates')
+            print(" >>> Info: On-the-fly integration only available for 1D coordinates")
 
     def shared_bias(self):
+        """TODO"""
         pass
 
     def divergence_xi(self, xi, cv):
 
         div = np.zeros(self.ncoords)
-        if cv.lower() == 'x':
+        if cv.lower() == "x":
             pass
-        elif cv.lower() == 'distance':
+        elif cv.lower() == "distance":
             div[i] += 2.0 / xi[i]
-        elif cv.lower() == 'angle':
+        elif cv.lower() == "angle":
             div[i] += 1.0 / np.tan(xi[i])
-        elif cv.lower() in ['torsion', '2d']:
-            pass  # div = 0 
+        elif cv.lower() in ["torsion", "2d"]:
+            pass  # div = 0
         else:
             raise ValueError(f" >>> Error: ABF not implemented for {cv}")
 
@@ -112,12 +120,12 @@ class ABF(EnhancedSampling):
             filename: name of restart file
         """
         self._write_restart(
-            filename=filename, 
-            hist=self.histogram, 
-            pmf=self.pmf, 
-            force=self.bias, 
-            var=self.var_force, 
-            m2=self.m2_force
+            filename=filename,
+            hist=self.histogram,
+            pmf=self.pmf,
+            force=self.bias,
+            var=self.var_force,
+            m2=self.m2_force,
         )
 
     def restart(self, filename: str = "restart_abf"):
@@ -149,4 +157,3 @@ class ABF(EnhancedSampling):
         self.traj = np.array([self.traj[-1]])
         self.epot = [self.epot[-1]]
         self.temp = [self.temp[-1]]
-        

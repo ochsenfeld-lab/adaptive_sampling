@@ -31,7 +31,7 @@ class CV:
         self.requires_grad = requires_grad
         self.gradient = None
         self.cv = None
-        self.type = 'default'
+        self.type = "default"
 
     def update_coords(self):
         """The coords tensor and ndarray share the same memory.
@@ -282,7 +282,7 @@ class CV:
         return float(self.cv)
 
     def linear_combination(self, cv_def: list) -> Tuple[float, np.ndarray]:
-        """linear combination angles or dihedrals between atoms or groups of atoms
+        """linear combination of distances, angles or dihedrals between atoms or groups of atoms
 
         Args:
             cv_dev (list):
