@@ -132,12 +132,18 @@ class EnhancedSampling(ABC):
     def shared_bias(self):
         pass
 
-    def harmonic_walls(self, xi: np.ndarray, delta_xi: np.ndarray) -> np.ndarray:
+    def harmonic_walls(
+        self,
+        xi: np.ndarray,
+        delta_xi: np.ndarray,
+        margin: np.ndarray = np.array([0, 0]),
+    ) -> np.ndarray:
         """confine system with harmonic walls to range(self.minx, self.maxx)
 
         args:
             xi: collective variable
             delta_xi: gradient of collective variable
+            margin: inset for start of harmonic wall
 
         returns:
             bias_force:
@@ -145,12 +151,12 @@ class EnhancedSampling(ABC):
         bias_force = np.zeros_like(self.the_md.forces.ravel())
 
         for i in range(self.ncoords):
-            if xi[i] > self.maxx[i]:
-                r = diff(self.maxx[i], xi[i], self.cv_type[i])
+            if xi[i] > (self.maxx[i] - margin[i]):
+                r = diff(self.maxx[i] - margin[i], xi[i], self.cv_type[i])
                 bias_force -= self.f_conf[i] * r * delta_xi[i]
 
             elif xi[i] < self.minx[i]:
-                r = diff(self.minx[i], xi[i], self.cv_type[i])
+                r = diff(self.minx[i] + margin[i], xi[i], self.cv_type[i])
                 bias_force -= self.f_conf[i] * r * delta_xi[i]
 
         return bias_force

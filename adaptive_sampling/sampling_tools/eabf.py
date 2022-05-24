@@ -83,8 +83,6 @@ class eABF(EnhancedSampling):
 
             for i in range(self.ncoords):
 
-                dxi = diff(self.ext_coords[i], xi[i], self.cv_type[i])
-
                 # linear ramp function
                 ramp = (
                     1.0
@@ -101,7 +99,7 @@ class eABF(EnhancedSampling):
                     self.ext_hist[bink[1], bink[0]],
                     self.bias[i][bink[1], bink[0]],
                     self.m2_force[i][bink[1], bink[0]],
-                    self.ext_k[i] * dxi,
+                    self.ext_k[i] * diff(self.ext_coords[i], xi[i], self.cv_type[i]),
                 )
                 self.ext_forces -= ramp * self.bias[i][bink[1], bink[0]]
 
