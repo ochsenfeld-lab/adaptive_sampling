@@ -1,7 +1,10 @@
 #!/usr/bin/env python
+import sys
 import time
-from InterfaceMD_2D import *
 from adaptive_sampling.sampling_tools.reference import Reference
+
+sys.path.insert(1, '../')
+from InterfaceMD_2D import *
 
 bohr2angs = 0.52917721092e0
 

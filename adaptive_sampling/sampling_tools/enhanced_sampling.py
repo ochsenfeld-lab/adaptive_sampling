@@ -16,7 +16,7 @@ class EnhancedSampling(ABC):
         self,
         md: MDInterface,
         cv_def: list,
-        equil_temp: float,
+        equil_temp: float=300.0,
         verbose: bool = True,
         kinetics: bool = False,
         f_conf: float = 100,
@@ -103,7 +103,7 @@ class EnhancedSampling(ABC):
                         self.minx[i] / np.pi / 180.0, 
                         self.maxx[i] / np.pi / 180.0, 
                         self.dx[i] / np.pi / 180.0, 
-                        'degree'
+                        'Degree'
                     )
                 elif self.cv_type[i] == "distance":
                     output_dat = (

@@ -31,7 +31,7 @@ class CV:
         self.requires_grad = requires_grad
         self.gradient = None
         self.cv = None
-        self.type = None
+        self.type = 'default'
 
     def update_coords(self):
         """The coords tensor and ndarray share the same memory.
@@ -660,8 +660,10 @@ class CV:
         """
         if cv.lower() == "x":
             xi = self.x()
+            self.type = "2d"
         elif cv.lower() == "y":
             xi = self.y()
+            self.type = "2d"
         elif cv.lower() == "distance":
             xi = self.distance(atoms)
             self.type = "distance"

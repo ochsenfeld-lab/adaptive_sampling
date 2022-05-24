@@ -20,7 +20,7 @@ class Reference(EnhancedSampling):
         self.epot.append(md_state.epot)
 
         bias_force = np.zeros_like(md_state.forces)
-
+        
         if (xi <= self.maxx).all() and (xi >= self.minx).all():
 
             bink = self.get_index(xi)
@@ -72,6 +72,8 @@ class Reference(EnhancedSampling):
         self, filename: str = "./shared_bias", sync_interval: int = 100, trial: int = 10
     ):
         """sync histogram between multiple walkers
+        
+        TODO: fix me
 
         args:
             filename: name of bias buffer
