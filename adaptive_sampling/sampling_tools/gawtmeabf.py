@@ -2,15 +2,14 @@ import random
 import numpy as np
 from .enhanced_sampling import EnhancedSampling
 from .utils import welford_var, diff
-from .eabf import eABF
+from .metaeabf import MetaeABF
 from .metadynamics import MtD
-from ..units import *
+from .gamd import GaMD
 
 
-class MetaeABF(eABF, MtD, EnhancedSampling):
+class GaWTMeABF(MetaeABF, GaMD, EnhancedSampling):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.abf_forces = np.zeros_like(self.bias)
 
     def step_bias(self, write_output: bool = True, write_traj: bool = True, **kwargs):
 
@@ -57,10 +56,6 @@ class MetaeABF(eABF, MtD, EnhancedSampling):
         else:
             bias_force += self._extended_dynamics(xi, delta_xi, self.ext_sigma)
 
-        self.traj = np.append(self.traj, [xi], axis=0)
-        self.temp.append(md_state.temp)
-        self.epot.append(md_state.epot)
-
         # xi-conditioned accumulators for CZAR
         if (xi <= self.maxx).all() and (xi >= self.minx).all():
 
@@ -94,7 +89,6 @@ class MetaeABF(eABF, MtD, EnhancedSampling):
                 for i in range(self.ncoords):
                     output[f"metaforce {i}"] = self.bias[i]
                     output[f"abf force {i}"] = self.abf_forces[i]
-                    # TODO: give variance of CZAR not bias
                     output[f"var force {i}"] = self.var_force[i]
                     output[f"czar force {i}"] = self.czar_force[i]
                 output[f"metapot"] = self.metapot
@@ -154,9 +148,9 @@ class MetaeABF(eABF, MtD, EnhancedSampling):
         data = {}
         for i in range(self.ncoords):
             if self.cv_type[i] == "angle":
-                self.ext_traj[:, i] *= DEGREES_per_RADIAN
+                self.ext_traj[:, i] /= np.pi / 180.0
             elif self.cv_type[i] == "distance":
-                self.ext_traj[:, i] *= BOHR_to_ANGSTROM
+                self.ext_traj[:, i] *= 0.52917721092e0
             data[f"lambda{i}"] = self.ext_traj[:, i]
         data["Epot [H]"] = self.epot
         data["T [K]"] = self.temp

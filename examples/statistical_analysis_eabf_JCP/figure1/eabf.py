@@ -1,16 +1,19 @@
 #!/usr/bin/env python
-import time
+# Imports
 import sys
-from adaptive_sampling.sampling_tools.abf import ABF
+import os
+import numpy as np
+import random
+import time
+
+from adaptive_sampling.sampling_tools.eabf import eABF
 from adaptive_sampling.interface.interfaceMD_2D import *
 
 bohr2angs = 0.52917721092e0
-
 ################# Imput Section ####################
-
 # MD
 seed = 42
-nsteps = 10000  # number of MD steps
+nsteps = 2000000  # number of MD steps
 dt = 5.0e0  # stepsize in fs
 target_temp = 300.0  # Kelvin
 mass = 10.0  # a.u.
@@ -18,10 +21,13 @@ potential = "1"
 
 # eABF
 ats = [["x", [], 70.0, 170.0, 2.0]]
+ext_sigma = 2.0
+ext_mass = 20.0
 N_full = 100
 
 step_count = 0
 coords = [80.0, 0]
+
 the_md = MD(
     mass_in=mass,
     coords_in=coords,
@@ -30,10 +36,9 @@ the_md = MD(
     target_temp_in=target_temp,
     seed_in=seed,
 )
-the_abm = ABF(
-    the_md, ats, output_freq=1000, f_conf=100, equil_temp=300.0, kinetics=True
+the_abm = eABF(
+    ext_sigma, ext_mass, the_md, ats, nfull=N_full, output_freq=1000, seed_in=seed
 )
-# the_abm.restart()
 
 the_md.calc_init()
 the_abm.step_bias()

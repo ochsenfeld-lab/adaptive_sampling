@@ -14,10 +14,8 @@ class ABF(EnhancedSampling):
     def step_bias(self, write_output: bool = True, write_traj: bool = True, **kwargs):
 
         md_state = self.the_md.get_sampling_data()
+
         (xi, delta_xi) = self.get_cv(**kwargs)
-        self.traj = np.append(self.traj, [xi], axis=0)
-        self.temp.append(md_state.temp)
-        self.epot.append(md_state.epot)
 
         bias_force = np.zeros_like(md_state.forces)
 
@@ -60,11 +58,15 @@ class ABF(EnhancedSampling):
         else:
             bias_force += self.harmonic_walls(xi, delta_xi)
 
+        self.traj = np.append(self.traj, [xi], axis=0)
+        self.temp.append(md_state.temp)
+        self.epot.append(md_state.epot)
+
         # correction for kinetics
         if self.kinetics:
             self.kinetics(delta_xi)
 
-        if self.the_md.step % self.out_freq == 0:
+        if md_state.step % self.out_freq == 0:
             # write output
 
             if write_traj:
@@ -88,7 +90,9 @@ class ABF(EnhancedSampling):
             self.pmf[0, :], _ = integrate(
                 self.bias[0][0], self.dx, equil_temp=self.equil_temp, method=method
             )
-            self.pmf *=  atomic_to_kJmol
+            self.pmf *= atomic_to_kJmol
+            self.pmf -= self.pmf.min()
+
         elif self.verbose:
             print(" >>> Info: On-the-fly integration only available for 1D coordinates")
 

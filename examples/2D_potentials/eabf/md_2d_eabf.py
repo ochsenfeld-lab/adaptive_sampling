@@ -2,9 +2,7 @@
 import time
 import sys
 from adaptive_sampling.sampling_tools.eabf import eABF
-
-sys.path.insert(1, "../")
-from InterfaceMD_2D import *
+from adaptive_sampling.interface.interfaceMD_2D import *
 
 bohr2angs = 0.52917721092e0
 
@@ -12,7 +10,7 @@ bohr2angs = 0.52917721092e0
 
 # MD
 seed = 42
-nsteps = 10000  # number of MD steps
+nsteps = 1000000  # number of MD steps
 dt = 5.0e0  # stepsize in fs
 target_temp = 300.0  # Kelvin
 mass = 10.0  # a.u.
@@ -33,7 +31,7 @@ the_md = MD(
     seed_in=seed,
 )
 the_abm = eABF([2.0], [20.0], the_md, ats, output_freq=10, f_conf=100, equil_temp=300.0)
-the_abm.restart()
+# the_abm.restart()
 
 the_md.calc_init()
 the_abm.step_bias()
