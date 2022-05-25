@@ -35,7 +35,7 @@ the_md = MD(
 the_abm = ABF(
     the_md, ats, output_freq=1000, f_conf=100, equil_temp=300.0, kinetics=True
 )
-the_abm.restart()
+# the_abm.restart()
 
 the_md.calc_init()
 the_abm.step_bias()

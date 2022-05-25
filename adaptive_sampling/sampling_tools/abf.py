@@ -65,7 +65,7 @@ class ABF(EnhancedSampling):
         if self.kinetics:
             self.kinetics(delta_xi)
 
-        if self.the_md.step % self.out_freq == 0:
+        if md_state.step % self.out_freq == 0:
             # write output
 
             if write_traj:
@@ -90,6 +90,8 @@ class ABF(EnhancedSampling):
                 self.bias[0][0], self.dx, equil_temp=self.equil_temp, method=method
             )
             self.pmf *= 2625.499639  # Hartree to kJ/mol
+            self.pmf -= self.pmf.min()
+
         elif self.verbose:
             print(" >>> Info: On-the-fly integration only available for 1D coordinates")
 

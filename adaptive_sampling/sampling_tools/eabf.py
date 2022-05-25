@@ -1,17 +1,17 @@
 import random
 import numpy as np
 from .enhanced_sampling import EnhancedSampling
+from .abf import ABF
 from .utils import welford_var, diff, cond_avg
 from ..processing_tools.thermodynamic_integration import integrate
 
 
-class eABF(EnhancedSampling):
+class eABF(ABF, EnhancedSampling):
     def __init__(
         self,
         ext_sigma: list,
         ext_mass: list,
         *args,
-        nfull: int = 100,
         friction: float = 1.0e-3,
         seed_in: int = 42,
         **kwargs,
@@ -33,11 +33,6 @@ class eABF(EnhancedSampling):
         self.czar_force = np.zeros_like(self.bias)
         self.friction = friction
         self.ext_traj = np.copy(self.traj)
-
-        # for ABF
-        self.nfull = nfull
-        self.var_force = np.zeros_like(self.bias)
-        self.m2_force = np.zeros_like(self.bias)
 
         # set random seed for langevin dynamics
         if type(seed_in) is int:
@@ -163,6 +158,9 @@ class eABF(EnhancedSampling):
                 -kB_a * self.equil_temp * np.gradient(log_rho[0], self.grid[0])
                 + avg_force[0]
             )
+            print(avg_force)
+            print(self.czar_force)
+
             self.pmf[0, :], _ = integrate(
                 self.czar_force[0][0],
                 self.dx,
@@ -170,6 +168,7 @@ class eABF(EnhancedSampling):
                 method=method,
             )
             self.pmf *= 2625.499639  # Hartree to kJ/mol
+            self.pmf -= self.pmf.min()
 
         else:
             der_log_rho = np.gradient(log_rho, self.grid[1], self.grid[0])
@@ -251,6 +250,7 @@ class eABF(EnhancedSampling):
             bias_force[i] -= self.ext_k[i] * dxi
             bias_force += bias_force[i] * delta_xi[i]
 
+            # harmonic walls for confinement to range of interest
             if self.ext_coords[i] > (self.maxx[i] - margin[i]):
                 r = diff(self.maxx[i] - margin[i], self.ext_coords[i], self.cv_type[i])
                 self.ext_forces[i] -= self.f_conf[i] * r
