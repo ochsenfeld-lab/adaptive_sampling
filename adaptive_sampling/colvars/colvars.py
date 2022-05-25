@@ -161,6 +161,8 @@ class CV:
 
         # get forces
         if self.requires_grad:
+            # @AH: why don't you do? Does this not work?
+#            self.gradient = self.partial_derivative(self.cv, self.coords)
             atom_grads = self.partial_derivative(self.cv, (p1, p2))
             self.gradient = torch.matmul(
                 atom_grads[0], self._get_atom_weights(m0, cv_def[0])

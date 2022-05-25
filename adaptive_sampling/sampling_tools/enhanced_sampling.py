@@ -238,8 +238,7 @@ class EnhancedSampling(ABC):
     def _kinetics(self, delta_xi):
         """accumulates data for kinetics"""
         forces = self.the_md.get_sampling_data().forces
-        m_xi = self._get_mass_of_cv(delta_xi)
-        self.mass_traj.append(m_xi)
+        self.mass_traj.append(self._get_mass_of_cv(delta_xi))
         self.abs_forces.append(np.linalg.norm(forces))
         self.CV_crit_traj.append(np.dot(delta_xi[0], forces))
         self.abs_grad_xi.append(np.linalg.norm(delta_xi))
@@ -252,10 +251,10 @@ class EnhancedSampling(ABC):
             delta_xi: gradients of cv's
 
         Returns:
-            m_xi: coordinate dependent mass of collective variabl
+            m_xi_inv: coordinate dependent mass of collective variabl
         """
         if self.ncoords == 1:
-            return np.dot(delta_xi[0], 1.0 / self.the_md.mass * delta_xi[0])
+            return np.dot(delta_xi[0], (1.0 / self.the_md.mass) * delta_xi[0])
         else:
             return 0.0
 
@@ -321,7 +320,7 @@ class EnhancedSampling(ABC):
             for kw in data.keys():
                 traj_out.write("%14s\t" % kw)
             if self.kinetics:
-                traj_out.write("%14s\t" % "m_xi [a.u.]")
+                traj_out.write("%14s\t" % "m_xi_inv [a.u.]")
                 traj_out.write("%14s\t" % "|dU| [a.u.]")
                 traj_out.write("%14s\t" % "|dxi| [a.u.]")
                 traj_out.write("%14s\t" % "dU*dxi [a.u.]")
@@ -333,7 +332,8 @@ class EnhancedSampling(ABC):
             for n in range(self.out_freq):
                 traj_out.write(
                     "\n%14.6f\t"
-                    % ((step - self.out_freq + n) * self.the_md.dt * 1.0327503e0)
+                    % ((step - self.out_freq + n) * self.the_md.dt * atomic_to_fs
+                    )
                 )  # time in fs
                 for i in range(len(self.traj[0])):
                     traj_out.write("%14.6f\t" % (self.traj[-self.out_freq + n][i]))

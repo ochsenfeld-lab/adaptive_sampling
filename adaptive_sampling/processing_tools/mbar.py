@@ -3,14 +3,15 @@ import sys
 import numpy as np
 from typing import List, Tuple
 
-from .utils import _error_vec, _join_frames
-
+from .utils import _join_frames
+from ..units import *
 
 def mbar(
     traj_list: List[np.ndarray],
     meta_f: np.ndarray,
     max_iter: int = 10000,
     conv: float = 1.0e-7,
+    conv_errvec: float = None,
     outfreq: int = 100,
     equil_temp: float = 300.0,
     dV_list: List[np.ndarray] = None,
@@ -21,7 +22,8 @@ def mbar(
         traj_list: List of biased trajectories
         meta_f: input from metafile
         max_iter: Maximum number of iterations
-        conv: Convergence criterion
+        conv: Convergence criterion, largest change in beta*Ai
+        conv_errvec: Convergence criterion based on the error vector, not used if None, largest absolute value in the error vec
         outfreq: Output frequency during self-consistent iteration
         equil_temp: Temperature of simulation
         dV_list: optional, list of GaMD boost potentials (has to match frames of traj_list)
@@ -29,9 +31,7 @@ def mbar(
     returns:
         W: array of statistical weigths of each frame
     """
-    H2kJmol = 2625.499639  # Hartree to kJ/mol
-    R = 8.314 / 1000.0  # kJ / K mol
-    RT = R * equil_temp / 1000.0
+    RT = R_in_SI * equil_temp / 1000.0
     beta = 1.0 / RT
 
     num_trajs = len(meta_f)
@@ -40,7 +40,7 @@ def mbar(
     all_frames, num_frames, frames_per_traj = _join_frames(traj_list)
     if dV_list is not None:
         all_dV, dV_num, dV_per_traj = _join_frames(dV_list)
-        all_dV *= H2kJmol  # kJ/mol
+        all_dV *= atomic_to_kJmol  # kJ/mol
         if (dV_num != num_frames) or (frames_per_traj != dV_per_traj).all():
             raise ValueError("GaMD frames have to match eABF frames!")
 
@@ -89,13 +89,19 @@ def mbar(
             print("Iter %4d:\tConv=%14.10f" % (count, np.max(delta_Ai[1:])))
             sys.stdout.flush()
 
+        max_err_vec = np.abs(_error_vec(frames_per_traj, beta_Ai, exp_U)).max()
+        if conv_errvec == None:
+            converged = delta_Ai[1:].max() < conv
+        else:
+            converged = (delta_Ai[1:].max() < conv) and (max_err_vec < conv_errvec)
+
         if count == max_iter:
             print(
                 "========================================================================"
             )
             print("Convergence not reached in {} iterations!".format(count))
             print(
-                "Max error vector:", (_error_vec(frames_per_traj, beta_Ai, exp_U).max())
+                "Max error vector:", max_err_vec
             )
             print(
                 "========================================================================"
@@ -103,13 +109,13 @@ def mbar(
             sys.stdout.flush()
             break
 
-        if delta_Ai[1:].max() < conv:
+        if converged:
             print(
                 "========================================================================"
             )
             print("Converged after {} iterations!".format(count))
             print(
-                "Max error vector:", (_error_vec(frames_per_traj, beta_Ai, exp_U).max())
+                "Max error vector:", max_err_vec
             )
             print(
                 "========================================================================"
@@ -145,8 +151,7 @@ def get_windows(
         index_list (np.ndarray): list of frame indices in original trajectory,
         meta_f (np.ndarray): window information for MBAR
     """
-    R = 8.314 / 1000.0  # kJ / K mol
-    RT = R * equil_temp / 1000.0
+    RT = R_in_SI * equil_temp / 1000.0
     k = RT / (sigma * sigma)
 
     dx = centers[1] - centers[0]
@@ -217,8 +222,7 @@ def pmf_from_weights(
     returns:
         Potential of mean force (PMF), probability density
     """
-    R = 8.314 / 1000.0  # kJ / K mol
-    RT = R * equil_temp / 1000.0
+    RT = R_in_SI * equil_temp / 1000.0
 
     dx = grid[1] - grid[0]
     dx2 = dx / 2.0
@@ -248,7 +252,7 @@ def deltaf_from_weights(
     returns:
         deltaF: free energy difference
     """
-    RT = R * equil_temp / 1000.0
+    RT = R_in_SI * equil_temp / 1000.0
     weights /= weights.sum()
 
     p_a = weights[np.where(cv < TS)].sum()
@@ -256,56 +260,14 @@ def deltaf_from_weights(
 
     return -RT * np.log(p_b / p_a)
 
-
-def ensemble_average(obs: np.ndarray, weights: np.ndarray) -> tuple:
-    """ensemble average of observable
-
-    args:
-        obs (np.ndarray): trajectory of observables
-        weights (np.ndarray): weigths of data frames
-
-    returns:
-        avg (float): ensemble average
-        sem (float): standard error of the mean of avg
-    """
-    weights /= weights.sum()
-    avg = np.average(obs, weights=weights)  # ensemble average
-    std = np.sqrt(
-        np.average(np.power(obs - avg, 2), weights=weights)
-    )  # standard deviation
-    sem = std / np.sqrt(float(len(obs)))  # standard error of the mean
-    return avg, sem
-
-
-def conditional_average(
-    grid: np.ndarray, xi_traj: np.ndarray, obs: np.ndarray, weights: np.ndarray
-) -> tuple:
-    """bin wise conditional average and standard error of the mean
-
-    args:
-        grid (np.ndarray): bins along reaction coordinate
-        xi_traj (np.ndarray): trajectory of reaction coordinate
-        obs (np.ndarray): trajectory of observables
-        weights (np.ndarray): weigths of data frames
-
-    returns:
-        obs_xi (np.ndarray): conditional average along reaction coordinate
-        sem_xi (np.ndarray): standard error of the mean of obs_xi
-    """
-    weights /= weights.sum()
-    dx = grid[1] - grid[0]
-    dx2 = dx / 2
-
-    obs_xi = np.zeros(len(grid))
-    sem_xi = np.zeros(len(grid))
-
-    for i, x in enumerate(grid):
-        dat_i = np.where(np.logical_and(xi_traj >= x - dx2, xi_traj < x + dx2))
-        nsamples = len(obs[dat_i])
-        if nsamples > 0:
-            p_i = weights[dat_i] / weights[dat_i].sum()
-            obs_xi[i] = np.sum(p_i * obs[dat_i])
-            sem_xi[i] = np.sqrt(
-                np.sum(p_i * np.square(obs[dat_i] - obs_xi[i]))
-            ) / np.sqrt(nsamples)
-    return obs_xi, sem_xi
+def _error_vec(
+    n_frames: np.ndarray, beta_Ai: np.ndarray, exp_U: np.ndarray
+) -> np.ndarray:
+    """error vector for MBAR"""
+    denominator = np.multiply(n_frames * np.exp(beta_Ai), exp_U.T)
+    denominator = 1.0 / np.sum(denominator, axis=1)
+    # sum over all frames
+    error_v = n_frames - n_frames * np.exp(beta_Ai) * (
+        np.multiply(exp_U, denominator).sum(axis=1)
+    )
+    return error_v
