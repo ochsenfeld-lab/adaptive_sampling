@@ -12,7 +12,7 @@ bohr2angs = 0.52917721092e0
 
 # MD
 seed = 42
-nsteps = 10000  # number of MD steps
+nsteps = 10000000  # number of MD steps
 dt = 5.0e0  # stepsize in fs
 target_temp = 300.0  # Kelvin
 mass = 10.0  # a.u.
@@ -33,17 +33,18 @@ the_md = MD(
     seed_in=seed,
 )
 the_abm = GaMD(
-    1.0,
-    100,
-    1000,
+    3.5,
+    10000,
+    50000,
     the_md,
     ats,
+    gamd_bound="lower",
     output_freq=1000,
     f_conf=100,
     equil_temp=300.0,
     kinetics=True,
 )
-the_abm.restart()
+# the_abm.restart()
 
 the_md.calc_init()
 the_abm.step_bias()

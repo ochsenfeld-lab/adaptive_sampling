@@ -5,12 +5,12 @@ from typing import Union, Tuple
 def diff(
     a: Union[np.ndarray, float], b: Union[np.ndarray, float], cv_type: list
 ) -> Union[np.ndarray, float]:
-    """get difference of elements of np.ndarrays or single floats
+    """get difference of elements of numbers or arrays
     in range(-inf, inf) if is_angle is False or in range(-pi, pi) if is_angle is True
 
     Args:
-        a:
-        b:
+        a: number or array
+        b: number or array
 
     Returns:
         diff: element-wise difference (a-b)
@@ -45,9 +45,9 @@ def welford_var(
         newValue: new sample
 
     returns:
-        mean (float): sample mean,
-        M2 (float): sum of powers of differences from the mean
-        var (float): sample variance
+        mean: sample mean,
+        M2: sum of powers of differences from the mean
+        var: sample variance
     """
     delta = newValue - mean
     mean += delta / count
@@ -61,10 +61,10 @@ def cond_avg(a: np.ndarray, hist: np.ndarray) -> np.ndarray:
     """get hist conditioned average of a, elements with 0 counts set to 0,
 
     Args:
-        a (np.ndarray): input array
-        hist (np.ndarray): histogram along cv (biased probability density)
+        a: input array
+        hist: histogram along cv (biased probability density)
 
     Returns:
-        cond_avg (np.ndarray): conditional average
+        cond_avg: conditional average
     """
     return np.divide(a, hist, out=np.zeros_like(a), where=(hist != 0))

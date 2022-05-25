@@ -18,6 +18,7 @@ class EnhancedSampling(ABC):
         cv_def: list,
         equil_temp: float = 300.0,
         verbose: bool = True,
+        confine: bool = True,
         kinetics: bool = False,
         f_conf: float = 100,
         output_freq: int = 100,
@@ -28,6 +29,7 @@ class EnhancedSampling(ABC):
         self.out_freq = output_freq
         self.equil_temp = equil_temp
         self.verbose = verbose
+        self.confine = confine
 
         # definition of CVs
         self.ncoords = len(cv_def)

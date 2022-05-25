@@ -46,9 +46,10 @@ class eABF(EnhancedSampling):
             try:
                 random.setstate(seed_in)
             except:
-                print(
-                    "\n\tWARNING: The provided seed for ABM was neither an int nor a state of random!\n"
-                )
+                if self.verbose:
+                    print(
+                        "\n >>> Warning: The provided seed was neither an int nor a state of random!\n"
+                    )
 
         # initialize extended system at target temp of MD simulation
         au2k = 315775.04e0
