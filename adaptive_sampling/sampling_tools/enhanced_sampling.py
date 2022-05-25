@@ -7,7 +7,7 @@ from abc import ABC, abstractmethod
 from ..interface.sampling_data import MDInterface
 from ..colvars.colvars import CV
 from .utils import diff
-
+from ..units import *
 
 class EnhancedSampling(ABC):
     """Abstract class for sampling algorithms"""
@@ -100,16 +100,16 @@ class EnhancedSampling(ABC):
                 print(f"\n Initialize {self.cv[i]} as collective variable:")
                 if self.cv_type[i] == "angle":
                     output_dat = (
-                        self.minx[i] / np.pi / 180.0,
-                        self.maxx[i] / np.pi / 180.0,
-                        self.dx[i] / np.pi / 180.0,
+                        self.minx[i] * DEGREES_per_RADIAN,
+                        self.maxx[i] * DEGREES_per_RADIAN,
+                        self.dx[i] * DEGREES_per_RADIAN,
                         "Degree",
                     )
                 elif self.cv_type[i] == "distance":
                     output_dat = (
-                        self.minx[i] * 0.52917721092e0,
-                        self.maxx[i] * 0.52917721092e0,
-                        self.dx[i] * 0.52917721092e0,
+                        self.minx[i] * BOHR_to_ANGSTROM,
+                        self.maxx[i] * BOHR_to_ANGSTROM,
+                        self.dx[i] * BOHR_to_ANGSTROM,
                         "Angstrom",
                     )
                 else:
@@ -204,18 +204,16 @@ class EnhancedSampling(ABC):
         returns:
             args in atomic units
         """
-        bohr2angs = 0.52917721092e0  # bohr to angstrom
-        deg2rad = np.pi / 180.0  # degree to radians
-        H2KJMOL = 2625.499639
 
         for i in range(self.ncoords):
             for arg in args:
                 if self.cv_type == "angle":
-                    arg[i] /= deg2rad / deg2rad / H2KJMOL
+                    # @AH: Please check that this is correct, what was here before looked suspicous
+                    arg[i] *= DEGREES_per_RADIAN * DEGREES_per_RADIAN / atomic_to_kJmol
                 elif self.cv_type == "distance":
-                    arg[i] *= bohr2angs * bohr2angs / H2KJMOL
+                    arg[i] *= BOHR_to_ANGSTROM * BOHR_to_ANGSTROM / atomic_to_kJmol
                 else:
-                    arg[i] /= H2KJMOL
+                    arg[i] /= atomic_to_kJmol
         return args
 
     def get_cv(self, **kwargs) -> Tuple[np.ndarray, np.ndarray]:
@@ -263,6 +261,7 @@ class EnhancedSampling(ABC):
 
         grid = np.copy(self.grid)
         for i in range(self.ncoords):
+            # @AH: the conversions below are the opposite of the comments! 
             if self.the_cv.type == "angle":
                 grid *= np.pi / 180.0  # radians to degree
             elif self.the_cv.type == "distance":
@@ -305,9 +304,9 @@ class EnhancedSampling(ABC):
         # convert units to degree and Angstrom
         for i in range(self.ncoords):
             if self.cv_type[i] == "angle":
-                self.traj[:, i] /= np.pi / 180.0
+                self.traj[:, i] *= DEGREES_per_RADIAN
             elif self.cv_type[i] == "distance":
-                self.traj[:, i] *= 0.52917721092e0
+                self.traj[:, i] *= BOHR_to_ANGSTROM
 
         # write header
         if not os.path.isfile("CV_traj.dat") and step == 0:

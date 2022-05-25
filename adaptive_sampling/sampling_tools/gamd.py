@@ -2,7 +2,7 @@ import numpy as np
 from .enhanced_sampling import EnhancedSampling
 from .utils import welford_var
 from ..processing_tools.thermodynamic_integration import integrate
-
+from ..units import *
 
 class GaMD(EnhancedSampling):
     def __init__(
@@ -114,8 +114,7 @@ class GaMD(EnhancedSampling):
 
     def get_pmf(self):
 
-        kB_a = 1.380648e-23 / 4.359744e-18
-        kBT = kB_a * self.equil_temp
+        kBT = kB_in_atomic * self.equil_temp
         self.corr = -self.c1 - self.c2 / (2.0 * kBT)
 
         self.pmf = -kBT * np.log(
@@ -124,7 +123,7 @@ class GaMD(EnhancedSampling):
             where=(self.histogram != 0),
         )
         self.pmf += self.corr
-        self.pmf *= 2625.499639  # Hartree to kJ/mol
+        self.pmf *= atomic_to_kJmol 
         self.pmf -= self.pmf.min()
 
     def shared_bias(self):

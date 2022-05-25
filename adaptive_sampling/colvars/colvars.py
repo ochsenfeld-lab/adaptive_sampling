@@ -3,7 +3,7 @@ import torch
 import numpy as np
 
 from typing import Union, Tuple
-
+from ..units import *
 
 class CV:
     """Class for Collective Variables
@@ -18,8 +18,6 @@ class CV:
     """
 
     def __init__(self, the_mol: object, requires_grad: bool = False):
-
-        self.BOHR2ANGS = 0.52917721092e0  # bohr to angstrom conversion factor
 
         self.the_mol = the_mol
         if not hasattr(the_mol, "masses") or not hasattr(the_mol, "coords"):
@@ -337,8 +335,8 @@ class CV:
         traj_out.write("\n")
         traj_out.close()
 
-    def distorted_distance(self, cv_def: list, r_0: float = 3.0) -> float:
-        """distorted distance between two mass centers in range(0, inf)
+    def coordination_number(self, cv_def: list, r_0: float = 3.0) -> float:
+        """coordination number between two mass centers in range(0, inf) mapped to range(1,0)
 
         Args:
             cv_def (list):
@@ -356,7 +354,7 @@ class CV:
                 "CV ERROR: Invalid number of centers in definition of distance!"
             )
 
-        r_0 /= self.BOHR2ANGS
+        r_0 /= BOHR_to_ANGSTROM
 
         (p1, m0) = self._get_com(cv_def[0])
         (p2, m1) = self._get_com(cv_def[1])
@@ -405,8 +403,8 @@ class CV:
         """
         self.update_coords()
 
-        r_sw /= self.BOHR2ANGS
-        d_sw /= self.BOHR2ANGS
+        r_sw /= BOHR_to_ANGSTROM
+        d_sw /= BOHR_to_ANGSTROM
 
         self.cv = 0.0
 
@@ -526,8 +524,8 @@ class CV:
         """
         self.update_coords()
 
-        r_sw /= self.BOHR2ANGS
-        d_sw /= self.BOHR2ANGS
+        r_sw /= BOHR_to_ANGSTROM
+        d_sw /= BOHR_to_ANGSTROM
 
         # 3D mCEC vector
         xi = torch.zeros(3, dtype=torch.float)
@@ -682,8 +680,8 @@ class CV:
         elif cv.lower() == "linear_combination":
             xi = self.linear_combination(atoms)
             self.type = None
-        elif cv.lower() == "distorted_distance":
-            xi = self.distorted_distance(atoms)
+        elif cv.lower() == "coordination_number":
+            xi = self.coordination_number(atoms)
         elif cv.lower() == "cec":
             xi = self.cec(atoms, modified=False, **kwargs)
             self.type = "distance"

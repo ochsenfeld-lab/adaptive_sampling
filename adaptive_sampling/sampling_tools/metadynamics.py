@@ -2,7 +2,7 @@ import numpy as np
 from .enhanced_sampling import EnhancedSampling
 from .utils import diff
 from ..processing_tools.thermodynamic_integration import integrate
-
+from ..units import *
 
 class MtD(EnhancedSampling):
     def __init__(
@@ -27,7 +27,7 @@ class MtD(EnhancedSampling):
                 " >>> fatal error: Effective temperature for Well-Tempered MtD has to be > 0!"
             )
 
-        self.hill_height = hill_height / 2625.499639  # Hartree
+        self.hill_height = hill_height / atomic_to_kJmol 
         self.hill_std = self.unit_conversion_cv(np.asarray(hill_std))[0]
         self.hill_var = self.hill_std * self.hill_std
         self.update_freq = int(update_freq)
@@ -72,7 +72,7 @@ class MtD(EnhancedSampling):
                 self.get_pmf()
                 output = {"hist": self.histogram, "free energy": self.pmf}
                 for i in range(self.ncoords):
-                    output[f"metapot {i}"] = self.metapot * 2625.499639  # kJ/mol
+                    output[f"metapot {i}"] = self.metapot * atomic_to_kJmol
 
                 self.write_output(output, filename="mtd.out")
                 self.write_restart()
@@ -80,7 +80,7 @@ class MtD(EnhancedSampling):
         return bias_force
 
     def get_pmf(self):
-        self.pmf = -self.metapot * 2625.499639  # kJ/mol
+        self.pmf = -self.metapot * atomic_to_kJmol
         if self.well_tempered:
             self.pmf *= (
                 self.equil_temp + self.well_tempered_temp
@@ -99,7 +99,6 @@ class MtD(EnhancedSampling):
         returns:
             bias: bias force
         """
-        kB_a = 1.380648e-23 / 4.359744e-18
         if (xi <= self.maxx).all() and (xi >= self.minx).all():
             bink = self.get_index(xi)
             if self.the_md.step % self.update_freq == 0:
@@ -110,7 +109,7 @@ class MtD(EnhancedSampling):
                     if self.well_tempered:
                         w = self.hill_height * np.exp(
                             -self.metapot[bink[1], bink[0]]
-                            / (kB_a * self.well_tempered_temp)
+                            / (kB_in_atomic * self.well_tempered_temp)
                         )
                     else:
                         w = self.hill_height
@@ -141,7 +140,7 @@ class MtD(EnhancedSampling):
                 for val in np.nditer(dx.compressed(), flags=["zerosize_ok"]):
                     if self.well_tempered:
                         w = self.hill_height * np.exp(
-                            -local_pot / (kB_a * self.well_tempered_temp)
+                            -local_pot / (kB_in_atomic * self.well_tempered_temp)
                         )
                     else:
                         w = self.hill_height

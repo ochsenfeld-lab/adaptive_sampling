@@ -3,7 +3,7 @@ import numpy as np
 from .enhanced_sampling import EnhancedSampling
 from .utils import welford_var, diff, cond_avg
 from ..processing_tools.thermodynamic_integration import integrate
-
+from ..units import *
 
 class eABF(EnhancedSampling):
     def __init__(
@@ -21,9 +21,8 @@ class eABF(EnhancedSampling):
         (xi, _) = self.get_cv()
 
         # for dynamics of extended-system
-        kB_a = 1.380648e-23 / 4.359744e-18
         self.ext_sigma = self.unit_conversion_cv(np.asarray(ext_sigma))[0]
-        self.ext_k = (kB_a * self.equil_temp) / (self.ext_sigma * self.ext_sigma)
+        self.ext_k = (kB_in_atomic * self.equil_temp) / (self.ext_sigma * self.ext_sigma)
         self.ext_mass = np.asarray(ext_mass)
         self.ext_hist = np.zeros_like(self.histogram)
         self.ext_forces = np.zeros(self.ncoords)
@@ -51,14 +50,13 @@ class eABF(EnhancedSampling):
                 )
 
         # initialize extended system at target temp of MD simulation
-        au2k = 315775.04e0
         for i in range(self.ncoords):
             self.ext_momenta[i] = random.gauss(0.0, 1.0) * np.sqrt(
                 self.equil_temp * self.ext_mass[i]
             )
             ttt = (np.power(self.ext_momenta, 2) / self.ext_mass).sum()
             ttt /= self.ncoords
-            self.ext_momenta *= np.sqrt(self.equil_temp / (ttt * au2k))
+            self.ext_momenta *= np.sqrt(self.equil_temp / (ttt * atomic_to_K))
 
     def step_bias(self, write_output: bool = True, write_traj: bool = True, **kwargs):
 
@@ -148,8 +146,6 @@ class eABF(EnhancedSampling):
 
     def get_pmf(self, method: str = "trapezoid"):
 
-        kB_a = 1.380648e-23 / 4.359744e-18
-
         log_rho = np.log(
             self.histogram,
             out=np.zeros_like(self.histogram),
@@ -159,7 +155,7 @@ class eABF(EnhancedSampling):
 
         if self.ncoords == 1:
             self.czar_force[0] = (
-                -kB_a * self.equil_temp * np.gradient(log_rho[0], self.grid[0])
+                -kB_in_atomic * self.equil_temp * np.gradient(log_rho[0], self.grid[0])
                 + avg_force[0]
             )
             self.pmf[0, :], _ = integrate(
@@ -168,12 +164,12 @@ class eABF(EnhancedSampling):
                 equil_temp=self.equil_temp,
                 method=method,
             )
-            self.pmf *= 2625.499639  # Hartree to kJ/mol
+            self.pmf *= atomic_to_kJmol 
 
         else:
             der_log_rho = np.gradient(log_rho, self.grid[1], self.grid[0])
-            self.czar_force[0] = -kB_a * self.equil_temp * der_log_rho[1] + avg_force[0]
-            self.czar_force[1] = -kB_a * self.equil_temp * der_log_rho[0] + avg_force[1]
+            self.czar_force[0] = -kB_in_atomic * self.equil_temp * der_log_rho[1] + avg_force[0]
+            self.czar_force[1] = -kB_in_atomic * self.equil_temp * der_log_rho[0] + avg_force[1]
             if self.verbose:
                 print(
                     " >>> Info: On-the-fly integration only available for 1D coordinates"
@@ -189,11 +185,10 @@ class eABF(EnhancedSampling):
         Args:
            langevin: Temperature control with langevin dynamics
         """
-        kB_a = 1.380648e-23 / 4.359744e-18
         if langevin:
             prefac = 2.0 / (2.0 + self.friction * self.the_md.dt)
             rand_push = np.sqrt(
-                self.equil_temp * self.friction * self.the_md.dt * kB_a / 2.0e0
+                self.equil_temp * self.friction * self.the_md.dt * kB_in_atomic / 2.0e0
             )
             self.ext_rand_gauss = np.zeros(shape=(len(self.ext_momenta),), dtype=float)
             for atom in range(len(self.ext_rand_gauss)):
@@ -215,13 +210,12 @@ class eABF(EnhancedSampling):
         Args:
             langevin: Temperature control with langevin dynamics
         """
-        kB_a = 1.380648e-23 / 4.359744e-18
         if langevin:
             prefac = (2.0e0 - self.friction * self.the_md.dt) / (
                 2.0e0 + self.friction * self.the_md.dt
             )
             rand_push = np.sqrt(
-                self.equil_temp * self.friction * self.the_md.dt * kB_a / 2.0e0
+                self.equil_temp * self.friction * self.the_md.dt * kB_in_atomic / 2.0e0
             )
             self.ext_momenta *= prefac
             self.ext_momenta += np.sqrt(self.ext_mass) * rand_push * self.ext_rand_gauss
@@ -300,9 +294,9 @@ class eABF(EnhancedSampling):
         data = {}
         for i in range(self.ncoords):
             if self.cv_type[i] == "angle":
-                self.ext_traj[:, i] /= np.pi / 180.0
+                self.ext_traj[:, i] *= DEGREES_per_RADIAN
             elif self.cv_type[i] == "distance":
-                self.ext_traj[:, i] *= 0.52917721092e0
+                self.ext_traj[:, i] *= BOHR_to_ANGSTROM 
             data[f"lambda{i}"] = self.ext_traj[:, i]
         data["Epot [H]"] = self.epot
         data["T [K]"] = self.temp

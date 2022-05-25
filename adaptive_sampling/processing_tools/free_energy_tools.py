@@ -1,16 +1,8 @@
 import os, sys, math, logging
 import numpy as np
 from typing import Union, List, Tuple
-
-# natural constants
-R = 8.314  # J / K mol
-kB = 1.380648e-23  # J / K
-H_in_J = 4.359744e-18  # Hartree in J
-H_in_kJ = 2625.499639  # kJ / mol
-kB_a = kB / H_in_J  # Hartree / K
-bohr2angs = 0.52917721092e0
-kJ_in_kcal = 0.23900574
-H_in_kcal = H_in_kJ * kJ_in_kcal
+from ..sampling_tools.units import *
+from ..units import *
 
 ######################################################################
 # helper functions
@@ -71,7 +63,7 @@ def get_us_windows(
         index_list (np.ndarray): list of frame indices in original trajectory,
         meta_f (np.ndarray): window information for MBAR
     """
-    RT = R * T / 1000.0
+    RT = R_in_SI * T / 1000.0
     k = RT / (sigma * sigma)
 
     dx = centers[1] - centers[0]
@@ -152,8 +144,8 @@ def welford_var(
     return mean, M2, var
 
 
-def delta_pmf(
-    pmf: np.ndarray, T: float = 300.0, min_bin: int = 20, max_bin: int = -20
+def reaction_freeE(
+        pmf: np.ndarray, T: float = 300.0, min_bin: int = 20, max_bin: int = -20, TS: int = None
 ) -> tuple:
     """calculate free energy difference
 
@@ -161,15 +153,16 @@ def delta_pmf(
         pmf: potential of mean force (free energy surface)
         T: temperature
         min_bin/max_bin: minimum/maximum bin for search of transition state
-
+        TS: alternatively, bin number of TS
     returns:
         dA (float): free energy difference
         dA_grid (np.ndarray): free energy difference on grid
     """
-    RT = (R * T) / 1000.0
+    RT = (R_in_SI * T) / 1000.0
     pmf = pmf[~np.isnan(pmf)]
-
-    TS = np.where(pmf == np.amax(pmf[min_bin:max_bin]))[0][0]
+    
+    if TS == None:
+        TS = np.where(pmf == np.amax(pmf[min_bin:max_bin]))[0][0]
 
     P = np.exp(-pmf / RT)
     P /= P.sum()
@@ -181,8 +174,47 @@ def delta_pmf(
     dA_grid = np.zeros(len(pmf))
     dA_grid[TS] += dA / 2
     dA_grid[(TS + 1) :] += dA
+    dA_approx = pmf[TS:].min() - pmf[:TS].min()
 
-    return dA, dA_grid
+    return dA, dA_grid, dA_approx
+
+def activation_freeE(
+        pmf: np.ndarray, m_xi_inv: np.ndarray, T: float = 300.0, min_bin: int = 20, max_bin: int = -20, TS: int = None
+) -> tuple:
+    """calculate activation free energy 
+
+    args:
+        pmf: potential of mean force (free energy surface)
+        m_xi_inv: z-conditioned average of inverse mass associates with CV, expected units are xi^2/(au_mass * angstrom^2)
+        T: temperature
+        min_bin/max_bin: minimum/maximum bin for search of transition state
+        TS: alternatively, bin number of TS
+    returns:
+        dA (float): free energy difference
+        dA_grid (np.ndarray): free energy difference on grid
+    """
+    RT = (R_in_SI * T) / 1000.0  # kJ/mol
+    
+    pmf = fep[~np.isnan(fep)]
+    if TS == None:
+        TS = np.where(pmf == np.amax(pmf[min_bin:max_bin]))[0][0]
+    
+    rho = np.exp(-pmf/RT)
+    P = rho / rho.sum() # normalize so that P_a + P_b = 1.0
+    
+    lambda_xi = np.sqrt((h_in_SI * h_in_SI * m_xi_inv[TS]) / (2. * np.pi * atomic_to_kg  * kB_in_SI * T))
+    lambda_xi *= 1e10
+
+    P_a = P[:TS].sum()
+    P_b = P[(TS+1):].sum()
+
+    dA_a2b = - RT*np.log((rho[TS]*lambda_xi) / P_a)
+    dA_b2a = - RT*np.log((rho[TS]*lambda_xi) / P_b)
+    dA_a2b_approx = pmf[TS] - pmf[:TS].min()
+    dA_b2a_approx = pmf[TS] - pmf[TS:].min()
+    
+    return dA_a2b, dA_b2a, dA_a2b_approx, dA_b2a_approx 
+
 
 
 ######################################################################
@@ -203,7 +235,7 @@ def CZAR(
     returns:
         ti_force (np.ndarray): thermodynamic force (gradient of PMF)
     """
-    RT = R * T / 1000.0
+    RT = R_in_SI * T / 1000.0
 
     dx2 = (grid[1] - grid[0]) / 2.0
     grid_local = grid + dx2
@@ -241,7 +273,7 @@ def integrate(
         pmf (np.ndarray): potential of mean force
         rho (np.ndarray): probability density
     """
-    RT = R * T / 1000.0
+    RT = R_in_SI * T / 1000.0
     data = np.copy(grad)
 
     if method == "simpson":
@@ -290,7 +322,7 @@ def MBAR(
     returns:
         W: array of statistical weigths of each frame
     """
-    RT = R * T / 1000.0
+    RT = R_in_SI * T / 1000.0
     beta = 1.0 / RT
 
     num_trajs = len(meta_f)
@@ -299,7 +331,7 @@ def MBAR(
     all_frames, num_frames, frames_per_traj = join_frames(traj_list)
     if dV_list is not None:
         all_dV, dV_num, dV_per_traj = join_frames(dV_list)
-        all_dV *= H_in_kJ  # kJ/mol
+        all_dV *= atomic_to_kJmol  # kJ/mol
         if (dV_num != num_frames) or (frames_per_traj != dV_per_traj).all():
             raise ValueError("GaMD frames have to match eABF frames!")
 
@@ -324,7 +356,6 @@ def MBAR(
     exp_U = np.asarray(exp_U, dtype=float)  # this is a num_trajs x num_frames array
 
     beta_Ai = np.zeros(shape=(num_trajs,), dtype=float)
-    Ai_overtime = [beta_Ai]
 
     print("All ready!\n")
     print("Start of the self-consistent iteration.")
@@ -339,7 +370,6 @@ def MBAR(
 
         beta_Ai_new = -np.log(np.multiply(exp_U, denominator).sum(axis=1))
         beta_Ai_new -= beta_Ai_new[0]
-        Ai_overtime.append(beta_Ai_new)
 
         delta_Ai = np.abs(beta_Ai - beta_Ai_new)
         beta_Ai = np.copy(beta_Ai_new)
@@ -410,7 +440,7 @@ def mbar_pmf(
     returns:
         Potential of mean force (PMF), probability density
     """
-    RT = R * T / 1000.0
+    RT = R_in_SI * T / 1000.0
 
     dx = grid[1] - grid[0]
     dx2 = dx / 2.0
@@ -440,7 +470,7 @@ def mbar_deltapmf(
     returns:
         deltaA: free energy difference
     """
-    RT = R * T / 1000.0
+    RT = R_in_SI * T / 1000.0
     weights /= weights.sum()
 
     p_a = weights[np.where(cv < TS)].sum()
@@ -535,8 +565,8 @@ def gamd_correction_n(
         print(" >>> Warning: cumulant expansion only supportet up to 4th order")
         korder = 4
 
-    beta = 1.0 / (R * T / 1000.0)  # 1/ kJ/mol
-    dV_kJ = delta_V * H_in_kJ  # kJ/mol
+    beta = 1.0 / (R_in_SI * T / 1000.0)  # 1/ kJ/mol
+    dV_kJ = delta_V * atomic_to_kJmol  # kJ/mol
 
     dx2 = (grid[1] - grid[0]) / 2.0
     hist = np.zeros(len(grid))
@@ -572,7 +602,7 @@ def gamd_pmf(
         pmf (np.ndarray): potential of mean force
         rho (np.ndarray): probability density
     """
-    RT = R * T / 1000.0  # kJ/mol
+    RT = R_in_SI * T / 1000.0  # kJ/mol
     dx = grid[1] - grid[0]
 
     # compute pmf from biased prob. density corrected by second order cumulant expansion
@@ -615,7 +645,7 @@ def gaeabf_pmf(
         pmf (np.ndarray): potential of mean force
         rho (np.ndarray): probability density
     """
-    RT = R * T / 1000.0  # kJ/mol
+    RT = R_in_SI * T / 1000.0  # kJ/mol
     dx = grid[1] - grid[0]
 
     # compute pmf from CZAR and cumulant expansion

@@ -2,7 +2,7 @@ import numpy as np
 from .enhanced_sampling import EnhancedSampling
 from .utils import welford_var
 from ..processing_tools.thermodynamic_integration import integrate
-
+from ..units import *
 
 class ABF(EnhancedSampling):
     def __init__(self, *args, nfull: int = 100, **kwargs):
@@ -13,7 +13,6 @@ class ABF(EnhancedSampling):
 
     def step_bias(self, write_output: bool = True, write_traj: bool = True, **kwargs):
 
-        kB_a = 1.380648e-23 / 4.359744e-18
         md_state = self.the_md.get_sampling_data()
         (xi, delta_xi) = self.get_cv(**kwargs)
         self.traj = np.append(self.traj, [xi], axis=0)
@@ -43,7 +42,7 @@ class ABF(EnhancedSampling):
                 # apply bias force
                 force_sample = np.dot(
                     md_state.forces, v_i
-                ) - kB_a * self.equil_temp * self.divergence_xi(xi[i], self.cv_type[i])
+                ) - kB_in_atomic * self.equil_temp * self.divergence_xi(xi[i], self.cv_type[i])
 
                 (
                     self.bias[i][bink[1], bink[0]],
@@ -89,7 +88,7 @@ class ABF(EnhancedSampling):
             self.pmf[0, :], _ = integrate(
                 self.bias[0][0], self.dx, equil_temp=self.equil_temp, method=method
             )
-            self.pmf *= 2625.499639  # Hartree to kJ/mol
+            self.pmf *=  atomic_to_kJmol
         elif self.verbose:
             print(" >>> Info: On-the-fly integration only available for 1D coordinates")
 
