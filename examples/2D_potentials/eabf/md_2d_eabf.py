@@ -2,9 +2,7 @@
 import time
 import sys
 from adaptive_sampling.sampling_tools.eabf import eABF
-
-sys.path.insert(1, "../")
-from InterfaceMD_2D import *
+from adaptive_sampling.interface.interfaceMD_2D import *
 
 bohr2angs = 0.52917721092e0
 

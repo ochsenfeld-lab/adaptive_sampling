@@ -15,10 +15,8 @@ class ABF(EnhancedSampling):
 
         kB_a = 1.380648e-23 / 4.359744e-18
         md_state = self.the_md.get_sampling_data()
+
         (xi, delta_xi) = self.get_cv(**kwargs)
-        self.traj = np.append(self.traj, [xi], axis=0)
-        self.temp.append(md_state.temp)
-        self.epot.append(md_state.epot)
 
         bias_force = np.zeros_like(md_state.forces)
 
@@ -60,6 +58,10 @@ class ABF(EnhancedSampling):
 
         else:
             bias_force += self.harmonic_walls(xi, delta_xi)
+
+        self.traj = np.append(self.traj, [xi], axis=0)
+        self.temp.append(md_state.temp)
+        self.epot.append(md_state.epot)
 
         # correction for kinetics
         if self.kinetics:

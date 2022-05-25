@@ -2,9 +2,8 @@
 import time
 import sys
 from adaptive_sampling.sampling_tools.metadynamics import MtD
+from adaptive_sampling.interface.interfaceMD_2D import *
 
-sys.path.insert(1, "../")
-from InterfaceMD_2D import *
 
 bohr2angs = 0.52917721092e0
 

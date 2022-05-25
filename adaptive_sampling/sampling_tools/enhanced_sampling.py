@@ -334,11 +334,7 @@ class EnhancedSampling(ABC):
             for n in range(self.out_freq):
                 traj_out.write(
                     "\n%14.6f\t"
-                    % (
-                        (self.the_md.step - self.out_freq + n)
-                        * self.the_md.dt
-                        * 1.0327503e0
-                    )
+                    % ((step - self.out_freq + n) * self.the_md.dt * 1.0327503e0)
                 )  # time in fs
                 for i in range(len(self.traj[0])):
                     traj_out.write("%14.6f\t" % (self.traj[-self.out_freq + n][i]))

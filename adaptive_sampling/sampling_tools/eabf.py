@@ -1,5 +1,6 @@
 import random
 import numpy as np
+from typing import Union
 from .enhanced_sampling import EnhancedSampling
 from .abf import ABF
 from .utils import welford_var, diff, cond_avg
@@ -9,14 +10,17 @@ from ..processing_tools.thermodynamic_integration import integrate
 class eABF(ABF, EnhancedSampling):
     def __init__(
         self,
-        ext_sigma: list,
-        ext_mass: list,
+        ext_sigma: Union[float, list],
+        ext_mass: Union[float, list],
         *args,
         friction: float = 1.0e-3,
         seed_in: int = 42,
         **kwargs,
     ):
         super().__init__(*args, **kwargs)
+
+        ext_sigma = [ext_sigma] if not hasattr(ext_sigma, "__len__") else ext_sigma
+        ext_mass = [ext_mass] if not hasattr(ext_mass, "__len__") else ext_mass
 
         (xi, _) = self.get_cv()
 
@@ -62,10 +66,6 @@ class eABF(ABF, EnhancedSampling):
         (xi, delta_xi) = self.get_cv(**kwargs)
         self._propagate()
 
-        self.traj = np.append(self.traj, [xi], axis=0)
-        self.temp.append(md_state.temp)
-        self.epot.append(md_state.epot)
-
         bias_force = np.zeros_like(md_state.forces)
 
         if (self.ext_coords <= self.maxx).all() and (
@@ -75,7 +75,7 @@ class eABF(ABF, EnhancedSampling):
             bink = self.get_index(self.ext_coords)
             self.ext_hist[bink[1], bink[0]] += 1
 
-            bias_force += self._extended_dynamics(xi, delta_xi, self.ext_sigma)
+            bias_force += self._extended_dynamics(xi, delta_xi)  # , self.ext_sigma)
 
             for i in range(self.ncoords):
 
@@ -100,7 +100,7 @@ class eABF(ABF, EnhancedSampling):
                 self.ext_forces -= ramp * self.bias[i][bink[1], bink[0]]
 
         else:
-            bias_force += self._extended_dynamics(xi, delta_xi, self.ext_sigma)
+            bias_force += self._extended_dynamics(xi, delta_xi)  # , self.ext_sigma)
 
         # xi-conditioned accumulators for CZAR
         if (xi <= self.maxx).all() and (xi >= self.minx).all():
@@ -158,9 +158,6 @@ class eABF(ABF, EnhancedSampling):
                 -kB_a * self.equil_temp * np.gradient(log_rho[0], self.grid[0])
                 + avg_force[0]
             )
-            print(avg_force)
-            print(self.czar_force)
-
             self.pmf[0, :], _ = integrate(
                 self.czar_force[0][0],
                 self.dx,
@@ -230,11 +227,16 @@ class eABF(ABF, EnhancedSampling):
             self.ext_momenta -= 0.5e0 * self.the_md.dt * self.ext_forces
 
     def _extended_dynamics(
-        self, xi: np.ndarray, delta_xi: np.ndarray, margin: np.ndarray
+        self,
+        xi: np.ndarray,
+        delta_xi: np.ndarray,
+        margin: np.ndarray = np.array([0.0, 0.0]),
     ) -> np.ndarray:
         """get forces due to coupling to extended system and confine extended variable to range of interest
 
         args:
+            xi: collective variable
+            delta_xi: gradient of collective variable
             margin: inset from minx, maxx where bias starts
 
         returns:
@@ -247,8 +249,7 @@ class eABF(ABF, EnhancedSampling):
 
             dxi = diff(self.ext_coords[i], xi[i], self.cv_type[i])
             self.ext_forces[i] = self.ext_k[i] * dxi
-            bias_force[i] -= self.ext_k[i] * dxi
-            bias_force += bias_force[i] * delta_xi[i]
+            bias_force -= self.ext_k[i] * dxi * delta_xi[i]
 
             # harmonic walls for confinement to range of interest
             if self.ext_coords[i] > (self.maxx[i] - margin[i]):

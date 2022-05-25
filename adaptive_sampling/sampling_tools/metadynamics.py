@@ -1,7 +1,6 @@
 import numpy as np
 from .enhanced_sampling import EnhancedSampling
 from .utils import diff
-from ..processing_tools.thermodynamic_integration import integrate
 
 
 class MtD(EnhancedSampling):
@@ -41,9 +40,6 @@ class MtD(EnhancedSampling):
 
         md_state = self.the_md.get_sampling_data()
         (xi, delta_xi) = self.get_cv(**kwargs)
-        self.traj = np.append(self.traj, [xi], axis=0)
-        self.temp.append(md_state.temp)
-        self.epot.append(md_state.epot)
 
         bias_force = np.zeros_like(md_state.forces)
 
@@ -56,7 +52,11 @@ class MtD(EnhancedSampling):
             for i in range(self.ncoords):
                 bias_force += mtd_force[i] * delta_xi[i]
 
-        bias_force += self.harmonic_walls(xi, delta_xi, self.hill_std)
+        bias_force += self.harmonic_walls(xi, delta_xi)  # , self.hill_std)
+
+        self.traj = np.append(self.traj, [xi], axis=0)
+        self.temp.append(md_state.temp)
+        self.epot.append(md_state.epot)
 
         # correction for kinetics
         if self.kinetics:
@@ -85,6 +85,7 @@ class MtD(EnhancedSampling):
             self.pmf *= (
                 self.equil_temp + self.well_tempered_temp
             ) / self.well_tempered_temp
+        self.pmf -= self.pmf.min()
 
     def shared_bias(self):
         """TODO"""

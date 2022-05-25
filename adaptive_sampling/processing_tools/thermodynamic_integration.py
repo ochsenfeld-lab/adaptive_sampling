@@ -62,7 +62,8 @@ def czar(
     returns:
         mean_force: thermodynamic force (gradient of PMF)
     """
-    RT = R * T / 1000.0
+    R = 8.314 / 1000.0  # kJ / K mol
+    RT = R * equil_temp / 1000.0
 
     dx2 = (grid[1] - grid[0]) / 2.0
     grid_local = grid + dx2

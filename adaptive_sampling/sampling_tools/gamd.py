@@ -1,4 +1,3 @@
-from locale import MON_2
 import numpy as np
 from .enhanced_sampling import EnhancedSampling
 from .utils import welford_var
@@ -40,14 +39,9 @@ class GaMD(EnhancedSampling):
         self.corr = np.zeros_like(self.histogram)
 
     def step_bias(self, write_output: bool = True, write_traj: bool = True, **kwargs):
-        # TODO: fix me
 
         md_state = self.the_md.get_sampling_data()
         (xi, delta_xi) = self.get_cv(**kwargs)
-
-        self.traj = np.append(self.traj, [xi], axis=0)
-        self.temp.append(md_state.temp)
-        self.epot.append(md_state.epot)
 
         # get energy and forces
         bias_force = np.zeros_like(md_state.forces)
@@ -112,8 +106,7 @@ class GaMD(EnhancedSampling):
                 output = {
                     "hist": self.histogram,
                     "free energy": self.pmf,
-                    "gamd_pot_c1": self.c1,
-                    "gamd_pot_c2": self.c2,
+                    "gamd_corr": self.corr,
                 }
                 self.write_output(output, filename="gamd.out")
                 self.write_restart()
@@ -133,7 +126,7 @@ class GaMD(EnhancedSampling):
         )
         self.pmf += self.corr
         self.pmf *= 2625.499639  # Hartree to kJ/mol
-        # self.pmf -= self.pmf.min()
+        self.pmf -= self.pmf.min()
 
     def shared_bias(self):
         """TODO: fix me"""
