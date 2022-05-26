@@ -6,6 +6,7 @@ from typing import List, Tuple
 from .utils import _join_frames
 from ..units import *
 
+
 def mbar(
     traj_list: List[np.ndarray],
     meta_f: np.ndarray,
@@ -100,9 +101,7 @@ def mbar(
                 "========================================================================"
             )
             print("Convergence not reached in {} iterations!".format(count))
-            print(
-                "Max error vector:", max_err_vec
-            )
+            print("Max error vector:", max_err_vec)
             print(
                 "========================================================================"
             )
@@ -114,9 +113,7 @@ def mbar(
                 "========================================================================"
             )
             print("Converged after {} iterations!".format(count))
-            print(
-                "Max error vector:", max_err_vec
-            )
+            print("Max error vector:", max_err_vec)
             print(
                 "========================================================================"
             )
@@ -259,6 +256,7 @@ def deltaf_from_weights(
     p_b = weights[np.where(cv > TS)].sum()
 
     return -RT * np.log(p_b / p_a)
+
 
 def _error_vec(
     n_frames: np.ndarray, beta_Ai: np.ndarray, exp_U: np.ndarray

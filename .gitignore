@@ -125,7 +125,7 @@ venv.bak/
 dmypy.json
 
 # output files
-.npz
-.npy
-.out
-.dat
+*.npz
+*.npy
+*.out
+*.dat

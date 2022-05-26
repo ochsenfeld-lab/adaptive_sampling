@@ -5,6 +5,7 @@ import numpy as np
 from typing import Union, Tuple
 from ..units import *
 
+
 class CV:
     """Class for Collective Variables
 
@@ -162,7 +163,7 @@ class CV:
         # get forces
         if self.requires_grad:
             # @AH: why don't you do? Does this not work?
-#            self.gradient = self.partial_derivative(self.cv, self.coords)
+            #            self.gradient = self.partial_derivative(self.cv, self.coords)
             atom_grads = self.partial_derivative(self.cv, (p1, p2))
             self.gradient = torch.matmul(
                 atom_grads[0], self._get_atom_weights(m0, cv_def[0])
@@ -380,263 +381,6 @@ class CV:
 
         return float(self.cv)
 
-    def cec(
-        self,
-        cv_def: list,
-        modified: bool = True,
-        r_sw: float = 1.3,
-        d_sw: float = 0.05,
-        n_pair: int = 15,
-    ) -> float:
-        """Center of Excess Charge coordinate for long range proton transfer projected on axis of proton transport after Koenig et al.
-
-        Args:
-            cv_dev: Definition of proton wire for long range PT,
-                [[protons],                  # [all proton indices]
-                [donors/acceptors],          # [[weight, index of first donor], [W1, X1], ..., [weight, index of last acceptor]]
-                [coupled donors/acceptors]]  # [[weight of group, donor, acceptor], ...]
-            modified: if True, use CEC modification by König et al.
-            r_sw: switching distance in Angstrom
-            d_sw: in Angstrom, controls how fast switching function flips from 0 to 1
-            n_pair: exponent for calculation of m(X,{H})
-
-        Returns:
-            cv (float): CEC coordinate
-        """
-        self.update_coords()
-
-        r_sw /= BOHR_to_ANGSTROM
-        d_sw /= BOHR_to_ANGSTROM
-
-        self.cv = 0.0
-
-        # vector from first donor to last acceptor defines 1D axis of proton transport
-        ind_don, ind_acc = cv_def[1][0][1], cv_def[1][-1][1]
-        r_don, _ = self._get_com(ind_don)
-        r_acc, _ = self._get_com(ind_acc)
-
-        z = r_acc - r_don
-        z_n = 1.0 / torch.linalg.norm(z)
-        z_u = z * z_n
-
-        # proton terms
-        index_h = cv_def[0]
-        coords_h = []
-        for _, ind_h in enumerate(index_h):
-            (r_hi, _) = self._get_com(ind_h)
-            coords_h.append(r_hi)
-            r = r_hi - r_don
-            self.cv += torch.dot(r, z_u)
-
-        # donor/acceptor terms
-        index_x = cv_def[1]
-        coords_x = []
-        for _, ind_x in enumerate(index_x[1:]):
-            (r_xj, _) = self._get_com(ind_x[1])
-            coords_x.append(r_xj)
-            w_xj = ind_x[0] + 1.0
-            r = r_xj - r_don
-            self.cv -= w_xj * torch.dot(r, z_u)
-
-        # modified CEC for long range proton transfer
-        if modified:
-            for _, (ind_h, r_hi) in enumerate(zip(index_h, coords_h)):
-                for _, (ind_x, r_xj) in enumerate(zip(index_x, coords_x)):
-                    r = r_hi - r_xj
-                    f_sw = self._f_sw(r, r_sw, d_sw)
-                    self.cv -= f_sw * torch.dot(r, z_u)
-
-        variables = (r_don, r_acc) + tuple(coords_h) + tuple(coords_x)
-        indices = [ind_don, ind_acc] + index_h + [ind_x[1] for ind_x in index_x[1:]]
-
-        # correction for coupled donor and acceptor (e.g. for glutamate, aspartate, histidine, ...)
-        if len(cv_def) == 3:
-            w_pair = [j[0] for j in cv_def[2]]
-            ind_pair = [[j[1], j[2]] for j in cv_def[2]]
-            coords_pair = []
-            for _, (w_pj, ind_pj) in enumerate(zip(w_pair, ind_pair)):
-
-                r_k, _ = self._get_com(ind_pj[0])
-                r_l, _ = self._get_com(ind_pj[1])
-
-                coords_pair += r_k
-                coords_pair += r_l
-
-                r_kl = torch.dot(r_l - r_k, z_u)
-                w = w_pj / 2.0
-
-                # accumulators for m_k and m_l
-                denom_k, num_k = 0.0, 0.0
-                denom_l, num_l = 0.0, 0.0
-
-                # compute m_k, m_l and their derivatives
-                for _, r_hi in enumerate(coords_h):
-                    r_ki = r_hi - r_k
-                    r_li = r_hi - r_l
-                    f_k = self._f_sw(r_ki, r_sw, d_sw)
-                    f_l = self._f_sw(r_li, r_sw, d_sw)
-
-                    # for heavy atoms sum over all protons contributes to gradient
-                    denom_k += np.power(f_k, n_pair)
-                    num_k += np.power(f_k, n_pair + 1)
-                    denom_l += np.power(f_l, n_pair)
-                    num_l += np.power(f_l, n_pair + 1)
-
-                # add coupled term to xi
-                m_k = num_k / denom_k
-                m_l = num_l / denom_l
-                self.cv += w * (m_k * r_kl - m_l * r_kl)
-
-                indices += [ind_pj[0], ind_pj[1]]
-                variables += (r_k, r_l)
-
-        if self.requires_grad:
-            atom_grads = self.partial_derivative(self.cv, tuple(variables))
-            self.gradient = np.zeros(3 * self.natoms, dtype=float)
-            for grad, atom in zip(atom_grads, indices):
-                self._grad_to_molecule(grad.numpy(), atom)
-
-        return float(self.cv)
-
-    def gmcec(
-        self,
-        cv_def: list,
-        r_sw: float = 1.3,
-        d_sw: float = 0.05,
-        n_pair: int = 15,
-        mapping: str = "default",
-        c: float = 1.0,
-    ) -> float:
-        """modified CEC coordinate to describe long range proton transfer generalized to complex 3D wire geometries after König et al.
-
-        Args:
-            cv_def: Definition of proton wire for long range PT,
-                [[protons],                  # [all proton indices]
-                [donors/acceptors],          # [[weight, index of first donor], [W1, X1], ..., [weight, index of last acceptor]]
-                [coupled donors/acceptors]]  # [[weight of group, donor, acceptor], ...]
-            r_sw: switching distance in Angstrom
-            d_sw: in Angstrom, controls how fast switching function flips from 0 to 1
-            n_pair: exponent for calculation of m(X,{H})
-            mapping: 'f_SW': uses switching function (chi = c/(1+e^(d_acc_xi)) - c/(1+e^(d_don_xi)))
-                     'fraction': chi = d_don_xi / (d_don_xi+d_acc_xi)
-                     'default': antisymmetric stretch between donor, xi and acceptor (chi = d_xi_don - d_xi_acc)
-
-        Returns:
-            cv: gmCEC coordinate
-        """
-        self.update_coords()
-
-        r_sw /= BOHR_to_ANGSTROM
-        d_sw /= BOHR_to_ANGSTROM
-
-        # 3D mCEC vector
-        xi = torch.zeros(3, dtype=torch.float)
-
-        # protons
-        index_h = cv_def[0]
-        coords_h = []
-        for _, ind_h in enumerate(index_h):
-            (r_hi, _) = self._get_com(ind_h)
-            coords_h.append(r_hi)
-            xi += r_hi
-
-        # donors/acceptors
-        w_x = [j[0] + 1.0 for j in cv_def[1]]
-        index_x = [j[1] for j in cv_def[1]]
-        coords_x = []
-        for _, (ind_xj, w_xj) in enumerate(zip(index_x, w_x)):
-            (r_xj, _) = self._get_com(ind_xj)
-            coords_x.append(r_xj)
-            xi -= w_xj * r_xj
-
-        # modified CEC
-        for _, r_hi in enumerate(coords_h):
-            for _, r_xj in enumerate(coords_x):
-                r_ij = r_hi - r_xj
-                f_sw = 1.0 / (1.0 + torch.exp((torch.linalg.norm(r_ij) - r_sw) / d_sw))
-                xi -= f_sw * r_ij
-
-        variables = tuple(coords_h) + tuple(coords_x)
-        indices = index_h + index_x
-
-        # correction for coupled donor and acceptor (e.g. for glutamate, aspartate, histidine, ...)
-        if len(cv_def) == 3:
-            w_pair = [j[0] for j in cv_def[2]]
-            ind_pair = [[j[1], j[2]] for j in cv_def[2]]
-            coords_pair = []
-            for _, (w_pj, ind_pj) in enumerate(zip(w_pair, ind_pair)):
-
-                r_k, _ = self._get_com(ind_pj[0])
-                r_l, _ = self._get_com(ind_pj[1])
-
-                coords_pair += r_k
-                coords_pair += r_l
-
-                r_kl = r_l - r_k
-                w = w_pj / 2.0
-
-                # accumulators for m_k and m_l
-                denom_k, num_k = 0.0, 0.0
-                denom_l, num_l = 0.0, 0.0
-
-                # compute m_k, m_l and their derivatives
-                for _, r_hi in enumerate(coords_h):
-                    r_ki = r_hi - r_k
-                    r_li = r_hi - r_l
-                    f_k = self._f_sw(r_ki, r_sw, d_sw)
-                    f_l = self._f_sw(r_li, r_sw, d_sw)
-
-                    # for heavy atoms sum over all protons contributes to gradient
-                    denom_k += torch.pow(f_k, n_pair)
-                    num_k += torch.pow(f_k, n_pair + 1)
-                    denom_l += torch.pow(f_l, n_pair)
-                    num_l += torch.pow(f_l, n_pair + 1)
-
-                # add coupled term to xi
-                m_k = num_k / denom_k
-                m_l = num_l / denom_l
-                xi += w * (m_k * r_kl - m_l * r_kl)
-
-                indices += [ind_pj[0], ind_pj[1]]
-                variables += (r_k, r_l)
-
-        # mapping to 1D
-        if mapping == "f_SW":
-            self.cv = -c / (1.0 + torch.exp(torch.linalg.norm(xi - coords_x[0])))
-            self.cv += c / (1.0 + torch.exp(torch.linalg.norm(xi - coords_x[-1])))
-
-        elif mapping == "fraction":
-            d_xi_don = torch.linalg.norm(xi - coords_x[0])
-            d_xi_acc = torch.linalg.norm(xi - coords_x[-1])
-            self.cv = d_xi_don / (d_xi_don + d_xi_acc)
-
-        else:  # default
-            self.cv = torch.linalg.norm(xi - coords_x[0]) - torch.linalg.norm(
-                xi - coords_x[-1]
-            )
-
-        # gradient of gmcec coordinate
-        if self.requires_grad:
-            atom_grads = self.partial_derivative(self.cv, tuple(variables))
-            self.gradient = np.zeros(3 * self.natoms, dtype=float)
-            for grad, atom in zip(atom_grads, indices):
-                self._grad_to_molecule(grad.numpy(), atom)
-
-        return float(self.cv)
-
-    @staticmethod
-    def _f_sw(r: torch.tensor, r_sw: float, d_sw: float) -> float:
-        """switching function f_sw(r)"""
-        d = torch.linalg.norm(r)
-        return 1.0 / (1.0 + torch.exp((d - r_sw) / d_sw))
-
-    def _grad_to_molecule(self, grad_atom: np.ndarray, index_atom: int):
-        """atom gradient of size(3) to molecular gradient of size(3N)"""
-        index_atom = int(index_atom)
-        self.gradient[3 * index_atom] += grad_atom[0]
-        self.gradient[3 * index_atom + 1] += grad_atom[1]
-        self.gradient[3 * index_atom + 2] += grad_atom[2]
-
     def custom_lin_comb(self, cvs: list, **kwargs):
         """custom linear combination of arbitrary functions"""
         self.update_coords()
@@ -651,7 +395,7 @@ class CV:
         self.gradient = gradient
         return float(cv)
 
-    def get_cv(self, cv, atoms, **kwargs):
+    def get_cv(self, cv, atoms, **kwargs) -> Tuple[float, np.ndarray]:
         """get state of collective variable
 
         Returns:
@@ -684,21 +428,6 @@ class CV:
             self.type = None
         elif cv.lower() == "coordination_number":
             xi = self.coordination_number(atoms)
-        elif cv.lower() == "cec":
-            xi = self.cec(atoms, modified=False, **kwargs)
-            self.type = "distance"
-        elif cv.lower() == "mcec":
-            xi = self.cec(atoms, modified=True, **kwargs)
-            self.type = "distance"
-        elif cv.lower() == "gmcec":
-            xi = self.gmcec(atoms, mapping="stretch", **kwargs)
-            self.type = "distance"
-        elif cv.lower() == "gmcec1":
-            xi = self.gmcec(atoms, mapping="f_SW", **kwargs)
-            self.type = None
-        elif cv.lower() == "gmcec2":
-            xi = self.gmcec(atoms, mapping="fraction", **kwargs)
-            self.type = None
         elif cv.lower() == "lin_comb_custom":
             xi = self.custom_lin_comb(atoms)
             self.type = None

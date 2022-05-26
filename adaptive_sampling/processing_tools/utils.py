@@ -134,8 +134,13 @@ def conditional_average(
             ) / np.sqrt(nsamples)
     return obs_xi, sem_xi
 
+
 def reaction_freeE(
-        pmf: np.ndarray, T: float = 300.0, min_bin: int = 20, max_bin: int = -20, TS: int = None
+    pmf: np.ndarray,
+    T: float = 300.0,
+    min_bin: int = 20,
+    max_bin: int = -20,
+    TS: int = None,
 ) -> tuple:
     """calculate free energy difference
        see: Dietschreit et al., J. Chem. Phys. 156, 114105 (2022); https://doi.org/10.1063/5.0083423
@@ -150,7 +155,7 @@ def reaction_freeE(
     """
     RT = (R_in_SI * T) / 1000.0
     pmf = pmf[~np.isnan(pmf)]
-    
+
     if TS == None:
         TS = np.where(pmf == np.amax(pmf[min_bin:max_bin]))[0][0]
 
@@ -168,8 +173,14 @@ def reaction_freeE(
 
     return dA, dA_grid, dA_approx
 
+
 def activation_freeE(
-        pmf: np.ndarray, m_xi_inv: np.ndarray, T: float = 300.0, min_bin: int = 20, max_bin: int = -20, TS: int = None
+    pmf: np.ndarray,
+    m_xi_inv: np.ndarray,
+    T: float = 300.0,
+    min_bin: int = 20,
+    max_bin: int = -20,
+    TS: int = None,
 ) -> tuple:
     """calculate activation free energy
        see: Dietschreit et al., J. Chem. Phys. XX, XXX (2022); https://doi.org/XXXX
@@ -184,23 +195,25 @@ def activation_freeE(
         dA_grid (np.ndarray): free energy difference on grid
     """
     RT = (R_in_SI * T) / 1000.0  # kJ/mol
-    
+
     pmf = fep[~np.isnan(fep)]
     if TS == None:
         TS = np.where(pmf == np.amax(pmf[min_bin:max_bin]))[0][0]
-    
-    rho = np.exp(-pmf/RT)
-    P = rho / rho.sum() # normalize so that P_a + P_b = 1.0
-    
-    lambda_xi = np.sqrt((h_in_SI * h_in_SI * m_xi_inv[TS]) / (2. * np.pi * atomic_to_kg  * kB_in_SI * T))
+
+    rho = np.exp(-pmf / RT)
+    P = rho / rho.sum()  # normalize so that P_a + P_b = 1.0
+
+    lambda_xi = np.sqrt(
+        (h_in_SI * h_in_SI * m_xi_inv[TS]) / (2.0 * np.pi * atomic_to_kg * kB_in_SI * T)
+    )
     lambda_xi *= 1e10
 
     P_a = P[:TS].sum()
-    P_b = P[(TS+1):].sum()
+    P_b = P[(TS + 1) :].sum()
 
-    dA_a2b = - RT*np.log((rho[TS]*lambda_xi) / P_a)
-    dA_b2a = - RT*np.log((rho[TS]*lambda_xi) / P_b)
+    dA_a2b = -RT * np.log((rho[TS] * lambda_xi) / P_a)
+    dA_b2a = -RT * np.log((rho[TS] * lambda_xi) / P_b)
     dA_a2b_approx = pmf[TS] - pmf[:TS].min()
     dA_b2a_approx = pmf[TS] - pmf[TS:].min()
-    
+
     return dA_a2b, dA_b2a, dA_a2b_approx, dA_b2a_approx

@@ -3,6 +3,7 @@ from .enhanced_sampling import EnhancedSampling
 from .utils import diff
 from ..units import *
 
+
 class MtD(EnhancedSampling):
     def __init__(
         self,
@@ -26,7 +27,7 @@ class MtD(EnhancedSampling):
                 " >>> fatal error: Effective temperature for Well-Tempered MtD has to be > 0!"
             )
 
-        self.hill_height = hill_height / atomic_to_kJmol 
+        self.hill_height = hill_height / atomic_to_kJmol
         self.hill_std = self.unit_conversion_cv(np.asarray(hill_std))[0]
         self.hill_var = self.hill_std * self.hill_std
         self.update_freq = int(update_freq)

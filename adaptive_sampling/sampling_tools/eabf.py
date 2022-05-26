@@ -7,6 +7,7 @@ from .utils import welford_var, diff, cond_avg
 from ..processing_tools.thermodynamic_integration import integrate
 from ..units import *
 
+
 class eABF(ABF, EnhancedSampling):
     def __init__(
         self,
@@ -26,7 +27,9 @@ class eABF(ABF, EnhancedSampling):
 
         # for dynamics of extended-system
         self.ext_sigma = self.unit_conversion_cv(np.asarray(ext_sigma))[0]
-        self.ext_k = (kB_in_atomic * self.equil_temp) / (self.ext_sigma * self.ext_sigma)
+        self.ext_k = (kB_in_atomic * self.equil_temp) / (
+            self.ext_sigma * self.ext_sigma
+        )
         self.ext_mass = np.asarray(ext_mass)
         self.ext_hist = np.zeros_like(self.histogram)
         self.ext_forces = np.zeros(self.ncoords)
@@ -64,7 +67,7 @@ class eABF(ABF, EnhancedSampling):
         (xi, delta_xi) = self.get_cv(**kwargs)
         self._propagate()
 
-        bias_force = np.zeros_like(md_state.forces)
+        bias_force = self._extended_dynamics(xi, delta_xi)  # , self.ext_sigma)
 
         if (self.ext_coords <= self.maxx).all() and (
             self.ext_coords >= self.minx
@@ -72,8 +75,6 @@ class eABF(ABF, EnhancedSampling):
 
             bink = self.get_index(self.ext_coords)
             self.ext_hist[bink[1], bink[0]] += 1
-
-            bias_force += self._extended_dynamics(xi, delta_xi)  # , self.ext_sigma)
 
             for i in range(self.ncoords):
 
@@ -96,9 +97,6 @@ class eABF(ABF, EnhancedSampling):
                     self.ext_k[i] * diff(self.ext_coords[i], xi[i], self.cv_type[i]),
                 )
                 self.ext_forces -= ramp * self.bias[i][bink[1], bink[0]]
-
-        else:
-            bias_force += self._extended_dynamics(xi, delta_xi)  # , self.ext_sigma)
 
         # xi-conditioned accumulators for CZAR
         if (xi <= self.maxx).all() and (xi >= self.minx).all():
@@ -165,8 +163,12 @@ class eABF(ABF, EnhancedSampling):
 
         else:
             der_log_rho = np.gradient(log_rho, self.grid[1], self.grid[0])
-            self.czar_force[0] = -kB_in_atomic * self.equil_temp * der_log_rho[1] + avg_force[0]
-            self.czar_force[1] = -kB_in_atomic * self.equil_temp * der_log_rho[0] + avg_force[1]
+            self.czar_force[0] = (
+                -kB_in_atomic * self.equil_temp * der_log_rho[1] + avg_force[0]
+            )
+            self.czar_force[1] = (
+                -kB_in_atomic * self.equil_temp * der_log_rho[0] + avg_force[1]
+            )
             if self.verbose:
                 print(
                     " >>> Info: On-the-fly integration only available for 1D coordinates"
@@ -298,7 +300,7 @@ class eABF(ABF, EnhancedSampling):
             if self.cv_type[i] == "angle":
                 self.ext_traj[:, i] *= DEGREES_per_RADIAN
             elif self.cv_type[i] == "distance":
-                self.ext_traj[:, i] *= BOHR_to_ANGSTROM 
+                self.ext_traj[:, i] *= BOHR_to_ANGSTROM
             data[f"lambda{i}"] = self.ext_traj[:, i]
         data["Epot [H]"] = self.epot
         data["T [K]"] = self.temp

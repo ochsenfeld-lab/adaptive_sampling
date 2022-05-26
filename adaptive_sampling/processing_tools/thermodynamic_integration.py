@@ -1,5 +1,6 @@
 import numpy as np
-from ..sampling_tools.units import *
+from ..units import *
+
 
 def integrate(
     mean_force: np.ndarray,
@@ -19,9 +20,9 @@ def integrate(
         pmf (np.ndarray): potential of mean force
         rho (np.ndarray): probability density
     """
-    #R = 8.314 / 1000.0  # kJ / K mol
+    # R = 8.314 / 1000.0  # kJ / K mol
     # @AH isn't that one time too many by 1000 ? R in J/K should now be imported from units
-    RT = R * equil_temp / 1000.0
+    RT = R_in_SI * equil_temp / 1000.0 
     data = np.copy(mean_force)
 
     if method == "simpson":
@@ -63,8 +64,7 @@ def czar(
     returns:
         mean_force: thermodynamic force (gradient of PMF)
     """
-    R = 8.314 / 1000.0  # kJ / K mol
-    RT = R * equil_temp / 1000.0
+    RT = R_in_SI * equil_temp / 1000.0
 
     dx2 = (grid[1] - grid[0]) / 2.0
     grid_local = grid + dx2

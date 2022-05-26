@@ -9,6 +9,7 @@ from ..colvars.colvars import CV
 from .utils import diff
 from ..units import *
 
+
 class EnhancedSampling(ABC):
     """Abstract class for sampling algorithms"""
 
@@ -262,7 +263,7 @@ class EnhancedSampling(ABC):
 
         grid = np.copy(self.grid)
         for i in range(self.ncoords):
-            # @AH: the conversions below are the opposite of the comments! 
+            # @AH: the conversions below are the opposite of the comments!
             if self.the_cv.type == "angle":
                 grid *= np.pi / 180.0  # radians to degree
             elif self.the_cv.type == "distance":
@@ -332,8 +333,7 @@ class EnhancedSampling(ABC):
             for n in range(self.out_freq):
                 traj_out.write(
                     "\n%14.6f\t"
-                    % ((step - self.out_freq + n) * self.the_md.dt * atomic_to_fs
-                    )
+                    % ((step - self.out_freq + n) * self.the_md.dt * atomic_to_fs)
                 )  # time in fs
                 for i in range(len(self.traj[0])):
                     traj_out.write("%14.6f\t" % (self.traj[-self.out_freq + n][i]))

@@ -3,6 +3,7 @@ from .enhanced_sampling import EnhancedSampling
 from .utils import welford_var
 from ..units import *
 
+
 class GaMD(EnhancedSampling):
     def __init__(
         self,
@@ -33,10 +34,10 @@ class GaMD(EnhancedSampling):
         self.gamd_pot = 0.0
         self.gamd_pot_traj = []
 
-        self.c1 = np.zeros_like(self.histogram)
-        self.c2 = np.zeros_like(self.histogram)
-        self.m2 = np.zeros_like(self.histogram)
-        self.corr = np.zeros_like(self.histogram)
+        self.gamd_c1 = np.zeros_like(self.histogram)
+        self.gamd_c2 = np.zeros_like(self.histogram)
+        self.gamd_m2 = np.zeros_like(self.histogram)
+        self.gamd_corr = np.zeros_like(self.histogram)
 
     def step_bias(self, write_output: bool = True, write_traj: bool = True, **kwargs):
 
@@ -46,7 +47,7 @@ class GaMD(EnhancedSampling):
         # get energy and forces
         bias_force = np.zeros_like(md_state.forces)
         self.gamd_forces = np.copy(md_state.forces)
-        epot = np.copy(md_state.epot)
+        epot = md_state.epot
 
         if md_state.step < self.gamd_init_steps:
             self._update_pot_distribution(epot)
@@ -73,13 +74,13 @@ class GaMD(EnhancedSampling):
 
                     # first and second order cumulants for free energy reweighting
                     (
-                        self.c1[bink[1], bink[0]],
-                        self.m2[bink[1], bink[0]],
-                        self.c2[bink[1], bink[0]],
+                        self.gamd_c1[bink[1], bink[0]],
+                        self.gamd_m2[bink[1], bink[0]],
+                        self.gamd_c2[bink[1], bink[0]],
                     ) = welford_var(
                         self.histogram[bink[1], bink[0]],
-                        self.c1[bink[1], bink[0]],
-                        self.m2[bink[1], bink[0]],
+                        self.gamd_c1[bink[1], bink[0]],
+                        self.gamd_m2[bink[1], bink[0]],
                         self.gamd_pot,
                     )
 
@@ -106,7 +107,7 @@ class GaMD(EnhancedSampling):
                 output = {
                     "hist": self.histogram,
                     "free energy": self.pmf,
-                    "gamd_corr": self.corr,
+                    "gamd_corr": self.gamd_corr,
                 }
                 self.write_output(output, filename="gamd.out")
                 self.write_restart()
@@ -116,15 +117,15 @@ class GaMD(EnhancedSampling):
     def get_pmf(self):
 
         kBT = kB_in_atomic * self.equil_temp
-        self.corr = -self.c1 - self.c2 / (2.0 * kBT)
+        self.gamd_corr = -self.gamd_c1 - self.gamd_c2 / (2.0 * kBT)
 
         self.pmf = -kBT * np.log(
             self.histogram,
             out=np.zeros_like(self.histogram),
             where=(self.histogram != 0),
         )
-        self.pmf += self.corr
-        self.pmf *= atomic_to_kJmol 
+        self.pmf += self.gamd_corr
+        self.pmf *= atomic_to_kJmol
         self.pmf -= self.pmf.min()
 
     def shared_bias(self):
@@ -182,9 +183,9 @@ class GaMD(EnhancedSampling):
             filename=filename,
             hist=self.histogram,
             pmf=self.pmf,
-            c1=self.c1,
-            m2=self.m2,
-            corr=self.corr,
+            c1=self.gamd_c1,
+            m2=self.gamd_m2,
+            corr=self.gamd_corr,
             pot_count=self.pot_count,
             pot_var=self.pot_var,
             pot_std=self.pot_std,
@@ -208,9 +209,9 @@ class GaMD(EnhancedSampling):
 
         self.histogram = data["hist"]
         self.pmf = data["pmf"]
-        self.c1 = data["c1"]
-        self.m2 = data["m2"]
-        self.corr = data["corr"]
+        self.gamd_c1 = data["c1"]
+        self.gamd_m2 = data["m2"]
+        self.gamd_corr = data["corr"]
         self.pot_count = data["pot_count"]
         self.pot_var = data["pot_var"]
         self.pot_std = data["pot_std"]

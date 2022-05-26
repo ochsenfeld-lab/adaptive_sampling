@@ -18,8 +18,8 @@ class MetaeABF(eABF, MtD, EnhancedSampling):
         (xi, delta_xi) = self.get_cv(**kwargs)
         self._propagate()
 
-        bias_force = np.zeros_like(md_state.forces)
         mtd_forces = self.get_mtd_force(self.ext_coords)
+        bias_force = self._extended_dynamics(xi, delta_xi) # , self.ext_sigma)
 
         if (self.ext_coords <= self.maxx).all() and (
             self.ext_coords >= self.minx
@@ -27,8 +27,6 @@ class MetaeABF(eABF, MtD, EnhancedSampling):
 
             bink = self.get_index(self.ext_coords)
             self.ext_hist[bink[1], bink[0]] += 1
-
-            bias_force += self._extended_dynamics(xi, delta_xi, self.ext_sigma)
 
             for i in range(self.ncoords):
 
@@ -53,9 +51,6 @@ class MetaeABF(eABF, MtD, EnhancedSampling):
                 self.ext_forces -= (
                     ramp * self.abf_forces[i][bink[1], bink[0]] - mtd_forces[i]
                 )
-
-        else:
-            bias_force += self._extended_dynamics(xi, delta_xi, self.ext_sigma)
 
         self.traj = np.append(self.traj, [xi], axis=0)
         self.temp.append(md_state.temp)

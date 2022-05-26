@@ -4,6 +4,7 @@ from .utils import welford_var
 from ..processing_tools.thermodynamic_integration import integrate
 from ..units import *
 
+
 class ABF(EnhancedSampling):
     def __init__(self, *args, nfull: int = 100, **kwargs):
         super().__init__(*args, **kwargs)
@@ -40,7 +41,9 @@ class ABF(EnhancedSampling):
                 # apply bias force
                 force_sample = np.dot(
                     md_state.forces, v_i
-                ) - kB_in_atomic * self.equil_temp * self.divergence_xi(xi[i], self.cv_type[i])
+                ) - kB_in_atomic * self.equil_temp * self.divergence_xi(
+                    xi[i], self.cv_type[i]
+                )
 
                 (
                     self.bias[i][bink[1], bink[0]],
