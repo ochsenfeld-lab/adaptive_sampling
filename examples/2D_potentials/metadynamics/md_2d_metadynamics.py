@@ -11,15 +11,13 @@ bohr2angs = 0.52917721092e0
 
 # MD
 seed = 42
-nsteps = 100000  # number of MD steps
+nsteps = 500000  # number of MD steps
 dt = 5.0e0  # stepsize in fs
 target_temp = 300.0  # Kelvin
 mass = 10.0  # a.u.
 potential = "1"
 
-# eABF
 ats = [["x", [], 70.0, 170.0, 2.0]]
-N_full = 100
 
 step_count = 0
 coords = [80.0, 0]
@@ -32,13 +30,13 @@ the_md = MD(
     seed_in=seed,
 )
 the_abm = WTM(
-    1.0,
     2.0,
+    5.0,
     the_md,
     ats,
     hill_drop_freq=100,
     output_freq=10,
-    force_from_grid=False,
+    force_from_grid=True,
     f_conf=100,
     equil_temp=300.0,
 )
