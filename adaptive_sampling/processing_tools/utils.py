@@ -28,7 +28,16 @@ def boltzmann(u_pot: Union[float, np.ndarray], beta: float) -> Union[float, np.n
 
 
 def join_frames(traj_list: List[np.array]) -> Tuple[np.ndarray, float, np.ndarray]:
-    """get one array with all frames from list of trajectories"""
+    """get one array with all frames from list of trajectories
+    
+    args:
+        traj_list: list of trajectories
+    
+    returns:
+        all_frames: array with all samples
+        num_frames: total numper of samples
+        frames_per_traj: array with number of samples per original trajectorie
+    """
     num_frames = 0
     frames_per_traj = []
     all_frames = traj_list[0]
@@ -64,21 +73,6 @@ def welford_var(
     M2 += delta * delta2
     var = M2 / count if count > 2 else 0.0
     return mean, M2, var
-
-
-def _join_frames(traj_list: List[np.array]) -> Tuple[np.ndarray, float, np.ndarray]:
-    """get one array with all frames from list of trajectories"""
-    num_frames = 0
-    frames_per_traj = []
-    all_frames = traj_list[0]
-    for ii, traj in enumerate(traj_list):
-        frames_per_traj.append(len(traj))
-        num_frames += frames_per_traj[ii]
-        if ii > 0:
-            all_frames = np.concatenate((all_frames, traj))
-
-    frames_per_traj = np.array(frames_per_traj)
-    return all_frames, num_frames, frames_per_traj
 
 
 def ensemble_average(obs: np.ndarray, weights: np.ndarray) -> tuple:

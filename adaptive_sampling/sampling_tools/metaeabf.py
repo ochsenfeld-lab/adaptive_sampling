@@ -1,13 +1,12 @@
-import random
 import numpy as np
 from .enhanced_sampling import EnhancedSampling
 from .utils import welford_var, diff
 from .eabf import eABF
-from .metadynamics import MtD
+from .metadynamics import WTM
 from ..units import *
 
 
-class MetaeABF(eABF, MtD, EnhancedSampling):
+class WTMeABF(eABF, WTM, EnhancedSampling):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.abf_forces = np.zeros_like(self.bias)
@@ -19,7 +18,7 @@ class MetaeABF(eABF, MtD, EnhancedSampling):
         self._propagate()
 
         mtd_forces = self.get_mtd_force(self.ext_coords)
-        bias_force = self._extended_dynamics(xi, delta_xi) # , self.ext_sigma)
+        bias_force = self._extended_dynamics(xi, delta_xi, self.hill_std)
 
         if (self.ext_coords <= self.maxx).all() and (
             self.ext_coords >= self.minx
@@ -94,7 +93,7 @@ class MetaeABF(eABF, MtD, EnhancedSampling):
                     output[f"czar force {i}"] = self.czar_force[i]
                 output[f"metapot"] = self.metapot
 
-                self.write_output(output, filename="metaeabf.out")
+                self.write_output(output, filename="wtmeabf.out")
                 self.write_restart()
 
         return bias_force
@@ -103,7 +102,7 @@ class MetaeABF(eABF, MtD, EnhancedSampling):
         """TODO"""
         pass
 
-    def write_restart(self, filename: str = "restart_metaabf"):
+    def write_restart(self, filename: str = "restart_wtmeabf"):
         """write restart file
 
         args:
@@ -122,7 +121,7 @@ class MetaeABF(eABF, MtD, EnhancedSampling):
             metapot=self.metapot,
         )
 
-    def restart(self, filename: str = "restart_metaabf"):
+    def restart(self, filename: str = "restart_wtmeabf"):
         """restart from restart file
 
         args:

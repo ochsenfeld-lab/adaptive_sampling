@@ -1,9 +1,7 @@
-import os
 import sys
 import numpy as np
 from typing import List, Tuple
-
-from .utils import _join_frames
+from .utils import join_frames
 from ..units import *
 
 
@@ -38,9 +36,9 @@ def mbar(
     num_trajs = len(meta_f)
 
     print("Making Boltzmann factors\n")
-    all_frames, num_frames, frames_per_traj = _join_frames(traj_list)
+    all_frames, num_frames, frames_per_traj = join_frames(traj_list)
     if dV_list is not None:
-        all_dV, dV_num, dV_per_traj = _join_frames(dV_list)
+        all_dV, dV_num, dV_per_traj = join_frames(dV_list)
         all_dV *= atomic_to_kJmol  # kJ/mol
         if (dV_num != num_frames) or (frames_per_traj != dV_per_traj).all():
             raise ValueError("GaMD frames have to match eABF frames!")
@@ -86,11 +84,12 @@ def mbar(
         delta_Ai = np.abs(beta_Ai - beta_Ai_new)
         beta_Ai = np.copy(beta_Ai_new)
 
+        max_err_vec = np.abs(_error_vec(frames_per_traj, beta_Ai, exp_U)).max()
+
         if count % outfreq == 0 or count == 1:
-            print("Iter %4d:\tConv=%14.10f" % (count, np.max(delta_Ai[1:])))
+            print("Iter %4d:\tConv=%14.10f\tConv_errvec=%14.6f" % (count, np.max(delta_Ai[1:]), max_err_vec))
             sys.stdout.flush()
 
-        max_err_vec = np.abs(_error_vec(frames_per_traj, beta_Ai, exp_U)).max()
         if conv_errvec == None:
             converged = delta_Ai[1:].max() < conv
         else:
@@ -100,7 +99,7 @@ def mbar(
             print(
                 "========================================================================"
             )
-            print("Convergence not reached in {} iterations!".format(count))
+            print(f"Convergence not reached in {count} iterations!")
             print("Max error vector:", max_err_vec)
             print(
                 "========================================================================"
@@ -112,7 +111,7 @@ def mbar(
             print(
                 "========================================================================"
             )
-            print("Converged after {} iterations!".format(count))
+            print(f"Converged after {count} iterations!")
             print("Max error vector:", max_err_vec)
             print(
                 "========================================================================"
@@ -166,43 +165,6 @@ def get_windows(
     meta_f[:, 2] = k
 
     return traj_list, index_list.astype(np.int32), meta_f
-
-
-def write_mbar_data(
-    centers: np.ndarray,
-    xi: np.ndarray,
-    la: np.ndarray,
-    sigma: float,
-    E_pot=None,
-    equil_temp: float = 300.0,
-    out: str = "umbrella_data/",
-):
-    """Get subsampled trajectories and metafile from eABF data
-    to use popular WHAM/MBAR/EMUS implementations with eABF
-    """
-    if not os.path.isdir(out):
-        os.mkdir(out)
-    os.chdir(out)
-
-    traj_list, _, meta_f = get_windows(centers, xi, la, sigma, equil_temp=equil_temp)
-
-    for i in range(len(centers)):
-        out = open("cv_meta.dat", "a")
-        out.write("umbrella_%d.dat\t%14.6f\t%14.6f\n" % (i, meta_f[i, 1], meta_f[i, 2]))
-        out.close()
-
-        timeseries = open("umbrella_%d.dat" % i, "w")
-        for t, cv in enumerate(traj_list[i]):
-            timeseries.write("%d\t%14.6f\n" % (t, cv))
-        timeseries.close()
-
-    if E_pot is not None:
-        E_list, _, _ = get_windows(centers, E_pot, la, sigma, equil_temp=equil_temp)
-        for i in range(len(centers)):
-            e_series = open("epot_%d.dat" % i, "w")
-            for t, epot in enumerate(E_list[i]):
-                e_series.write("%d\t%14.6f\n" % (t, epot))
-            e_series.close()
 
 
 def pmf_from_weights(
@@ -259,7 +221,9 @@ def deltaf_from_weights(
 
 
 def _error_vec(
-    n_frames: np.ndarray, beta_Ai: np.ndarray, exp_U: np.ndarray
+    n_frames: np.ndarray, 
+    beta_Ai: np.ndarray, 
+    exp_U: np.ndarray
 ) -> np.ndarray:
     """error vector for MBAR"""
     denominator = np.multiply(n_frames * np.exp(beta_Ai), exp_U.T)

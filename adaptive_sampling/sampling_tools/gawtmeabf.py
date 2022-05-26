@@ -1,15 +1,17 @@
 import numpy as np
 from .enhanced_sampling import EnhancedSampling
-from .metaeabf import MetaeABF
+from .metaeabf import WTMeABF
 from .gamd import GaMD
 from .utils import welford_var, diff, cond_avg
 from ..processing_tools.thermodynamic_integration import integrate
 from ..units import *
 
 
-class GaWTMeABF(MetaeABF, GaMD, EnhancedSampling):
-    def __init__(self, *args, **kwargs):
+class GaWTMeABF(WTMeABF, GaMD, EnhancedSampling):
+
+    def __init__(self, *args, do_wtm: bool=True, **kwargs):
         super().__init__(*args, **kwargs)
+        self.do_wtm = do_wtm
 
     def step_bias(self, write_output: bool = True, write_traj: bool = True, **kwargs):
 
@@ -18,17 +20,20 @@ class GaWTMeABF(MetaeABF, GaMD, EnhancedSampling):
         self.gamd_forces = np.copy(md_state.forces)
 
         (xi, delta_xi) = self.get_cv(**kwargs)
-        
+
         self._propagate()
-        bias_force = self._extended_dynamics(xi, delta_xi, self.ext_sigma)
+        if self.do_wtm:
+            bias_force = self._extended_dynamics(xi, delta_xi, self.hill_std)
+        else:
+            bias_force = self._extended_dynamics(xi, delta_xi)
 
         if md_state.step < self.gamd_init_steps:
             self._update_pot_distribution(epot)
-        
+
         else:
             if md_state.step == self.gamd_init_steps:
                 self._calc_E_k0()
-            
+
             # apply gamd boost potential
             prefac = self.k0 / (self.pot_max - self.pot_min)
             self.gamd_pot = 0.5 * prefac * np.power(self.E - epot, 2)
@@ -40,8 +45,9 @@ class GaWTMeABF(MetaeABF, GaMD, EnhancedSampling):
 
             else:
 
-                # mete-eABF bias on extended-system only in production
-                mtd_forces = self.get_mtd_force(self.ext_coords)
+                # (WTM-)eABF bias on extended-variable only in production
+                if self.do_wtm:
+                    mtd_forces = self.get_mtd_force(self.ext_coords)
 
                 if (self.ext_coords <= self.maxx).all() and (
                     self.ext_coords >= self.minx
@@ -59,7 +65,7 @@ class GaWTMeABF(MetaeABF, GaMD, EnhancedSampling):
                             else self.ext_hist[bink[1], bink[0]] / self.nfull
                         )
 
-                        # apply meta-eABF bias force on extended system
+                        # apply (WTM-)eABF bias force on extended variable
                         (
                             self.abf_forces[i][bink[1], bink[0]],
                             self.m2_force[i][bink[1], bink[0]],
@@ -68,18 +74,22 @@ class GaWTMeABF(MetaeABF, GaMD, EnhancedSampling):
                             self.ext_hist[bink[1], bink[0]],
                             self.abf_forces[i][bink[1], bink[0]],
                             self.m2_force[i][bink[1], bink[0]],
-                            self.ext_k[i] * diff(self.ext_coords[i], xi[i], self.cv_type[i]),
+                            self.ext_k[i]
+                            * diff(self.ext_coords[i], xi[i], self.cv_type[i]),
                         )
                         self.ext_forces -= (
-                            ramp * self.abf_forces[i][bink[1], bink[0]] - mtd_forces[i]
+                            ramp * self.abf_forces[i][bink[1], bink[0]] 
                         )
+                        
+                        if self.do_wtm:
+                            self.ext_forces -= self.metapot[i]
 
-        # free energy reweigthing
+        # free energy reweighting
         if (xi <= self.maxx).all() and (xi >= self.minx).all():
 
             bink = self.get_index(xi)
             self.histogram[bink[1], bink[0]] += 1
-            
+
             # CZAR
             for i in range(self.ncoords):
                 dx = diff(self.ext_coords[i], self.grid[i][bink[i]], self.cv_type[i])
@@ -132,16 +142,18 @@ class GaWTMeABF(MetaeABF, GaMD, EnhancedSampling):
 
         return bias_force
 
-    def get_pmf(self, method: str="trapezoid"):
-        
+    def get_pmf(self, method: str = "trapezoid"):
+
         log_rho = np.log(
             self.histogram,
             out=np.zeros_like(self.histogram),
             where=(0 != self.histogram),
         )
         avg_force = cond_avg(self.correction_czar, self.histogram)
-        
-        self.gamd_corr = -self.gamd_c1 - self.gamd_c2 / (2.0 * kB_in_atomic * self.equil_temp)
+
+        self.gamd_corr = -self.gamd_c1 - self.gamd_c2 / (
+            2.0 * kB_in_atomic * self.equil_temp
+        )
 
         if self.ncoords == 1:
             self.czar_force[0] = (

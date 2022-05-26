@@ -4,35 +4,41 @@ from .utils import diff
 from ..units import *
 
 
-class MtD(EnhancedSampling):
+class WTM(EnhancedSampling):
     def __init__(
         self,
         hill_height: float,
         hill_std: list,
         *args,
-        update_freq: int = 10,
+        hill_drop_freq: int = 10,
         well_tempered_temp: float = 3000.0,
+        force_from_grid: bool = True,
         **kwargs,
     ):
         super().__init__(*args, **kwargs)
 
-        if int(update_freq) <= 0:
+        if int(hill_drop_freq) <= 0:
             raise ValueError(" >>> fatal error: Update interval has to be int > 0!")
 
         if hill_height <= 0:
             raise ValueError(" >>> fatal error: Gaussian height for MtD has to be > 0!")
 
-        if well_tempered_temp is not None and well_tempered_temp <= 0:
+        if well_tempered_temp is None and self.verbose:
+            print(" >>> Info: well-tempered scaling of WTM hill_height switched off")
+        elif well_tempered_temp <= 0:
             raise ValueError(
                 " >>> fatal error: Effective temperature for Well-Tempered MtD has to be > 0!"
             )
 
+        hill_std = [hill_std] if not hasattr(hill_std, "__len__") else hill_std
+
         self.hill_height = hill_height / atomic_to_kJmol
         self.hill_std = self.unit_conversion_cv(np.asarray(hill_std))[0]
         self.hill_var = self.hill_std * self.hill_std
-        self.update_freq = int(update_freq)
+        self.update_freq = int(hill_drop_freq)
         self.well_tempered_temp = well_tempered_temp
         self.well_tempered = False if well_tempered_temp == None else True
+        self.force_from_grid = force_from_grid
 
         self.metapot = np.zeros_like(self.histogram)
         self.center = []
@@ -44,7 +50,7 @@ class MtD(EnhancedSampling):
 
         bias_force = np.zeros_like(md_state.forces)
 
-        mtd_force = self.get_mtd_force(xi)
+        mtd_force = self.get_wtm_force(xi)
         if (xi <= self.maxx).all() and (xi >= self.minx).all():
 
             bink = self.get_index(xi)
@@ -75,7 +81,7 @@ class MtD(EnhancedSampling):
                 for i in range(self.ncoords):
                     output[f"metapot {i}"] = self.metapot * atomic_to_kJmol
 
-                self.write_output(output, filename="mtd.out")
+                self.write_output(output, filename="wtm.out")
                 self.write_restart()
 
         return bias_force
@@ -92,72 +98,104 @@ class MtD(EnhancedSampling):
         """TODO"""
         pass
 
-    def get_mtd_force(self, xi: np.ndarray) -> list:
-        """compute metadynamics bias force from superpossiosion of gaussian hills
+    def get_wtm_force(self, xi: np.ndarray) -> list:
+        """compute well-tempered metadynamics bias force from superpossiosion of gaussian hills
 
         args:
             xi: state of collective variable
 
         returns:
-            bias: bias force
+            bias_force: bias force from metadynamics
         """
-        if (xi <= self.maxx).all() and (xi >= self.minx).all():
-            bink = self.get_index(xi)
-            if self.the_md.step % self.update_freq == 0:
-                if self.ncoords == 1:
+        if self.the_md.step % self.update_freq == 0:
+            self.center.append(xi[0]) if self.ncoords == 1 else self.center.append(xi)
 
-                    self.center.append(xi[0])
+        is_in_bounds = (xi <= self.maxx).all() and (xi >= self.minx).all() 
 
-                    if self.well_tempered:
-                        w = self.hill_height * np.exp(
-                            -self.metapot[bink[1], bink[0]]
-                            / (kB_in_atomic * self.well_tempered_temp)
-                        )
-                    else:
-                        w = self.hill_height
+        if is_in_bounds:
+            bias_force = self._accumulate_wtm_force(xi)
+            
+        if not is_in_bounds or not self.force_from_grid:
+            bias_force = self._analytic_wtm_force(xi)
 
-                    dx = diff(self.grid[0], xi[0], self.cv_type[0])
-                    epot = w * np.exp(-(dx * dx) / (2.0 * self.hill_var[0]))
-                    self.metapot[0] += epot
-                    self.bias[0][0] -= epot * dx / self.hill_var[0]
+        return bias_force
 
-                else:
-                    # TODO: implement for 2D
-                    pass
+    def _accumulate_wtm_force(self, xi: np.ndarray) -> list:
+        """accumulate metadynamics potential for free energy reweighting and its gradient on grid
+        
+        args:
+            xi: state of collective variable
 
-            bias = [self.bias[i][bink[1], bink[0]] for i in range(self.ncoords)]
-
-        else:
-
-            # compute bias from sum of gaussians if out of grid
-            local_pot = 0.0
-            bias = [0 for _ in range(self.ncoords)]
+        returns:
+            bias_force: bias force from metadynamics 
+        """
+        bink = self.get_index(xi)
+        if self.the_md.step % self.update_freq == 0:
             if self.ncoords == 1:
-                dx = np.ma.array(
-                    diff(np.asarray(self.center[0]), xi[0], self.cv_type[0])
-                )
-                dx[abs(dx) > 3 * self.hill_std[0]] = np.ma.masked
 
-                # can get solw in long run so only iterate over significant elements
-                for val in np.nditer(dx.compressed(), flags=["zerosize_ok"]):
-                    if self.well_tempered:
-                        w = self.hill_height * np.exp(
-                            -local_pot / (kB_in_atomic * self.well_tempered_temp)
-                        )
-                    else:
-                        w = self.hill_height
+                if self.well_tempered:
+                    w = self.hill_height * np.exp(
+                        -self.metapot[bink[1], bink[0]]
+                        / (kB_in_atomic * self.well_tempered_temp)
+                    )
+                else:
+                    w = self.hill_height
 
-                    epot = w * np.exp(-(val * val) / (2.0 * self.hill_var[0]))
-                    local_pot += epot
-                    bias[0] += epot * val / self.hill_var[0]
-
+                dx = diff(self.grid[0], xi[0], self.cv_type[0])
+                epot = w * np.exp(-(dx * dx) / (2.0 * self.hill_var[0]))
+                self.metapot[0] += epot
+                self.bias[0][0] -= epot * dx / self.hill_var[0]
+            
             else:
                 # TODO: implement for 2D
                 pass
 
-        return bias
+        return [self.bias[i][bink[1], bink[0]] for i in range(self.ncoords)]
 
-    def write_restart(self, filename: str = "restart_mtd"):
+    def _analytic_wtm_force(self, xi: np.ndarray) -> list:
+        """compute analytic WTM bias force from sum of gaussians hills
+
+        args:
+            xi: state of collective variable
+        
+        returns:
+            bias_force: bias force from metadynamics 
+        """
+        local_pot = 0.0
+        bias_force = [0.0 for _ in range(self.ncoords)]
+            
+        if len(self.center) == 0:
+            # nothing to do
+            return bias_force
+
+        if self.ncoords == 1:
+                
+            dx = np.ma.array(
+                diff(xi[0], np.asarray(self.center), self.cv_type[0])
+            )
+            dx[abs(dx) > 3 * self.hill_std[0]] = np.ma.masked
+
+            # can get solw in long run, so only iterate over significant elements
+            for val in np.nditer(dx.compressed(), flags=["zerosize_ok"]):
+                    
+                if self.well_tempered:
+                    w = self.hill_height * np.exp(
+                        -local_pot / (kB_in_atomic * self.well_tempered_temp)
+                    )
+                else:
+                    w = self.hill_height
+
+                epot = w * np.exp(-(val * val) / (2.0 * self.hill_var[0]))
+                local_pot += epot
+                bias_force[0] -= epot * val / self.hill_var[0]
+
+        else:
+            # TODO: implement for 2D
+            pass
+        
+        return bias_force
+
+    def write_restart(self, filename: str = "restart_wtm"):
         """write restart file
 
         args:
@@ -172,7 +210,7 @@ class MtD(EnhancedSampling):
             centers=self.center,
         )
 
-    def restart(self, filename: str = "restart_mtd"):
+    def restart(self, filename: str = "restart_wtm"):
         """restart from restart file
 
         args:

@@ -1,15 +1,11 @@
 #!/usr/bin/env python
 import time
 import sys
-from adaptive_sampling.sampling_tools.metaeabf import MetaeABF
-
-sys.path.insert(1, "../")
-from InterfaceMD_2D import *
+from adaptive_sampling.sampling_tools.metaeabf import WTMeABF
+from adaptive_sampling.interface.interfaceMD_2D import *
 
 bohr2angs = 0.52917721092e0
-
 ################# Imput Section ####################
-
 # MD
 seed = 42
 nsteps = 1000000  # number of MD steps
@@ -32,7 +28,7 @@ the_md = MD(
     target_temp_in=target_temp,
     seed_in=seed,
 )
-the_abm = MetaeABF(
+the_abm = WTMeABF(
     [2.0],
     [20.0],
     2.0,

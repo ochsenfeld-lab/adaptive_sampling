@@ -1,9 +1,9 @@
 from .enhanced_sampling import EnhancedSampling
 from .reference import Reference
-from .metadynamics import MtD
+from .metadynamics import WTM
 from .abf import ABF
 from .eabf import eABF
-from .metaeabf import MetaeABF
+from .metaeabf import WTMeABF
 from .gamd import GaMD
 from .utils import *
 
