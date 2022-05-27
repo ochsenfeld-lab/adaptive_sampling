@@ -149,20 +149,20 @@ class EnhancedSampling(ABC):
             margin: inset for start of harmonic wall
 
         returns:
-            bias_force:
+            bias_force: confinement force
         """
-        bias_force = np.zeros_like(self.the_md.forces.ravel())
+        conf_force = np.zeros_like(self.the_md.forces.ravel())
 
         for i in range(self.ncoords):
             if xi[i] > (self.maxx[i] - margin[i]):
                 r = diff(self.maxx[i] - margin[i], xi[i], self.cv_type[i])
-                bias_force -= self.f_conf[i] * r * delta_xi[i]
+                conf_force -= self.f_conf[i] * r * delta_xi[i]
 
-            elif xi[i] < self.minx[i]:
+            elif xi[i] < (self.minx[i] + margin[i]):
                 r = diff(self.minx[i] + margin[i], xi[i], self.cv_type[i])
-                bias_force -= self.f_conf[i] * r * delta_xi[i]
+                conf_force -= self.f_conf[i] * r * delta_xi[i]
 
-        return bias_force
+        return conf_force
 
     def get_index(self, xi: np.ndarray) -> list:
         """get list of bin indices for current position of CVs or extended variables

@@ -9,7 +9,8 @@ def gamd_correction_n(
     cv: np.ndarray, 
     delta_V: np.ndarray, 
     korder: int=2, 
-    equil_temp: float=300.0
+    equil_temp: float=300.0,
+    return_hist: bool=False,
 ) -> Tuple[np.ndarray, np.ndarray]:
     """Correction to PMF from GaMD using kth cumulant expansion 
 
@@ -42,7 +43,10 @@ def gamd_correction_n(
             for k in range(1, korder+1):
                 corr[i] += (np.power(beta, k)/math.factorial(k)) * kstat(dat_i, k)
 
-    return -corr/beta, hist
+    if return_hist:
+        return -corr/beta, hist
+    else:
+        return -corr/beta
 
 def gamd_pmf(
     grid: np.ndarray, 
@@ -73,7 +77,8 @@ def gamd_pmf(
         cv, 
         delta_V, 
         korder=korder, 
-        equil_temp=equil_temp
+        equil_temp=equil_temp,
+        return_hist=True,
     )
     rho = hist / (hist.sum() * dx)
     pmf = - RT * np.log(rho, out=np.full_like(rho, np.nan), where=(rho != 0)) + gamd_corr
@@ -84,42 +89,4 @@ def gamd_pmf(
 
     return pmf, rho
 
-def correct_pmf(
-    pmf: np.ndarray,
-    grid: np.ndarray, 
-    cv: np.ndarray, 
-    delta_V: np.ndarray, 
-    korder: int=2, 
-    equil_temp: float=300.0
-) -> Tuple[np.ndarray, np.ndarray]:
-    """correct GaMD biased PMF with cumulant expansion
-
-    args:
-        grid: grid for reaction coordinate
-        cv: trajectory of reaction coordinate
-        delta_V: trajectory of GaMD bias potential
-        korder: order of cumulant expansion, supported up to 4
-        equil_temp: equilibrium temperature
-
-    returns:
-        pmf: potential of mean force
-        rho: probability density
-    """
-    RT = R_in_SI * equil_temp / 1000.0 # kJ/mol
-    dx = grid[1]-grid[0]
-
-    corr, _ = gamd_correction_n(
-        grid, 
-        cv, 
-        delta_V, 
-        korder=korder, 
-        equil_temp=equil_temp
-    )
-    pmf += corr
-
-    rho = np.exp(-pmf / RT)
-    rho /= (rho[~np.isnan(pmf)].sum()*dx)
-    pmf = -RT * np.log(rho, out=np.full_like(rho, np.nan), where=(rho != 0))
-
-    return pmf, rho
 

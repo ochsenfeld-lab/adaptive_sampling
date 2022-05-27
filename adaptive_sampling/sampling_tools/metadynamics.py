@@ -10,7 +10,7 @@ class WTM(EnhancedSampling):
         hill_height: float,
         hill_std: list,
         *args,
-        hill_drop_freq: int = 10,
+        hill_drop_freq: int = 20,
         well_tempered_temp: float = 3000.0,
         force_from_grid: bool = True,
         **kwargs,
@@ -59,7 +59,7 @@ class WTM(EnhancedSampling):
             for i in range(self.ncoords):
                 bias_force += mtd_force[i] * delta_xi[i]
 
-        bias_force += self.harmonic_walls(xi, delta_xi)  # , self.hill_std)
+        bias_force += self.harmonic_walls(xi, delta_xi, self.hill_std)
 
         self.traj = np.append(self.traj, [xi], axis=0)
         self.temp.append(md_state.temp)
@@ -145,7 +145,7 @@ class WTM(EnhancedSampling):
                 epot = w * np.exp(-(dx * dx) / (2.0 * self.hill_var[0]))
                 self.metapot[0] += epot
                 self.bias[0][0] -= epot * dx / self.hill_var[0]
-            
+
             else:
                 # TODO: implement for 2D
                 pass
@@ -187,7 +187,7 @@ class WTM(EnhancedSampling):
 
                 epot = w * np.exp(-(val * val) / (2.0 * self.hill_var[0]))
                 local_pot += epot
-                bias_force[0] -= epot * val / self.hill_var[0]
+                bias_force[0] += epot * val / self.hill_var[0]
 
         else:
             # TODO: implement for 2D

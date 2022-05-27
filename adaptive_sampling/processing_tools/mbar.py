@@ -5,7 +5,7 @@ from .utils import join_frames
 from ..units import *
 
 
-def mbar(
+def run_mbar(
     traj_list: List[np.ndarray],
     meta_f: np.ndarray,
     max_iter: int = 10000,

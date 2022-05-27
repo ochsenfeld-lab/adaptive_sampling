@@ -74,6 +74,26 @@ def welford_var(
     var = M2 / count if count > 2 else 0.0
     return mean, M2, var
 
+def weighted_hist(grid: np.ndarray, obs:np.ndarray, weights: np.ndarray) -> np.ndarray:
+    """get weighted histogram of data
+
+    args:
+        grid: bins along reaction coordinate
+        obs: data frames of observable
+        weights: weights of data frames
+
+    returns:
+        hist: weighted histogram
+    """
+    weights /= weights.sum()
+    hist = np.zeros(len(grid))
+    dx = grid[1]-grid[0]
+    idx = np.arange(0,len(obs),1)
+    for i, x in enumerate(grid):
+        dat_x = idx[np.where(np.logical_and(obs >= x-dx/2., obs <= x+dx/2.))]
+        hist[i] = (obs[dat_x] * weights[dat_x]).sum()
+    hist /= (hist.sum()*dx)
+    return hist
 
 def ensemble_average(obs: np.ndarray, weights: np.ndarray) -> tuple:
     """ensemble average of observable
@@ -97,18 +117,18 @@ def ensemble_average(obs: np.ndarray, weights: np.ndarray) -> tuple:
 
 def conditional_average(
     grid: np.ndarray, xi_traj: np.ndarray, obs: np.ndarray, weights: np.ndarray
-) -> tuple:
+) -> Tuple[np.ndarray, np.ndarray]:
     """bin wise conditional average and standard error of the mean
 
     args:
-        grid (np.ndarray): bins along reaction coordinate
-        xi_traj (np.ndarray): trajectory of reaction coordinate
-        obs (np.ndarray): trajectory of observables
-        weights (np.ndarray): weigths of data frames
+        grid: bins along reaction coordinate
+        xi_traj: trajectory of reaction coordinate
+        obs: trajectory of observables
+        weights: weigths of data frames
 
     returns:
-        obs_xi (np.ndarray): conditional average along reaction coordinate
-        sem_xi (np.ndarray): standard error of the mean of obs_xi
+        obs_xi: conditional average along reaction coordinate
+        sem_xi: standard error of the mean of obs_xi
     """
     weights /= weights.sum()
     dx = grid[1] - grid[0]
@@ -190,7 +210,7 @@ def activation_freeE(
     """
     RT = (R_in_SI * T) / 1000.0  # kJ/mol
 
-    pmf = fep[~np.isnan(fep)]
+    pmf = pmf[~np.isnan(pmf)]
     if TS == None:
         TS = np.where(pmf == np.amax(pmf[min_bin:max_bin]))[0][0]
 

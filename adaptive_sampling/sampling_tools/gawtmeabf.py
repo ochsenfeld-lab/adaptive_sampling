@@ -47,7 +47,7 @@ class GaWTMeABF(WTMeABF, GaMD, EnhancedSampling):
 
                 # (WTM-)eABF bias on extended-variable only in production
                 if self.do_wtm:
-                    mtd_forces = self.get_mtd_force(self.ext_coords)
+                    mtd_forces = self.get_wtm_force(self.ext_coords)
 
                 if (self.ext_coords <= self.maxx).all() and (
                     self.ext_coords >= self.minx
@@ -82,7 +82,7 @@ class GaWTMeABF(WTMeABF, GaMD, EnhancedSampling):
                         )
                         
                         if self.do_wtm:
-                            self.ext_forces -= self.metapot[i]
+                            self.ext_forces += mtd_forces[i]
 
         # free energy reweighting
         if (xi <= self.maxx).all() and (xi >= self.minx).all():
@@ -95,19 +95,19 @@ class GaWTMeABF(WTMeABF, GaMD, EnhancedSampling):
                 dx = diff(self.ext_coords[i], self.grid[i][bink[i]], self.cv_type[i])
                 self.correction_czar[i][bink[1], bink[0]] += self.ext_k[i] * dx
 
-                # GaMD
-                if md_state.step >= self.gamd_equil_steps:
+            # GaMD
+            if md_state.step >= self.gamd_equil_steps:
 
-                    (
-                        self.gamd_c1[bink[1], bink[0]],
-                        self.gamd_m2[bink[1], bink[0]],
-                        self.gamd_c2[bink[1], bink[0]],
-                    ) = welford_var(
-                        self.histogram[bink[1], bink[0]],
-                        self.gamd_c1[bink[1], bink[0]],
-                        self.gamd_m2[bink[1], bink[0]],
-                        self.gamd_pot,
-                    )
+                (
+                    self.gamd_c1[bink[1], bink[0]],
+                    self.gamd_m2[bink[1], bink[0]],
+                    self.gamd_c2[bink[1], bink[0]],
+                ) = welford_var(
+                    self.histogram[bink[1], bink[0]],
+                    self.gamd_c1[bink[1], bink[0]],
+                    self.gamd_m2[bink[1], bink[0]],
+                    self.gamd_pot,
+                )
 
         self._up_momenta()
 
@@ -121,8 +121,8 @@ class GaWTMeABF(WTMeABF, GaMD, EnhancedSampling):
         if self.kinetics:
             self.kinetics(delta_xi)
 
+        # write traj and output
         if md_state.step % self.out_freq == 0:
-            # write output
 
             if write_traj:
                 self.write_traj()
@@ -137,7 +137,7 @@ class GaWTMeABF(WTMeABF, GaMD, EnhancedSampling):
                 output[f"metapot"] = self.metapot
                 output[f"GaMD corr"] = self.gamd_corr
 
-                self.write_output(output, filename="metaeabf.out")
+                self.write_output(output, filename="gaeabf.out")
                 self.write_restart()
 
         return bias_force
@@ -157,7 +157,7 @@ class GaWTMeABF(WTMeABF, GaMD, EnhancedSampling):
 
         if self.ncoords == 1:
             self.czar_force[0] = (
-                -kB_in_atomic * self.equil_temp * np.gradient(log_rho[0], self.grid[0])
+                - kB_in_atomic * self.equil_temp * np.gradient(log_rho[0], self.grid[0])
                 + avg_force[0]
             )
             self.pmf[0, :], _ = integrate(
@@ -187,7 +187,7 @@ class GaWTMeABF(WTMeABF, GaMD, EnhancedSampling):
         """TODO"""
         pass
 
-    def write_restart(self, filename: str = "restart_metaabf"):
+    def write_restart(self, filename: str = "restart_gaabf"):
         """write restart file
 
         args:
@@ -217,7 +217,7 @@ class GaWTMeABF(WTMeABF, GaMD, EnhancedSampling):
             k0=self.k0,
         )
 
-    def restart(self, filename: str = "restart_metaabf"):
+    def restart(self, filename: str = "restart_gaabf"):
         """restart from restart file
 
         args:
@@ -270,3 +270,4 @@ class GaWTMeABF(WTMeABF, GaMD, EnhancedSampling):
         self.ext_traj = np.array([self.ext_traj[-1]])
         self.epot = [self.epot[-1]]
         self.temp = [self.temp[-1]]
+        self.gamd_pot_traj = [self.gamd_pot_traj[-1]]

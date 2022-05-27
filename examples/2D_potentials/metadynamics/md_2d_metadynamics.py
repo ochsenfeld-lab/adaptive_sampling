@@ -1,6 +1,5 @@
 #!/usr/bin/env python
 import time
-import sys
 from adaptive_sampling.sampling_tools.metadynamics import WTM
 from adaptive_sampling.interface.interfaceMD_2D import *
 
@@ -17,7 +16,7 @@ target_temp = 300.0  # Kelvin
 mass = 10.0  # a.u.
 potential = "1"
 
-ats = [["x", [], 70.0, 170.0, 2.0]]
+ats = [["x", [], 60.0, 180.0, 0.2]]
 
 step_count = 0
 coords = [80.0, 0]
@@ -30,14 +29,14 @@ the_md = MD(
     seed_in=seed,
 )
 the_abm = WTM(
-    2.0,
-    5.0,
+    0.5,
+    4.0,
     the_md,
     ats,
     hill_drop_freq=100,
     output_freq=10,
     force_from_grid=True,
-    f_conf=100,
+    f_conf=1000,
     equil_temp=300.0,
 )
 # the_abm.restart()

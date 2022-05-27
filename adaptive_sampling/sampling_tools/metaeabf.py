@@ -17,7 +17,7 @@ class WTMeABF(eABF, WTM, EnhancedSampling):
         (xi, delta_xi) = self.get_cv(**kwargs)
         self._propagate()
 
-        mtd_forces = self.get_mtd_force(self.ext_coords)
+        mtd_forces = self.get_wtm_force(self.ext_coords)
         bias_force = self._extended_dynamics(xi, delta_xi, self.hill_std)
 
         if (self.ext_coords <= self.maxx).all() and (
@@ -36,7 +36,7 @@ class WTMeABF(eABF, WTM, EnhancedSampling):
                     else self.ext_hist[bink[1], bink[0]] / self.nfull
                 )
 
-                # apply bias force on extended system
+                # apply bias force on extended variable
                 (
                     self.abf_forces[i][bink[1], bink[0]],
                     self.m2_force[i][bink[1], bink[0]],
@@ -45,7 +45,8 @@ class WTMeABF(eABF, WTM, EnhancedSampling):
                     self.ext_hist[bink[1], bink[0]],
                     self.abf_forces[i][bink[1], bink[0]],
                     self.m2_force[i][bink[1], bink[0]],
-                    self.ext_k[i] * diff(self.ext_coords[i], xi[i], self.cv_type[i]),
+                    self.ext_k[i] 
+                    * diff(self.ext_coords[i], xi[i], self.cv_type[i]),
                 )
                 self.ext_forces -= (
                     ramp * self.abf_forces[i][bink[1], bink[0]] - mtd_forces[i]

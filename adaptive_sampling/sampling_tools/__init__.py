@@ -5,6 +5,7 @@ from .abf import ABF
 from .eabf import eABF
 from .metaeabf import WTMeABF
 from .gamd import GaMD
+from .gawtmeabf import GaWTMeABF
 from .utils import *
 
 __all__ = [
@@ -15,5 +16,6 @@ __all__ = [
     "eabf",
     "metaeabf",
     "gamd",
+    "gawtmeabf"
     "utils",
 ]
