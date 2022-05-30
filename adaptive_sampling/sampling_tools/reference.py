@@ -10,7 +10,7 @@ class Reference(EnhancedSampling):
     """Unbiased simulation with restraint to region of interest in cv space with harmonic walls
     Can be used for equilibration prior to production or free energy estimation from unbiased simulation
     
-    args:
+    Args:
         md: Object of the MD Inteface
         cv_def: definition of the Collective Variable (CV) (see adaptive_sampling.colvars)
                 [["cv_type", [atom_indices], minimum, maximum, bin_width], [possible second dimension]]
@@ -87,7 +87,7 @@ class Reference(EnhancedSampling):
 
         TODO: fix me
 
-        args:
+        Args:
             filename: name of bias buffer
             sync_interval: interval in MD steps between syncs of bias
             trial: number of recursive calls if buffer is occupied by other walkers
@@ -131,7 +131,7 @@ class Reference(EnhancedSampling):
     def write_restart(self, filename: str = "restart_ref"):
         """write restart file
 
-        args:
+        Args:
             filename: name of restart file
         """
         self._write_restart(filename=filename, hist=self.histogram, pmf=self.pmf)
@@ -139,7 +139,7 @@ class Reference(EnhancedSampling):
     def restart(self, filename: str = "restart_ref"):
         """restart from restart file
 
-        args:
+        Args:
             filename: name of restart file
         """
         try:

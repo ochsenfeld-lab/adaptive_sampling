@@ -10,13 +10,13 @@ def integrate(
 ) -> tuple:
     """numeric integration of thermodynamic force by simpson, trapezoid or rectangle rule
 
-    args:
+    Args:
         data: data to integrate
         dx: bin width
         equil_temp: equilibrium temperature
         method: use 'simpson', 'trapezoid' or 'rectangle' rule
 
-    returns:
+    Returns:
         pmf (np.ndarray): potential of mean force
         rho (np.ndarray): probability density
     """
@@ -54,14 +54,14 @@ def czar(
 ) -> np.ndarray:
     """Corrected z-averaged restrained (Lesage et al. 2016)
 
-    args:
+    Args:
         grid: grid for reaction coordinate
         xi: trajectory of reaction coordinate
         la: trajectory of fictitious particle
         sigma: thermal width of coupling of la to xi
         equil_temp: Temperature of the simulation
 
-    returns:
+    Returns:
         mean_force: thermodynamic force (gradient of PMF)
     """
     RT = R_in_SI * equil_temp / 1000.0

@@ -81,7 +81,7 @@ class MD:
     def calc(self) -> Tuple[float, np.ndarray]:
         """Calculation of energy, forces
 
-        returns:
+        Returns:
            energy (float): energy,
            forces (ndarray): forces
         """
@@ -91,7 +91,7 @@ class MD:
     def calc_energy_forces_MD(self, potential: str = "1") -> tuple:
         """Calculate energy and forces
 
-        args:
+        Args:
             potential: selects potential energy function
         """
         x = self.coords[0]

@@ -386,12 +386,16 @@ class CV:
         self.gradient = gradient
         return float(cv)
 
-    def get_cv(self, cv, atoms, **kwargs) -> Tuple[float, np.ndarray]:
+    def get_cv(self, cv: str, atoms: list, **kwargs) -> Tuple[float, np.ndarray]:
         """get state of collective variable from cv definition of sampling_tools
 
+        Args:
+            cv: type of CV 
+            atoms: indices of atoms
+
         Returns:
-           xi (float): value of collective variable
-           gradient (np.ndarray) : gradient of collective variable
+           xi: value of collective variable
+           gradient: gradient of collective variable
         """
         if cv.lower() == "x":
             xi = self.x()

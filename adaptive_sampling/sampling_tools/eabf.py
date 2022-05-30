@@ -15,7 +15,7 @@ class eABF(ABF, EnhancedSampling):
     The collective variable is coupled to an fictitious particle with an harmonic force.
     The dynamics of the fictitious particel is biased with the ABF algorithm. 
 
-    args:
+    Args:
         ext_sigma: thermal width of coupling between collective and extended variable
         ext_mass: mass of extended variable in atomic units
         md: Object of the MDInterface
@@ -252,12 +252,12 @@ class eABF(ABF, EnhancedSampling):
     ) -> np.ndarray:
         """get forces due to coupling to extended system and confine extended variable to range of interest
 
-        args:
+        Args:
             xi: collective variable
             delta_xi: gradient of collective variable
             margin: inset from minx, maxx where bias starts
 
-        returns:
+        Returns:
             bias_force:
         """
         bias_force = np.zeros_like(self.the_md.forces)
@@ -283,7 +283,7 @@ class eABF(ABF, EnhancedSampling):
     def write_restart(self, filename: str = "restart_abf"):
         """write restart file
 
-        args:
+        Args:
             filename: name of restart file
         """
         self._write_restart(
@@ -299,7 +299,7 @@ class eABF(ABF, EnhancedSampling):
     def restart(self, filename: str = "restart_abf"):
         """restart from restart file
 
-        args:
+        Args:
             filename: name of restart file
         """
         try:

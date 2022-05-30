@@ -14,7 +14,7 @@ class GaWTMeABF(WTMeABF, GaMD, EnhancedSampling):
     The dynamics of the fictitious particel is biased using a combination of ABF and Metadynamics.
     The dynamics of the pysical system is biased with CV-independend an GaMD boost potential
 
-    args:
+    Args:
         ext_sigma: thermal width of coupling between collective and extended variable
         ext_mass: mass of extended variable in atomic units
 
@@ -224,7 +224,7 @@ class GaWTMeABF(WTMeABF, GaMD, EnhancedSampling):
     def write_restart(self, filename: str = "restart_gaabf"):
         """write restart file
 
-        args:
+        Args:
             filename: name of restart file
         """
         self._write_restart(
@@ -254,7 +254,7 @@ class GaWTMeABF(WTMeABF, GaMD, EnhancedSampling):
     def restart(self, filename: str = "restart_gaabf"):
         """restart from restart file
 
-        args:
+        Args:
             filename: name of restart file
         """
         try:

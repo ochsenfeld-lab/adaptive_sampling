@@ -30,10 +30,10 @@ def boltzmann(u_pot: Union[float, np.ndarray], beta: float) -> Union[float, np.n
 def join_frames(traj_list: List[np.array]) -> Tuple[np.ndarray, float, np.ndarray]:
     """get one array with all frames from list of trajectories
     
-    args:
+    Args:
         traj_list: list of trajectories
     
-    returns:
+    Returns:
         all_frames: array with all samples
         num_frames: total numper of samples
         frames_per_traj: array with number of samples per original trajectorie
@@ -56,13 +56,13 @@ def welford_var(
 ) -> Tuple[float, float, float]:
     """On-the-fly estimate of sample variance by Welford's online algorithm
 
-    args:
+    Args:
         count: current number of samples (with new one)
         mean: current mean
         M2: helper to get variance
         newValue: new sample
 
-    returns:
+    Returns:
         mean (float)
         M2 (float)
         var (float)
@@ -77,12 +77,12 @@ def welford_var(
 def weighted_hist(grid: np.ndarray, obs:np.ndarray, weights: np.ndarray) -> np.ndarray:
     """get weighted histogram of data
 
-    args:
+    Args:
         grid: bins along reaction coordinate
         obs: data frames of observable
         weights: weights of data frames
 
-    returns:
+    Returns:
         hist: weighted histogram
     """
     weights /= weights.sum()
@@ -98,11 +98,11 @@ def weighted_hist(grid: np.ndarray, obs:np.ndarray, weights: np.ndarray) -> np.n
 def ensemble_average(obs: np.ndarray, weights: np.ndarray) -> tuple:
     """ensemble average of observable
 
-    args:
+    Args:
         obs (np.ndarray): trajectory of observables
         weights (np.ndarray): weigths of data frames
 
-    returns:
+    Returns:
         avg (float): ensemble average
         sem (float): standard error of the mean of avg
     """
@@ -120,13 +120,13 @@ def conditional_average(
 ) -> Tuple[np.ndarray, np.ndarray]:
     """bin wise conditional average and standard error of the mean
 
-    args:
+    Args:
         grid: bins along reaction coordinate
         xi_traj: trajectory of reaction coordinate
         obs: trajectory of observables
         weights: weigths of data frames
 
-    returns:
+    Returns:
         obs_xi: conditional average along reaction coordinate
         sem_xi: standard error of the mean of obs_xi
     """
@@ -158,12 +158,14 @@ def reaction_freeE(
 ) -> tuple:
     """calculate free energy difference
        see: Dietschreit et al., J. Chem. Phys. 156, 114105 (2022); https://doi.org/10.1063/5.0083423
-    args:
+ 
+    Args:
         pmf: potential of mean force (free energy surface)
         T: temperature
         min_bin/max_bin: minimum/maximum bin for search of transition state
         TS: alternatively, bin number of TS
-    returns:
+ 
+    Returns:
         dA (float): free energy difference
         dA_grid (np.ndarray): free energy difference on grid
     """
@@ -198,13 +200,15 @@ def activation_freeE(
 ) -> tuple:
     """calculate activation free energy
        see: Dietschreit et al., J. Chem. Phys. XX, XXX (2022); https://doi.org/XXXX
-    args:
+    
+    Args:
         pmf: potential of mean force (free energy surface)
         m_xi_inv: z-conditioned average of inverse mass associates with CV, expected units are xi^2/(au_mass * angstrom^2)
         T: temperature
         min_bin/max_bin: minimum/maximum bin for search of transition state
         TS: alternatively, bin number of TS
-    returns:
+    
+    Returns:
         dA (float): free energy difference
         dA_grid (np.ndarray): free energy difference on grid
     """

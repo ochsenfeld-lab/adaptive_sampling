@@ -7,6 +7,27 @@ from ..units import *
 
 
 class WTMeABF(eABF, WTM, EnhancedSampling):
+    """Well-Tempered Metadynamics extended-system Adaptive Biasing Force method
+       see: Fu et. al., J. Phys. Chem. Lett. (2018); https://doi.org/10.1021/acs.jpclett.8b01994
+
+    The collective variable is coupled to an fictitious particle with an harmonic force.
+    The dynamics of the fictitious particel is biased using a combination of ABF and Metadynamics.
+
+    Args:
+        ext_sigma: thermal width of coupling between collective and extended variable
+        ext_mass: mass of extended variable in atomic units
+
+        nfull: Number of force samples per bin where full bias is applied, 
+               if nsamples < nfull the bias force is scaled down by nsamples/nfull
+        friction: friction coefficient for Lagevin dynamics of the extended-system
+        seed_in: random seed for Langevin dynamics of extended-system
+        hill_height: height of Gaussian hills in kJ/mol
+        hill_std: standard deviation of Gaussian hills in units of the CV (can be Bohr, Degree, or None)
+        hill_drop_freq: frequency of hill creation in steps
+        well_tempered_temp: effective temperature for WTM, if None, hills are not scaled down (normal metadynamics)
+        force_from_grid: forces are accumulated on grid for performance, 
+                         if False, forces are calculated from sum of Gaussians in every step 
+    """
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.abf_forces = np.zeros_like(self.bias)
@@ -106,7 +127,7 @@ class WTMeABF(eABF, WTM, EnhancedSampling):
     def write_restart(self, filename: str = "restart_wtmeabf"):
         """write restart file
 
-        args:
+        Args:
             filename: name of restart file
         """
         self._write_restart(
@@ -125,7 +146,7 @@ class WTMeABF(eABF, WTM, EnhancedSampling):
     def restart(self, filename: str = "restart_wtmeabf"):
         """restart from restart file
 
-        args:
+        Args:
             filename: name of restart file
         """
         try:

@@ -10,7 +10,7 @@ class WTM(EnhancedSampling):
 
     An repulsive biasing potential is built by a superposition of Gaussian hills along the reaction coordinate.
 
-    args:
+    Args:
         hill_height: height of Gaussian hills in kJ/mol
         hill_std: standard deviation of Gaussian hills in units of the CV (can be Bohr, Degree, or None)
         hill_drop_freq: frequency of hill creation in steps
@@ -114,10 +114,10 @@ class WTM(EnhancedSampling):
     def get_wtm_force(self, xi: np.ndarray) -> list:
         """compute well-tempered metadynamics bias force from superpossiosion of gaussian hills
 
-        args:
+        Args:
             xi: state of collective variable
 
-        returns:
+        Returns:
             bias_force: bias force from metadynamics
         """
         if self.the_md.step % self.update_freq == 0:
@@ -140,10 +140,10 @@ class WTM(EnhancedSampling):
     def _accumulate_wtm_force(self, xi: np.ndarray) -> list:
         """accumulate metadynamics potential for free energy reweighting and its gradient on grid
         
-        args:
+        Args:
             xi: state of collective variable
 
-        returns:
+        Returns:
             bias_force: bias force from metadynamics 
         """
         bink = self.get_index(xi)
@@ -172,10 +172,10 @@ class WTM(EnhancedSampling):
     def _analytic_wtm_force(self, xi: np.ndarray) -> list:
         """compute analytic WTM bias force from sum of gaussians hills
 
-        args:
+        Args:
             xi: state of collective variable
         
-        returns:
+        Returns:
             bias_force: bias force from metadynamics 
         """
         local_pot = 0.0
@@ -216,7 +216,7 @@ class WTM(EnhancedSampling):
     def _smooth_boundary(self, xi: np.ndarray):
         """smooth MtD potential at boundary by adding Gaussians outside of range(minx,maxx)
 
-        args:
+        Args:
             xi: collective variable
         """
         dminx = xi - self.minx  # > 0 if in bounds
@@ -236,7 +236,7 @@ class WTM(EnhancedSampling):
     def write_restart(self, filename: str = "restart_wtm"):
         """write restart file
 
-        args:
+        Args:
             filename: name of restart file
         """
         self._write_restart(
@@ -251,7 +251,7 @@ class WTM(EnhancedSampling):
     def restart(self, filename: str = "restart_wtm"):
         """restart from restart file
 
-        args:
+        Args:
             filename: name of restart file
         """
         try:

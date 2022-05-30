@@ -17,7 +17,7 @@ def run_mbar(
 ) -> np.ndarray:
     """self-consistent MBAR algorithm
 
-    args:
+    Args:
         traj_list: List of biased trajectories
         meta_f: input from metafile
         max_iter: Maximum number of iterations
@@ -27,7 +27,7 @@ def run_mbar(
         equil_temp: Temperature of simulation
         dV_list: optional, list of GaMD boost potentials (has to match frames of traj_list)
 
-    returns:
+    Returns:
         W: array of statistical weigths of each frame
     """
     RT = R_in_SI * equil_temp / 1000.0
@@ -135,14 +135,14 @@ def get_windows(
 ) -> Tuple[List[np.ndarray], np.ndarray, np.ndarray]:
     """generate US windows from eABF trajectory
 
-    args:
+    Args:
         centers (np.ndarray): centers of Umbrella windows
         xi (np.ndarray): Trajectory of the reaction coordinate
         la (np.ndarray): Trajectory of the extended variable
         sigma (float): Thermal width of coupling of xi and la
         equil_temp (float): equillibrium temperature
 
-    returns:
+    Returns:
         traj_list (list): list of window trajectories,
         index_list (np.ndarray): list of frame indices in original trajectory,
         meta_f (np.ndarray): window information for MBAR
@@ -172,13 +172,13 @@ def pmf_from_weights(
 ) -> Tuple[np.array, np.array]:
     """make free energy surface from MBAR result
 
-    args:
+    Args:
         grid: grid along cv
         cv: trajectory of cv
         weights: boltzmann weights of frames in trajectory
         T: Temperature of simulation
 
-    returns:
+    Returns:
         Potential of mean force (PMF), probability density
     """
     RT = R_in_SI * equil_temp / 1000.0
@@ -202,13 +202,13 @@ def deltaf_from_weights(
 ) -> Tuple[np.array, np.array]:
     """Compute free energy difference from weights
 
-    args:
+    Args:
         TS: position of transition state on CV
         cv: trajectory of CV
         weights: MBAR weights of data points
         T: temperature
 
-    returns:
+    Returns:
         deltaF: free energy difference
     """
     RT = R_in_SI * equil_temp / 1000.0

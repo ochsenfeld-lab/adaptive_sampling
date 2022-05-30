@@ -10,7 +10,7 @@ class GaMD(EnhancedSampling):
 
        Apply an harmonic boost bias potential to potential energy. Independent of Collective Variable.
 
-    args:
+    Args:
         gamd_sigma0: upper limit of standard deviation of boost potential
         gamd_init_step: initial steps where no bias is applied to estimate min, max and var of potential energy
         gamd_equil_steps: equilibration steps, min, max and var of potential energy is still updated
@@ -159,7 +159,7 @@ class GaMD(EnhancedSampling):
     def _update_pot_distribution(self, epot: float):
         """update min, max, avg, var and std of epot
 
-        args:
+        Args:
             epot: potential energy
         """
         self.pot_min = np.min([epot, self.pot_min])
@@ -173,7 +173,7 @@ class GaMD(EnhancedSampling):
     def _calc_E_k0(self):
         """compute force constant for gamd boost potential
 
-        args:
+        Args:
             epot: potential energy
         """
         if self.gamd_bound == "lower":
@@ -200,7 +200,7 @@ class GaMD(EnhancedSampling):
         """write restart file
         TODO: fix me
 
-        args:
+        Args:
             filename: name of restart file
         """
         self._write_restart(
@@ -223,7 +223,7 @@ class GaMD(EnhancedSampling):
     def restart(self, filename: str = "restart_gamd"):
         """restart from restart file
 
-        args:
+        Args:
             filename: name of restart file
         """
         try:

@@ -11,7 +11,18 @@ from ..units import *
 
 
 class EnhancedSampling(ABC):
-    """Abstract class for sampling algorithms"""
+    """Abstract class for sampling algorithms with Molecular Dynamics (MD)
+    
+    Args:
+        md: Object of the MD Inteface
+        cv_def: definition of the Collective Variable (CV) (see adaptive_sampling.colvars)
+                [["cv_type", [atom_indices], minimum, maximum, bin_width], [possible second dimension]]
+        equil_temp: equillibrium temperature of MD
+        verbose: print verbose information
+        kinetice: calculate necessary data to obtain kinetics of reaction
+        f_conf: force constant for confinement of system to the range of interest in CV space
+        output_freq: frequency in steps for writing outputs
+    """
 
     def __init__(
         self,
@@ -19,7 +30,6 @@ class EnhancedSampling(ABC):
         cv_def: list,
         equil_temp: float = 300.0,
         verbose: bool = True,
-        confine: bool = True,
         kinetics: bool = False,
         f_conf: float = 100,
         output_freq: int = 100,
@@ -30,7 +40,6 @@ class EnhancedSampling(ABC):
         self.out_freq = output_freq
         self.equil_temp = equil_temp
         self.verbose = verbose
-        self.confine = confine
 
         # definition of CVs
         self.ncoords = len(cv_def)
@@ -144,12 +153,12 @@ class EnhancedSampling(ABC):
     ) -> np.ndarray:
         """confine system with harmonic walls to range(self.minx, self.maxx)
 
-        args:
+        Args:
             xi: collective variable
             delta_xi: gradient of collective variable
             margin: inset for start of harmonic wall
 
-        returns:
+        Returns:
             bias_force: confinement force
         """
         conf_force = np.zeros_like(self.the_md.get_sampling_data().forces.ravel())
@@ -182,10 +191,10 @@ class EnhancedSampling(ABC):
     def unit_conversion_cv(self, *args):
         """convert input to bohr and radians
 
-        args:
+        Args:
             args: arrays to convert of size(dimensions)
 
-        returns:
+        Returns:
             args in atomic units
         """
         bohr2angs = 0.52917721092e0  # bohr to angstrom
@@ -202,10 +211,10 @@ class EnhancedSampling(ABC):
     def unit_conversion_force(self, *args):
         """convert input to bohr and radians
 
-        args:
+        Args:
             *args: arrays to convert of size(dimensions)
 
-        returns:
+        Returns:
             args in atomic units
         """
 
@@ -263,7 +272,7 @@ class EnhancedSampling(ABC):
     def write_output(self, data: dict, filename="free_energy.dat"):
         """write results to output file
 
-        args: 
+        Args: 
             data: results to write
             filename: name of output file
         """
