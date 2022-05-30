@@ -16,7 +16,9 @@ This package implements various sampling algorithms for the calculation of free 
 * 	Gaussian-accelerated MD (GaMD) [7] and GaWTM-eABF [8]
 
 ## Install:
-> $ pip install adaptive_sampling 
+```shell
+$ pip install adaptive_sampling 
+```
 
 ## Requirements:
 * python >= 3.8
@@ -81,7 +83,6 @@ pmf, rho = mbar.pmf_from_weights(grid, cv[indices], W, equil_temp=300.0)
 Code documentation can be created with pdoc3:
 ```shell
 $ pip install pdoc3
-
 $ pdoc --html adaptive_sampling -o doc/
 ```
 ## References:
