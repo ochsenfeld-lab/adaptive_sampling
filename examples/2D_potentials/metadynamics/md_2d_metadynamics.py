@@ -16,7 +16,7 @@ target_temp = 300.0  # Kelvin
 mass = 10.0  # a.u.
 potential = "1"
 
-ats = [["x", [], 60.0, 180.0, 0.2]]
+ats = [["x", [], 70.0, 160.0, 0.2]]
 
 step_count = 0
 coords = [80.0, 0]

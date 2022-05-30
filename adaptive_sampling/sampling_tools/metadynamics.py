@@ -18,16 +18,16 @@ class WTM(EnhancedSampling):
         super().__init__(*args, **kwargs)
 
         if int(hill_drop_freq) <= 0:
-            raise ValueError(" >>> fatal error: Update interval has to be int > 0!")
+            raise ValueError(" >>> Error: Update interval has to be int > 0!")
 
         if hill_height <= 0:
-            raise ValueError(" >>> fatal error: Gaussian height for MtD has to be > 0!")
+            raise ValueError(" >>> Error: Gaussian height for MtD has to be > 0!")
 
         if well_tempered_temp is None and self.verbose:
             print(" >>> Info: well-tempered scaling of WTM hill_height switched off")
         elif well_tempered_temp <= 0:
             raise ValueError(
-                " >>> fatal error: Effective temperature for Well-Tempered MtD has to be > 0!"
+                " >>> Error: Effective temperature for Well-Tempered MtD has to be > 0!"
             )
 
         hill_std = [hill_std] if not hasattr(hill_std, "__len__") else hill_std
@@ -59,7 +59,7 @@ class WTM(EnhancedSampling):
             for i in range(self.ncoords):
                 bias_force += mtd_force[i] * delta_xi[i]
 
-        bias_force += self.harmonic_walls(xi, delta_xi, self.hill_std)
+        bias_force += self.harmonic_walls(xi, delta_xi) #, self.hill_std)
 
         self.traj = np.append(self.traj, [xi], axis=0)
         self.temp.append(md_state.temp)
@@ -109,13 +109,17 @@ class WTM(EnhancedSampling):
         """
         if self.the_md.step % self.update_freq == 0:
             self.center.append(xi[0]) if self.ncoords == 1 else self.center.append(xi)
+            self._smooth_boundary(xi)
 
         is_in_bounds = (xi <= self.maxx).all() and (xi >= self.minx).all() 
+        is_near_bounds = (
+            xi - self.minx <= 3.0 * self.hill_std).any() or (
+            self.maxx - xi <= 3.0 * self.hill_std).any()
 
         if is_in_bounds:
             bias_force = self._accumulate_wtm_force(xi)
             
-        if not is_in_bounds or not self.force_from_grid:
+        if not is_in_bounds or not self.force_from_grid or is_near_bounds:
             bias_force = self._analytic_wtm_force(xi)
 
         return bias_force
@@ -165,7 +169,8 @@ class WTM(EnhancedSampling):
         bias_force = [0.0 for _ in range(self.ncoords)]
             
         if len(self.center) == 0:
-            # nothing to do
+            if self.verbose:
+                print(" >>> Warning: no metadynamics hills stored")
             return bias_force
 
         if self.ncoords == 1:
@@ -187,13 +192,33 @@ class WTM(EnhancedSampling):
 
                 epot = w * np.exp(-(val * val) / (2.0 * self.hill_var[0]))
                 local_pot += epot
-                bias_force[0] += epot * val / self.hill_var[0]
+                bias_force[0] -= epot * val / self.hill_var[0]
 
         else:
             # TODO: implement for 2D
             pass
         
         return bias_force
+
+    def _smooth_boundary(self, xi: np.ndarray):
+        """smooth MtD potential at boundary by adding Gaussians outside of range(minx,maxx)
+
+        args:
+            xi: collective variable
+        """
+        dminx = xi - self.minx  # > 0 if in bounds
+        dmaxx = self.maxx - xi  # > 0 if in bounds
+
+        if (dminx <= 3.0 * self.hill_std).all():
+            self.center.append(self.minx[0]-dminx[0]) if self.ncoords == 1 else self.center.append(self.minx-dminx)
+        elif (dmaxx <= 3.0 * self.hill_std).all():
+            self.center.append(self.maxx[0]+dminx[0]) if self.ncoords == 1 else self.center.append(self.minx+dminx)
+        elif (dminx <= 3.0 * self.hill_std).any():
+            # TODO: implement for 2D
+            pass
+        elif (dmaxx <= 3.0 * self.hill_std).any():
+            # TODO: implement for 2D
+            pass
 
     def write_restart(self, filename: str = "restart_wtm"):
         """write restart file

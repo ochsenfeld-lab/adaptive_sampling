@@ -10,7 +10,7 @@ setup(
     description="sampling algorithms",
     author="Andreas Hulm",
     packages=find_packages(include=["adaptive_sampling"]),
-    install_requires=["torch>=1.10.2" "numpy>=1.19.5"],
+    install_requires=["torch>=1.10.2", "numpy>=1.19.5", "scipy>=1.8.0"],
     setup_requires=["pytest", "flake8"],
     tests_requires=["pytest"],
     zip_safe=False,

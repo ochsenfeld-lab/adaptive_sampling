@@ -9,6 +9,7 @@ from ..units import *
 
 
 class eABF(ABF, EnhancedSampling):
+    
     def __init__(
         self,
         ext_sigma: Union[float, list],

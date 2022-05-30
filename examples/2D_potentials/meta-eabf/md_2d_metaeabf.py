@@ -64,7 +64,6 @@ print(
 )
 
 while step_count < nsteps:
-    start_loop = time.perf_counter()
     the_md.step += 1
     step_count += 1
 

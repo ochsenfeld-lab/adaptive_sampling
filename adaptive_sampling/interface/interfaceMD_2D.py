@@ -2,19 +2,9 @@
 import sys
 import random
 import numpy as np
-
-from adaptive_sampling.interface.sampling_data import SamplingData
-
-# Constants
-it2fs = 1.0327503e0
-au2k = 315775.04e0
-au2bar = 2.9421912e8
-
-kB = 1.380648e-23  # J / K
-H_in_J = 4.359744e-18
-H_in_kJmol = 2625.499639
-kB_a = kB / H_in_J  # Hartree / K
-
+from typing import Tuple
+from .sampling_data import SamplingData
+from ..units import *
 
 class MD:
     """Class for MD on test potentials"""
@@ -34,7 +24,7 @@ class MD:
         self.coords = np.array(coords_in)
         self.natoms = 1
         self.dt_fs = dt_in
-        self.dt = dt_in / it2fs
+        self.dt = dt_in / atomic_to_fs
         self.target_temp = target_temp_in
         self.forces = np.zeros(2 * self.natoms)
         self.momenta = np.zeros(2 * self.natoms)
@@ -85,16 +75,13 @@ class MD:
         self.momenta[1] = random.gauss(0.0, 1.0) * np.sqrt(init_temp * self.mass)
 
         TTT = (np.power(self.momenta, 2) / self.masses).sum() / 2.0
-        self.momenta *= np.sqrt(init_temp / (TTT * au2k))
+        self.momenta *= np.sqrt(init_temp / (TTT * atomic_to_K))
 
     # -----------------------------------------------------------------------------------------------------
-    def calc(self):
+    def calc(self) -> Tuple[float, np.ndarray]:
         """Calculation of energy, forces
 
-        Args:
-           only_energy (bool, False): Only energies are calculated
-
-        Returns:
+        returns:
            energy (float): energy,
            forces (ndarray): forces
         """
@@ -102,7 +89,11 @@ class MD:
 
     # -----------------------------------------------------------------------------------------------------
     def calc_energy_forces_MD(self, potential: str = "1") -> tuple:
+        """Calculate energy and forces
 
+        args:
+            potential: selects potential energy function
+        """
         x = self.coords[0]
         y = self.coords[1]
         self.forces = np.zeros(2 * self.natoms)
@@ -112,8 +103,8 @@ class MD:
 
         if potential == "1":
 
-            a = 8.0e-6 / H_in_kJmol
-            b = 0.5 / H_in_kJmol
+            a = 8.0e-6 / atomic_to_kJmol
+            b = 0.5 / atomic_to_kJmol
             d = 80.0
             e = 160.0
 
@@ -133,21 +124,21 @@ class MD:
             exp_1 = np.exp((-a * (x - d) * (x - d)) + (-b * (y - e) * (y - e)))
             exp_2 = np.exp((-a * (x + d) * (x + d)) + (-b * (y + e) * (y + e)))
 
-            self.epot = -np.log(exp_1 + exp_2) / H_in_kJmol
+            self.epot = -np.log(exp_1 + exp_2) / atomic_to_kJmol
 
             self.forces[0] = (
                 -(
                     (-2.0 * a * (x - d) * exp_1 - 2.0 * a * (x + d) * exp_2)
                     / (exp_1 + exp_2)
                 )
-                / H_in_kJmol
+                / atomic_to_kJmol
             )
             self.forces[1] = (
                 -(
                     (-2.0 * b * (y - e) * exp_1 - 2.0 * b * (y + e) * exp_2)
                     / (exp_1 + exp_2)
                 )
-                / H_in_kJmol
+                / atomic_to_kJmol
             )
 
         else:
@@ -169,21 +160,19 @@ class MD:
         self.ekin = (np.power(self.momenta, 2) / self.masses).sum()
         self.ekin /= 2.0
 
-        self.temp = self.ekin / kB_a
+        self.temp = self.ekin / kB_in_atomic
 
     # -----------------------------------------------------------------------------------------------------
     def propagate(self, langevin=True, friction=1.0e-3):
         """Propagate momenta/coords with Velocity Verlet
 
         Args:
-           langevin                (bool, False)
+           langevin                (bool, True)
            friction                (float, 10^-3 1/fs)
-        Returns:
-           -
         """
         if langevin == True:
             prefac = 2.0 / (2.0 + friction * self.dt_fs)
-            rand_push = np.sqrt(self.target_temp * friction * self.dt_fs * kB_a / 2.0e0)
+            rand_push = np.sqrt(self.target_temp * friction * self.dt_fs * kB_in_atomic / 2.0e0)
             self.rand_gauss = np.zeros(shape=(len(self.momenta),), dtype=np.double)
             self.rand_gauss[0] = random.gauss(0, 1)
             self.rand_gauss[1] = random.gauss(0, 1)
@@ -201,14 +190,12 @@ class MD:
         """Update momenta with Velocity Verlet
 
         Args:
-           -
-
-        Returns:
-           -
+           langevin                (bool, True)
+           friction                (float, 10^-3 1/fs)           
         """
         if langevin == True:
             prefac = (2.0e0 - friction * self.dt_fs) / (2.0e0 + friction * self.dt_fs)
-            rand_push = np.sqrt(self.target_temp * friction * self.dt_fs * kB_a / 2.0e0)
+            rand_push = np.sqrt(self.target_temp * friction * self.dt_fs * kB_in_atomic / 2.0e0)
             self.momenta *= prefac
             self.momenta += np.sqrt(self.masses) * rand_push * self.rand_gauss
             self.momenta -= 0.5e0 * self.dt * self.forces

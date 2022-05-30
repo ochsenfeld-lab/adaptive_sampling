@@ -18,7 +18,7 @@ class WTMeABF(eABF, WTM, EnhancedSampling):
         self._propagate()
 
         mtd_forces = self.get_wtm_force(self.ext_coords)
-        bias_force = self._extended_dynamics(xi, delta_xi, self.hill_std)
+        bias_force = self._extended_dynamics(xi, delta_xi) #, self.hill_std)
 
         if (self.ext_coords <= self.maxx).all() and (
             self.ext_coords >= self.minx
