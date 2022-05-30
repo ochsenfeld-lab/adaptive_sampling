@@ -79,10 +79,11 @@ pmf, rho = mbar.pmf_from_weights(grid, cv[indices], W, equil_temp=300.0)
 
 ## Documentation:
 Code documentation can be created with pdoc3:
-> $ pip install pdoc3
+```shell
+$ pip install pdoc3
 
-> $ pdoc --html adaptive_sampling -o doc/
-
+$ pdoc --html adaptive_sampling -o doc/
+```
 ## References:
 This work:
 1. 	Hulm et. al., J. Chem. Phys. (in press)
