@@ -51,9 +51,10 @@ class EnhancedSampling(ABC):
         self.f_conf = self.unit_conversion_force(self.f_conf)
 
         # store trajectories of CVs and temperature and epot between outputs
+        md_state = self.the_md.get_sampling_data()
         self.traj = np.array([xi])
-        self.temp = [self.the_md.get_sampling_data().temp]
-        self.epot = [self.the_md.get_sampling_data().epot]
+        self.temp = [md_state.temp]
+        self.epot = [md_state.epot]
 
         # get number of bins (1D or 2D)
         self.nbins_per_dim = np.array([1, 1])
@@ -88,8 +89,8 @@ class EnhancedSampling(ABC):
         self.kinetics = kinetics
         if self.kinetics and self.ncoords == 0:
             self.mass_traj = [self._get_mass_of_cv(delta_xi)]
-            self.abs_forces = [np.linalg.norm(self.the_md.forces)]
-            self.CV_crit_traj = [np.abs(np.dot(self.the_md.forces, delta_xi[0]))]
+            self.abs_forces = [np.linalg.norm(md_state.forces)]
+            self.CV_crit_traj = [np.abs(np.dot(md_state.forces, delta_xi[0]))]
             self.abs_grad_xi = [np.linalg.norm(delta_xi)]
         elif self.kinetics:
             self.kinetics = False
@@ -151,7 +152,7 @@ class EnhancedSampling(ABC):
         returns:
             bias_force: confinement force
         """
-        conf_force = np.zeros_like(self.the_md.forces.ravel())
+        conf_force = np.zeros_like(self.the_md.get_sampling_data().forces.ravel())
 
         for i in range(self.ncoords):
             if xi[i] > (self.maxx[i] - margin[i]):
@@ -228,7 +229,7 @@ class EnhancedSampling(ABC):
         """
         self.the_cv.requires_grad = True
         xi = np.zeros(self.ncoords)
-        grad_xi = np.zeros((self.ncoords, len(self.the_md.forces.ravel())))
+        grad_xi = np.zeros((self.ncoords, len(self.the_md.get_sampling_data().forces.ravel())))
 
         for i in range(self.ncoords):
             xi[i], grad_xi[i] = self.the_cv.get_cv(self.cv[i], self.atoms[i], **kwargs)
@@ -244,7 +245,7 @@ class EnhancedSampling(ABC):
         self.CV_crit_traj.append(np.dot(delta_xi[0], forces))
         self.abs_grad_xi.append(np.linalg.norm(delta_xi))
 
-    def _get_mass_of_cv(self, delta_xi: np.ndarray) -> np.ndarray:
+    def _get_mass_of_cv(self, delta_xi: np.ndarray) -> float:
         """get mass of collective variable for TS theory and kinetics
         only defined for 1D reaction coordinates!
 
@@ -255,7 +256,7 @@ class EnhancedSampling(ABC):
             m_xi_inv: coordinate dependent mass of collective variabl
         """
         if self.ncoords == 1:
-            return np.dot(delta_xi[0], (1.0 / self.the_md.mass) * delta_xi[0])
+            return np.dot(delta_xi[0], (1.0 / self.the_md.get_sampling_data().mass) * delta_xi[0])
         else:
             return 0.0
 
@@ -332,7 +333,7 @@ class EnhancedSampling(ABC):
                 for n in range(self.out_freq):
                     traj_out.write(
                         "\n%14.6f\t"
-                        % ((step - self.out_freq + n) * self.the_md.dt * atomic_to_fs)
+                        % ((step - self.out_freq + n) * self.the_md.get_sampling_data().dt * atomic_to_fs)
                     )  # time in fs
                     for i in range(len(self.traj[0])):
                         traj_out.write("%14.6f\t" % (self.traj[-self.out_freq + n][i]))
