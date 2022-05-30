@@ -1,4 +1,5 @@
 import numpy as np
+import pytest
 from adaptive_sampling.colvars import CV
 
 
@@ -16,43 +17,30 @@ def four_particles():
     return MD(masses, coords)
 
 
-the_mol = four_particles()
-cv = CV(the_mol, requires_grad=True)
-f, grad = cv.get_cv("distance", [0, 2])
-print("\nDistance: ", f)
-print("Gradient:\n", grad)
+def test_distance():
+    cv = CV(four_particles(), requires_grad=True)
+    f, grad = cv.get_cv("distance", [0, 1])
+    assert f == 1
+    assert (grad == np.asarray([-1, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0])).all()
 
-the_mol.coords = np.array([0, 0, 0, 10, 0, 0, 1, 1, 0, 1, 1, 1])
-f, grad = cv.get_cv("distance", [0, 2])
-print("\nDistance: ", f)
-print("Gradient:\n", grad)
 
-f = cv.angle([0, 1, 2])
-print("\nAngle: ", np.degrees(f))
-print("Gradient:\n", cv.gradient)
+def test_angle():
+    cv = CV(four_particles(), requires_grad=False)
+    f = cv.get_cv("angle", [0, 1, 3])
+    f /= np.pi / 180.0
+    assert int(f) == 90
 
-f = cv.torsion([0, 1, 2, 3])
-print("\nDihedral: ", np.degrees(f))
-print("Gradient:\n", cv.gradient)
 
-f = cv.linear_combination([[1.0, [2, 3]], [2.0, [0, 1]]])
-print("\nLinear combination: ", f)
-print("Gradient:\n", cv.gradient)
+def test_torsion():
+    cv = CV(four_particles(), requires_grad=False)
+    f = cv.get_cv("torsion", [0, 1, 2, 3])
+    f /= np.pi / 180.0
+    assert int(f) == 90
 
-f = cv.distorted_distance([0, [2, 3]])
-print("\ndistorted distance: ", f)
-print("Gradient:\n", cv.gradient)
 
-d = cv.cec([[0, 1], [[1.0, 2], [2.0, 3]]])
-print("\ncec: ", d)
-print("Gradient:\n", cv.gradient)
-
-d = cv.gmcec([[0, 1], [[1.0, 2], [1.0, 3]], [[2, 2, 3]]], mapping="default")
-print("\ngmcec: ", d)
-print("Gradient:\n", cv.gradient)
-
-f, grad = cv.get_cv(
-    "lin_comb_custom", [["distance", 1.0, [0, 2]], ["distance", 1.0, [0, 2]]]
-)
-print("\ncustom linear combination: ", f)
-print("Gradient:\n", cv.gradient)
+def test_linear_combination():
+    cv = CV(four_particles(), requires_grad=True)
+    f = cv.linear_combination([[1.0, [2, 3]], [2.0, [0, 1]]])
+    print(cv.gradient)
+    assert f == 3.0
+    assert (cv.gradient == np.asarray([-2, 0, 0, 2, 0, 0, 0, 0, -1, 0, 0, 1])).all()

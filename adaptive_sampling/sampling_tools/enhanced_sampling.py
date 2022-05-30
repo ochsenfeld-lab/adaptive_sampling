@@ -7,6 +7,7 @@ from abc import ABC, abstractmethod
 from ..interface.sampling_data import MDInterface
 from ..colvars.colvars import CV
 from .utils import diff
+from ..units import *
 
 
 class EnhancedSampling(ABC):
@@ -16,8 +17,9 @@ class EnhancedSampling(ABC):
         self,
         md: MDInterface,
         cv_def: list,
-        equil_temp: float=300.0,
+        equil_temp: float = 300.0,
         verbose: bool = True,
+        confine: bool = True,
         kinetics: bool = False,
         f_conf: float = 100,
         output_freq: int = 100,
@@ -28,6 +30,7 @@ class EnhancedSampling(ABC):
         self.out_freq = output_freq
         self.equil_temp = equil_temp
         self.verbose = verbose
+        self.confine = confine
 
         # definition of CVs
         self.ncoords = len(cv_def)
@@ -100,25 +103,20 @@ class EnhancedSampling(ABC):
                 print(f"\n Initialize {self.cv[i]} as collective variable:")
                 if self.cv_type[i] == "angle":
                     output_dat = (
-                        self.minx[i] / np.pi / 180.0,
-                        self.maxx[i] / np.pi / 180.0,
-                        self.dx[i] / np.pi / 180.0,
-                        'Degree'
+                        self.minx[i] * DEGREES_per_RADIAN,
+                        self.maxx[i] * DEGREES_per_RADIAN,
+                        self.dx[i] * DEGREES_per_RADIAN,
+                        "Degree",
                     )
                 elif self.cv_type[i] == "distance":
                     output_dat = (
-                        self.minx[i]  * 0.52917721092e0,
-                        self.maxx[i]  * 0.52917721092e0,
-                        self.dx[i] * 0.52917721092e0,
-                        'Angstrom'
+                        self.minx[i] * BOHR_to_ANGSTROM,
+                        self.maxx[i] * BOHR_to_ANGSTROM,
+                        self.dx[i] * BOHR_to_ANGSTROM,
+                        "Angstrom",
                     )
                 else:
-                    output_dat = (
-                        self.minx[i],
-                        self.maxx[i],
-                        self.dx[i],
-                        ''
-                    )
+                    output_dat = (self.minx[i], self.maxx[i], self.dx[i], "")
                 print(f"\t Minimum{i}:\t\t\t{output_dat[0]} {output_dat[3]}")
                 print(f"\t Maximum{i}:\t\t\t{output_dat[1]} {output_dat[3]}")
                 print(f"\t Bin width{i}:\t\t\t{output_dat[2]} {output_dat[3]}")
@@ -137,28 +135,34 @@ class EnhancedSampling(ABC):
     def shared_bias(self):
         pass
 
-    def harmonic_walls(self, xi: np.ndarray, delta_xi: np.ndarray) -> np.ndarray:
+    def harmonic_walls(
+        self,
+        xi: np.ndarray,
+        delta_xi: np.ndarray,
+        margin: np.ndarray = np.array([0, 0]),
+    ) -> np.ndarray:
         """confine system with harmonic walls to range(self.minx, self.maxx)
 
         args:
             xi: collective variable
             delta_xi: gradient of collective variable
+            margin: inset for start of harmonic wall
 
         returns:
-            bias_force:
+            bias_force: confinement force
         """
-        bias_force = np.zeros_like(self.the_md.forces.ravel())
+        conf_force = np.zeros_like(self.the_md.forces.ravel())
 
         for i in range(self.ncoords):
-            if xi[i] > self.maxx[i]:
-                r = diff(self.maxx[i], xi[i], self.cv_type[i])
-                bias_force -= self.f_conf[i] * r * delta_xi[i]
+            if xi[i] > (self.maxx[i] - margin[i]):
+                r = diff(self.maxx[i] - margin[i], xi[i], self.cv_type[i])
+                conf_force -= self.f_conf[i] * r * delta_xi[i]
 
-            elif xi[i] < self.minx[i]:
-                r = diff(self.minx[i], xi[i], self.cv_type[i])
-                bias_force -= self.f_conf[i] * r * delta_xi[i]
+            elif xi[i] < (self.minx[i] + margin[i]):
+                r = diff(self.minx[i] + margin[i], xi[i], self.cv_type[i])
+                conf_force -= self.f_conf[i] * r * delta_xi[i]
 
-        return bias_force
+        return conf_force
 
     def get_index(self, xi: np.ndarray) -> list:
         """get list of bin indices for current position of CVs or extended variables
@@ -203,18 +207,16 @@ class EnhancedSampling(ABC):
         returns:
             args in atomic units
         """
-        bohr2angs = 0.52917721092e0  # bohr to angstrom
-        deg2rad = np.pi / 180.0  # degree to radians
-        H2KJMOL = 2625.499639
 
         for i in range(self.ncoords):
             for arg in args:
                 if self.cv_type == "angle":
-                    arg[i] /= deg2rad / deg2rad / H2KJMOL
+                    # @AH: Please check that this is correct, what was here before looked suspicous
+                    arg[i] *= DEGREES_per_RADIAN * DEGREES_per_RADIAN / atomic_to_kJmol
                 elif self.cv_type == "distance":
-                    arg[i] *= bohr2angs * bohr2angs / H2KJMOL
+                    arg[i] *= BOHR_to_ANGSTROM * BOHR_to_ANGSTROM / atomic_to_kJmol
                 else:
-                    arg[i] /= H2KJMOL
+                    arg[i] /= atomic_to_kJmol
         return args
 
     def get_cv(self, **kwargs) -> Tuple[np.ndarray, np.ndarray]:
@@ -237,8 +239,7 @@ class EnhancedSampling(ABC):
     def _kinetics(self, delta_xi):
         """accumulates data for kinetics"""
         forces = self.the_md.get_sampling_data().forces
-        m_xi = self._get_mass_of_cv(delta_xi)
-        self.mass_traj.append(m_xi)
+        self.mass_traj.append(self._get_mass_of_cv(delta_xi))
         self.abs_forces.append(np.linalg.norm(forces))
         self.CV_crit_traj.append(np.dot(delta_xi[0], forces))
         self.abs_grad_xi.append(np.linalg.norm(delta_xi))
@@ -251,10 +252,10 @@ class EnhancedSampling(ABC):
             delta_xi: gradients of cv's
 
         Returns:
-            m_xi: coordinate dependent mass of collective variabl
+            m_xi_inv: coordinate dependent mass of collective variabl
         """
         if self.ncoords == 1:
-            return np.dot(delta_xi[0], 1.0 / self.the_md.mass * delta_xi[0])
+            return np.dot(delta_xi[0], (1.0 / self.the_md.mass) * delta_xi[0])
         else:
             return 0.0
 
@@ -262,6 +263,7 @@ class EnhancedSampling(ABC):
 
         grid = np.copy(self.grid)
         for i in range(self.ncoords):
+            # @AH: the conversions below are the opposite of the comments!
             if self.the_cv.type == "angle":
                 grid *= np.pi / 180.0  # radians to degree
             elif self.the_cv.type == "distance":
@@ -291,6 +293,7 @@ class EnhancedSampling(ABC):
                             fout.write("%14.6f\t" % dat[i, j])
                         fout.write("\n")
 
+
     def _write_traj(self, data: dict = {}):
         """write trajectory of extended or normal ABF at output times
 
@@ -303,9 +306,9 @@ class EnhancedSampling(ABC):
         # convert units to degree and Angstrom
         for i in range(self.ncoords):
             if self.cv_type[i] == "angle":
-                self.traj[:, i] /= np.pi / 180.0
+                self.traj[:, i] *= DEGREES_per_RADIAN
             elif self.cv_type[i] == "distance":
-                self.traj[:, i] *= 0.52917721092e0
+                self.traj[:, i] *= BOHR_to_ANGSTROM
 
         # write header
         if not os.path.isfile("CV_traj.dat") and step == 0:
@@ -318,7 +321,7 @@ class EnhancedSampling(ABC):
                 for kw in data.keys():
                     traj_out.write("%14s\t" % kw)
                 if self.kinetics:
-                    traj_out.write("%14s\t" % "m_xi [a.u.]")
+                    traj_out.write("%14s\t" % "m_xi_inv [a.u.]")
                     traj_out.write("%14s\t" % "|dU| [a.u.]")
                     traj_out.write("%14s\t" % "|dxi| [a.u.]")
                     traj_out.write("%14s\t" % "dU*dxi [a.u.]")
@@ -329,11 +332,7 @@ class EnhancedSampling(ABC):
                 for n in range(self.out_freq):
                     traj_out.write(
                         "\n%14.6f\t"
-                        % (
-                            (self.the_md.step - self.out_freq + n)
-                            * self.the_md.dt
-                            * 1.0327503e0
-                        )
+                        % ((step - self.out_freq + n) * self.the_md.dt * atomic_to_fs)
                     )  # time in fs
                     for i in range(len(self.traj[0])):
                         traj_out.write("%14.6f\t" % (self.traj[-self.out_freq + n][i]))

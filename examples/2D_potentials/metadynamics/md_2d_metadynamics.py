@@ -1,8 +1,8 @@
 #!/usr/bin/env python
 import time
-import sys
-from adaptive_sampling.sampling_tools.abf import ABF
+from adaptive_sampling.sampling_tools.metadynamics import WTM
 from adaptive_sampling.interface.interfaceMD_2D import *
+
 
 bohr2angs = 0.52917721092e0
 
@@ -10,15 +10,13 @@ bohr2angs = 0.52917721092e0
 
 # MD
 seed = 42
-nsteps = 10000  # number of MD steps
+nsteps = 500000  # number of MD steps
 dt = 5.0e0  # stepsize in fs
 target_temp = 300.0  # Kelvin
 mass = 10.0  # a.u.
 potential = "1"
 
-# eABF
-ats = [["x", [], 70.0, 170.0, 2.0]]
-N_full = 100
+ats = [["x", [], 70.0, 160.0, 0.2]]
 
 step_count = 0
 coords = [80.0, 0]
@@ -30,8 +28,16 @@ the_md = MD(
     target_temp_in=target_temp,
     seed_in=seed,
 )
-the_abm = ABF(
-    the_md, ats, output_freq=1000, f_conf=100, equil_temp=300.0, kinetics=True
+the_abm = WTM(
+    0.5,
+    4.0,
+    the_md,
+    ats,
+    hill_drop_freq=100,
+    output_freq=10,
+    force_from_grid=True,
+    f_conf=1000,
+    equil_temp=300.0,
 )
 # the_abm.restart()
 
