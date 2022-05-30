@@ -27,7 +27,7 @@ This package implements various sampling algorithms for the calculation of free 
 ## Basic usage:
 To use adaptive sampling with your MD code of choice add a function called `get_sampling_data()` to the corresponding python interface that returns an object containing all required data. Hard-coded dependencies can be avoided by wrapping the `adaptive_sampling` import in a `try/except` clause:
 
-```
+```python
 class MD:
     # Your MD code
     ...
@@ -50,7 +50,7 @@ class MD:
             raise NotImplementedError("`get_sampling_data()` is missing `adaptive_sampling` package") from e
 ```
 The bias force on atoms in the N-th step can be obtained by calling `step_bias()` on any sampling algorithm:
-```
+```python
 from adaptive_sampling.sampling_tools import *
 the_md = MD(...)
 collective_var = ["distance", list_of_atom_indices, minimum, maximum, bin_width]
@@ -59,7 +59,7 @@ the_md.forces += eABF.step_bias(write_output=True, write_traj=True)
 ```
 This automatically writes an on-the-fly free energy estimate in the output file and all necessary data for post-processing in a trajectory file.
 For extended-system dynamics unbiased statistical weigths of individual frames can be obtained using the MBAR estimator:
-```
+```python
 import numpy as np
 from adaptive_sampling.processing_tools import mbar
 
