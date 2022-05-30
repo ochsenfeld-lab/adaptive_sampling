@@ -24,6 +24,66 @@ This package implements various sampling algorithms for the calculation of free 
 * torch >= 1.10
 * scipy >= 1.8
 
+## Basic usage:
+To use adaptive sampling with your MD code of choice add a function called get_sampling_data to the corresponding python interface that returns an object containing all required data:
+
+```
+from adaptive_sampling.interface.sampling_data import SamplingData
+
+class MD:
+	"""Python interface of MD code"""
+	
+	def __init__(self):
+		...
+
+	def get_sampling_data(self):
+        """provides interface to adaptive_sampling"""
+        return SamplingData(
+            self.masses: np.ndarray,    # atom masses in atomic units (len(natoms))
+            self.coords: np.ndarray,	# cartesian coordinates in Bohr (len(3*natoms))
+            self.forces: np.ndarray,	# forces in Hartree/Bohr (len(3*natoms))
+            self.epot: float,			# potential energy in Hartree	
+            self.temp: float,           # temperature in Kelvin
+            self.natoms: int,           # number of atoms 
+            self.step: int,             # MD step number
+            self.dt: float,             # MD step size in fs 
+        )
+
+```
+The bias force on atoms in the Nth step can now be obtained by calling step_bias on any sampling algorithm:
+```
+from adaptive_sampling.sampling_tools import *
+the_md = MD(...)
+collective_var = ["distance", list_of_atom_indices, minimum, maximum, bin_width]
+the_bias = eABF(ext_sigma, ext_mass, the_md, collective_variable, output_freq=10, f_conf=100, equil_temp=300.0)
+the_md.forces += eABF.step_bias(write_output=True, write_traj=True)
+```
+An on-the-fly free energy estimate is automatically wreite in the output file and all necessary data for post-processing is stored in a trajectory file.
+For extended-system dynamics unbiased statistical weigths of indicidual frames can be obtained with the MBAR estimator:
+```
+import numpy as np
+from adaptive_sampling.processing_tools import *
+
+traj_dat = np.loadtxt('CV_traj.dat', skiprows=1)
+ext_sigma = 2.0
+bin_width = 2.0
+grid = np.arange(70.0, 170.0, bin_width)
+
+cv = traj_dat[:,1]  # trajectory of collective variable
+la = traj_dat[:,2]  # trajectory of extended system
+
+traj_list, indices, meta_f = get_windows(grid, cv, la, sigma, equil_temp=300.0)
+
+weigths = run_mbar(traj_list, meta_f, conv=1.0e-4, conv_errvec=None, outfreq=100, equil_temp=300.0)
+pmf, rho = pmf_from_weights(grid, cv[indices], W, equil_temp=300.0)
+```
+
+## Documentation:
+Create code documentation with pdoc3:
+> $ pip install pdoc3
+
+> $ pdoc --html pdoc -o doc/
+
 ## References:
 This work:
 1. 	Hulm et. al., J. Chem. Phys. (in press)
