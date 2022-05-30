@@ -1,8 +1,8 @@
 #!/usr/bin/env python
 from adaptive_sampling.sampling_tools.metaeabf import WTMeABF
 from adaptive_sampling.interface.interfaceMD_2D import *
+from adaptive_sampling.units import *
 
-bohr2angs = 0.52917721092e0
 ################# Imput Section ####################
 # MD
 seed = 42
@@ -53,7 +53,7 @@ print(
 print(
     "%11.2f\t%14.6f\t%14.6f\t%14.6f\t%14.6f\t%14.6f\t%14.6f"
     % (
-        the_md.step * the_md.dt * it2fs,
+        the_md.step * the_md.dt * atomic_to_fs,
         the_md.coords[0],
         the_md.coords[1],
         the_md.epot,
@@ -78,7 +78,7 @@ while step_count < nsteps:
     print(
         "%11.2f\t%14.6f\t%14.6f\t%14.6f\t%14.6f\t%14.6f\t%14.6f"
         % (
-            the_md.step * the_md.dt * it2fs,
+            the_md.step * the_md.dt * atomic_to_fs,
             the_md.coords[0],
             the_md.coords[1],
             the_md.epot,
