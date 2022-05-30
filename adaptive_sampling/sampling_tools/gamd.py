@@ -5,18 +5,42 @@ from ..units import *
 
 
 class GaMD(EnhancedSampling):
+    """Gaussian-accelerated Molecular Dynamics
+       see: Miao et. al., J. Chem. Theory Comput. (2015); https://doi.org/10.1021/acs.jctc.5b00436
+
+       Apply an harmonic boost bias potential to potential energy. Independent of Collective Variable.
+
+    args:
+        gamd_sigma0: upper limit of standard deviation of boost potential
+        gamd_init_step: initial steps where no bias is applied to estimate min, max and var of potential energy
+        gamd_equil_steps: equilibration steps, min, max and var of potential energy is still updated
+                          force constant of coupling is calculated from previous steps
+        md: Object of the MD Inteface
+        cv_def: definition of the Collective Variable (CV) (see adaptive_sampling.colvars)
+                [["cv_type", [atom_indices], minimum, maximum, bin_width], [possible second dimension]]
+        gamd_bound: "lower": use lower bound for GaMD boost
+                    "upper: use upper bound for GaMD boost
+        confine: is system should be confined to range of CV
+        equil_temp: equillibrium temperature of MD
+        verbose: print verbose information
+        kinetice: calculate necessary data to obtain kinetics of reaction
+        f_conf: force constant for confinement of system to the range of interest in CV space
+        output_freq: frequency in steps for writing outputs
+
+    """
     def __init__(
         self,
-        sigma0: float,
+        gamd_sigma0: float,
         gamd_init_steps: int,
         gamd_equil_steps: int,
         *args,
         gamd_bound: str = "lower",
+        confine: bool = True,
         **kwargs,
     ):
         super().__init__(*args, **kwargs)
 
-        self.sigma0 = sigma0
+        self.sigma0 = gamd_sigma0
         self.gamd_init_steps = gamd_init_steps
         self.gamd_equil_steps = gamd_equil_steps
         self.gamd_bound = gamd_bound.lower()

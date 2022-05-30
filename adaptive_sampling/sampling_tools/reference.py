@@ -1,13 +1,25 @@
 import os
 import time
 import numpy as np
+
+from adaptive_sampling.units import R_in_SI
 from .enhanced_sampling import EnhancedSampling
 
 
 class Reference(EnhancedSampling):
     """Unbiased simulation with restraint to region of interest in cv space with harmonic walls
-    Can be used for equilibration prior to production or free energy estimation from unbiased simulation"""
-
+    Can be used for equilibration prior to production or free energy estimation from unbiased simulation
+    
+    args:
+        md: Object of the MD Inteface
+        cv_def: definition of the Collective Variable (CV) (see adaptive_sampling.colvars)
+                [["cv_type", [atom_indices], minimum, maximum, bin_width], [possible second dimension]]
+        equil_temp: equillibrium temperature of MD
+        verbose: print verbose information
+        kinetice: calculate necessary data to obtain kinetics of reaction
+        f_conf: force constant for confinement of system to the range of interest in CV space
+        output_freq: frequency in steps for writing outputs
+    """
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
@@ -56,9 +68,8 @@ class Reference(EnhancedSampling):
 
     def get_pmf(self) -> np.ndarray:
         """get free energy profile from histogram"""
-        R = 8.314 / 1000.0  # kJ / K mol
         self.pmf = (
-            -R
+            -R_in_SI / 1000.0   # kJ/mol
             * self.equil_temp
             * np.log(
                 self.histogram,

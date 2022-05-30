@@ -3,6 +3,7 @@ import torch
 import numpy as np
 
 from typing import Union, Tuple
+from .utils import _partial_derivative
 from ..interface.sampling_data import MDInterface
 from ..units import *
 
@@ -22,6 +23,7 @@ class CV:
     def __init__(self, the_mol: MDInterface, requires_grad: bool = False):
 
         self.the_mol = the_mol
+        self.requires_grad = requires_grad
 
         md_state = self.the_mol.get_sampling_data()
 
@@ -37,21 +39,8 @@ class CV:
         """The coords tensor and ndarray share the same memory.
         Modifications to the tensor will be reflected in the ndarray and vice versa!"""
         self.coords = torch.from_numpy(self.the_mol.get_sampling_data().coords.ravel())
-
-    @staticmethod
-    def partial_derivative(
-        f: torch.tensor, *args: Tuple[torch.tensor]
-    ) -> Tuple[torch.tensor]:
-        """get partial derivative of arbitrary function from torch.autograd
-
-        Args:
-            f (torch.tensor): function f(*args) to differentiate
-            *args (torch.tensor): variables of f for which derivative is computed
-
-        Returns:
-            partial_derivatives (Tuple[torch.tensor]): derivatives of f with respect to args
-        """
-        return torch.autograd.grad(f, *args)
+        self.coords = self.coords.float()
+        self.coords.requires_grad = self.requires_grad
 
     def _get_com(self, atoms: Union[int, list]) -> Tuple[torch.tensor, float]:
         """get center of mass (com) of group of atoms
@@ -87,7 +76,6 @@ class CV:
                     self.coords[3 * atom + 2],
                 ]
             )
-
         com = com.float()
         com.requires_grad = self.requires_grad
 
@@ -165,7 +153,7 @@ class CV:
         if self.requires_grad:
             # @AH: why don't you do? Does this not work?
             #            self.gradient = self.partial_derivative(self.cv, self.coords)
-            atom_grads = self.partial_derivative(self.cv, (p1, p2))
+            atom_grads = _partial_derivative(self.cv, (p1, p2))
             self.gradient = torch.matmul(
                 atom_grads[0], self._get_atom_weights(m0, cv_def[0])
             )
@@ -173,6 +161,9 @@ class CV:
                 atom_grads[1], self._get_atom_weights(m1, cv_def[1])
             )
             self.gradient = self.gradient.numpy()
+        
+        # AH: this returns (None,), I don't know why.
+        #       self.gradient = torch.autograd.grad(self.cv, self.coords, allow_unused=True)
 
         return float(self.cv)
 
@@ -212,7 +203,7 @@ class CV:
 
         # get forces
         if self.requires_grad:
-            atom_grads = self.partial_derivative(self.cv, (p1, p2, p3))
+            atom_grads = _partial_derivative(self.cv, (p1, p2, p3))
             self.gradient = torch.matmul(
                 atom_grads[0], self._get_atom_weights(m0, cv_def[0])
             )
@@ -266,7 +257,7 @@ class CV:
 
         # get forces
         if self.requires_grad:
-            atom_grads = self.partial_derivative(self.cv, (p1, p2, p3, p4))
+            atom_grads = _partial_derivative(self.cv, (p1, p2, p3, p4))
             self.gradient = torch.matmul(
                 atom_grads[0], self._get_atom_weights(m1, cv_def[0])
             )
@@ -370,7 +361,7 @@ class CV:
 
         # get forces
         if self.requires_grad:
-            atom_grads = self.partial_derivative(self.cv, (p1, p2))
+            atom_grads = _partial_derivative(self.cv, (p1, p2))
             self.gradient = torch.matmul(
                 atom_grads[0], self._get_atom_weights(m0, cv_def[0])
             )
@@ -396,7 +387,7 @@ class CV:
         return float(cv)
 
     def get_cv(self, cv, atoms, **kwargs) -> Tuple[float, np.ndarray]:
-        """get state of collective variable
+        """get state of collective variable from cv definition of sampling_tools
 
         Returns:
            xi (float): value of collective variable
@@ -427,10 +418,10 @@ class CV:
             xi = self.linear_combination(atoms)
             self.type = None
         elif cv.lower() == "coordination_number":
-            xi = self.coordination_number(atoms)
+            xi = self.coordination_number(atoms, **kwargs)
             self.type = None
         elif cv.lower() == "lin_comb_custom":
-            xi = self.custom_lin_comb(atoms)
+            xi = self.custom_lin_comb(atoms, **kwargs)
             self.type = None
         else:
             print(" >>> Error in CV: Unknown coordinate")

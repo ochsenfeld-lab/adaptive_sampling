@@ -8,7 +8,41 @@ from ..units import *
 
 
 class GaWTMeABF(WTMeABF, GaMD, EnhancedSampling):
+    """Gaussian-accelerated Well-Tempered Metadynamics extended-system Adaptive Biasing Force Method
 
+    The collective variable (CV) is coupled to an fictitious particle with an harmonic force.
+    The dynamics of the fictitious particel is biased using a combination of ABF and Metadynamics.
+    The dynamics of the pysical system is biased with CV-independend an GaMD boost potential
+
+    args:
+        ext_sigma: thermal width of coupling between collective and extended variable
+        ext_mass: mass of extended variable in atomic units
+
+        nfull: Number of force samples per bin where full bias is applied, 
+               if nsamples < nfull the bias force is scaled down by nsamples/nfull
+        friction: friction coefficient for Lagevin dynamics of the extended-system
+        seed_in: random seed for Langevin dynamics of extended-system
+        hill_height: height of Gaussian hills in kJ/mol
+        hill_std: standard deviation of Gaussian hills in units of the CV (can be Bohr, Degree, or None)
+        gamd_sigma0: upper limit of standard deviation of boost potential
+        md: Object of the MD Inteface
+        cv_def: definition of the Collective Variable (CV) (see adaptive_sampling.colvars)
+                [["cv_type", [atom_indices], minimum, maximum, bin_width], [possible second dimension]]
+        hill_drop_freq: frequency of hill creation in steps
+        well_tempered_temp: effective temperature for WTM, if None, hills are not scaled down (normal metadynamics)
+        force_from_grid: forces are accumulated on grid for performance, 
+                         if False, forces are calculated from sum of Gaussians in every step 
+        gamd_init_step: initial steps where no bias is applied to estimate min, max and var of potential energy
+        gamd_equil_steps: equilibration steps, min, max and var of potential energy is still updated
+                          force constant of coupling is calculated from previous steps
+        gamd_bound: "lower": use lower bound for GaMD boost
+                    "upper: use upper bound for GaMD boost
+        equil_temp: equillibrium temperature of MD
+        verbose: print verbose information
+        kinetice: calculate necessary data to obtain kinetics of reaction
+        f_conf: force constant for confinement of system to the range of interest in CV space
+        output_freq: frequency in steps for writing output
+    """
     def __init__(self, *args, do_wtm: bool=True, **kwargs):
         super().__init__(*args, **kwargs)
         self.do_wtm = do_wtm

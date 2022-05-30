@@ -10,7 +10,7 @@ else:
 
 @dataclass
 class SamplingData:
-    """The necessary sampling data to perform the biasing."""
+    """The necessary sampling data to perform the enhanced sampling."""
     mass: np.ndarray    # Masses in atomic units, shape (natoms,)
     coords: np.ndarray  # Cartesian coordinates in Bohr, shape (3 * natoms,)
     forces: np.ndarray	# Forces in Hartree/Bohr, shape (3 * natoms,)

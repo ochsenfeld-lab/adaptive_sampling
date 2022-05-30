@@ -9,7 +9,28 @@ from ..units import *
 
 
 class eABF(ABF, EnhancedSampling):
-    
+    """Extended-system adaptive biasing Force method
+       see: Lesage et. al., J. Phys. Chem. B (2017); https://doi.org/10.1021/acs.jpcb.6b10055
+
+    The collective variable is coupled to an fictitious particle with an harmonic force.
+    The dynamics of the fictitious particel is biased with the ABF algorithm. 
+
+    args:
+        ext_sigma: thermal width of coupling between collective and extended variable
+        ext_mass: mass of extended variable in atomic units
+        md: Object of the MDInterface
+        cv_def: definition of the Collective Variable (CV) (see adaptive_sampling.colvars)
+                [["cv_type", [atom_indices], minimum, maximum, bin_width], [possible second dimension]]
+        nfull: Number of force samples per bin where full bias is applied, 
+               if nsamples < nfull the bias force is scaled down by nsamples/nfull
+        friction: friction coefficient for Lagevin dynamics of the extended-system
+        seed_in: random seed for Langevin dynamics of extended-system
+        equil_temp: equillibrium temperature of MD
+        verbose: print verbose information
+        kinetice: calculate necessary data to obtain kinetics of reaction
+        f_conf: force constant for confinement of system to the range of interest in CV space
+        output_freq: frequency in steps for writing outputs
+    """
     def __init__(
         self,
         ext_sigma: Union[float, list],

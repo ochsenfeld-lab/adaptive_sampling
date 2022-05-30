@@ -6,6 +6,21 @@ from ..units import *
 
 
 class ABF(EnhancedSampling):
+    """Adaptive Biasing Force Method
+       see: Comer et. al., J. Phys. Chem. B (2015); https://doi.org/10.1021/jp506633n
+
+    args:
+        nfull: Number of force samples per bin where full bias is applied, 
+               if nsamples < nfull the bias force is scaled down by nsamples/nfull
+        md: Object of the MD Interface
+        cv_def: definition of the Collective Variable (CV) (see adaptive_sampling.colvars)
+                [["cv_type", [atom_indices], minimum, maximum, bin_width], [possible second dimension]]
+        equil_temp: equillibrium temperature of MD
+        verbose: print verbose information
+        kinetice: calculate necessary data to obtain kinetics of reaction
+        f_conf: force constant for confinement of system to the range of interest in CV space
+        output_freq: frequency in steps for writing outputs
+    """
     def __init__(self, *args, nfull: int = 100, **kwargs):
         super().__init__(*args, **kwargs)
         self.nfull = nfull

@@ -12,7 +12,7 @@ class MD:
     def __init__(
         self,
         mass_in=1,
-        coords_in=[1, 1],
+        coords_in=[0.0, 0.0],
         potential="1",
         dt_in=0.1e0,
         target_temp_in=298.15e0,
@@ -206,12 +206,12 @@ class MD:
     def get_sampling_data(self):
         """interface to adaptive_sampling"""
         return SamplingData(
-            self.masses: np.ndarray,    
-            self.coords: np.ndarray,
-            self.forces: np.ndarray,
-            self.epot: float,
-            self.temp: float,
-            self.natoms: int,
-            self.step: int,
-            self.dt_fs: float,
+            self.masses,    
+            self.coords,
+            self.forces,
+            self.epot,
+            self.temp,
+            self.natoms,
+            self.step,
+            self.dt_fs,
         )

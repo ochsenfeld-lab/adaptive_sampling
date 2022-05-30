@@ -16,6 +16,6 @@ __all__ = [
     "eabf",
     "metaeabf",
     "gamd",
-    "gawtmeabf"
+    "gawtmeabf",
     "utils",
 ]

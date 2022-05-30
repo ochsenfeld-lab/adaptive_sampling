@@ -49,7 +49,7 @@ class MD:
         except ImportError as e:
             raise NotImplementedError("`get_sampling_data()` is missing `adaptive_sampling` package") from e
 ```
-The bias force on atoms in the N-th step can be obtained by calling step_bias on any sampling algorithm:
+The bias force on atoms in the N-th step can be obtained by calling `step_bias()` on any sampling algorithm:
 ```
 from adaptive_sampling.sampling_tools import *
 the_md = MD(...)
@@ -78,7 +78,7 @@ pmf, rho = mbar.pmf_from_weights(grid, cv[indices], W, equil_temp=300.0)
 ```
 
 ## Documentation:
-To create code documentation with pdoc3 type:
+Code documentation can be created with pdoc3:
 > $ pip install pdoc3
 
 > $ pdoc --html pdoc -o doc/

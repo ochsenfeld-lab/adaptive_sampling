@@ -5,6 +5,19 @@ from ..units import *
 
 
 class WTM(EnhancedSampling):
+    """Well-Tempered Metadynamics
+       see: Barducci et. al., Phys. rev. lett. (2008); https://doi.org/10.1103/PhysRevLett.100.020603
+
+    An repulsive biasing potential is built by a superposition of Gaussian hills along the reaction coordinate.
+
+    args:
+        hill_height: height of Gaussian hills in kJ/mol
+        hill_std: standard deviation of Gaussian hills in units of the CV (can be Bohr, Degree, or None)
+        hill_drop_freq: frequency of hill creation in steps
+        well_tempered_temp: effective temperature for WTM, if None, hills are not scaled down (normal metadynamics)
+        force_from_grid: forces are accumulated on grid for performance, 
+                         if False, forces are calculated from sum of Gaussians in every step 
+    """
     def __init__(
         self,
         hill_height: float,

@@ -260,8 +260,13 @@ class EnhancedSampling(ABC):
         else:
             return 0.0
 
-    def write_output(self, data, filename="free_energy.dat"):
+    def write_output(self, data: dict, filename="free_energy.dat"):
+        """write results to output file
 
+        args: 
+            data: results to write
+            filename: name of output file
+        """
         grid = np.copy(self.grid)
         for i in range(self.ncoords):
             # @AH: the conversions below are the opposite of the comments!
