@@ -10,14 +10,15 @@ else:
 
 @dataclass
 class SamplingData:
-    mass: np.ndarray
-    coords: np.ndarray
-    forces: np.ndarray
-    epot: float
-    temp: float
-    natoms: int
-    step: int
-    dt: float
+    """The necessary sampling data to perform the biasing."""
+    mass: np.ndarray    # Masses in atomic units, shape (natoms,)
+    coords: np.ndarray  # Cartesian coordinates in Bohr, shape (3 * natoms,)
+    forces: np.ndarray	# Forces in Hartree/Bohr, shape (3 * natoms,)
+    epot: float 		# Potential energy in Hartree
+    temp: float         # Temperature in Kelvin
+    natoms: int         # Number of atoms
+    step: int           # MD step number
+    dt: float           # MD step size in fs
 
 
 class MDInterface(Protocol):
@@ -34,7 +35,7 @@ class MDInterface(Protocol):
 
             def get_sampling_data(self):
                 try:
-                    from adaptive_biasing.interface.sampling_data import SamplingData
+                    from adaptive_sampling.interface.sampling_data import SamplingData
 
                     mass   = ...
                     coords = ...
@@ -47,7 +48,7 @@ class MDInterface(Protocol):
 
                     return SamplingData(mass, coords, forces, epot, temp, natoms, step, dt)
                 except ImportError as e:
-                    raise NotImplementedError("`get_sampling_data()` is missing `adaptive_biasing` package") from e
+                    raise NotImplementedError("`get_sampling_data()` is missing `adaptive_sampling` package") from e
         ```
         """
         ...
