@@ -1,6 +1,7 @@
 import numpy as np
 import pytest
 from adaptive_sampling.colvars import CV
+from adaptive_sampling.interface.sampling_data import SamplingData
 
 
 class MD:
@@ -9,6 +10,9 @@ class MD:
         self.coords = np.array(coords)
         self.natoms = len(mass)
         self.forces = np.zeros(3 * self.natoms)
+
+    def get_sampling_data(self) -> SamplingData:
+        return SamplingData(self.masses, self.coords, np.zeros_like(self.coords), 0.0, 0.0, self.natoms, 0, 0.0)
 
 
 def four_particles():
