@@ -81,7 +81,7 @@ pmf, rho = mbar.pmf_from_weights(grid, cv[indices], W, equil_temp=300.0)
 Code documentation can be created with pdoc3:
 > $ pip install pdoc3
 
-> $ pdoc --html pdoc -o doc/
+> $ pdoc --html adaptive_sampling -o doc/
 
 ## References:
 This work:
