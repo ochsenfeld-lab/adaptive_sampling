@@ -51,9 +51,10 @@ class EnhancedSampling(ABC):
         self.f_conf = self.unit_conversion_force(self.f_conf)
 
         # store trajectories of CVs and temperature and epot between outputs
+        md_state = self.the_md.get_sampling_data()
         self.traj = np.array([xi])
-        self.temp = [self.the_md.get_sampling_data().temp]
-        self.epot = [self.the_md.get_sampling_data().epot]
+        self.temp = [md_state.temp]
+        self.epot = [md_state.epot]
 
         # get number of bins (1D or 2D)
         self.nbins_per_dim = np.array([1, 1])
@@ -88,8 +89,8 @@ class EnhancedSampling(ABC):
         self.kinetics = kinetics
         if self.kinetics and self.ncoords == 0:
             self.mass_traj = [self._get_mass_of_cv(delta_xi)]
-            self.abs_forces = [np.linalg.norm(self.the_md.forces)]
-            self.CV_crit_traj = [np.abs(np.dot(self.the_md.forces, delta_xi[0]))]
+            self.abs_forces = [np.linalg.norm(md_state.forces)]
+            self.CV_crit_traj = [np.abs(np.dot(md_state.forces, delta_xi[0]))]
             self.abs_grad_xi = [np.linalg.norm(delta_xi)]
         elif self.kinetics:
             self.kinetics = False
@@ -151,7 +152,7 @@ class EnhancedSampling(ABC):
         returns:
             bias_force: confinement force
         """
-        conf_force = np.zeros_like(self.the_md.forces.ravel())
+        conf_force = np.zeros_like(self.the_md.get_sampling_data().forces.ravel())
 
         for i in range(self.ncoords):
             if xi[i] > (self.maxx[i] - margin[i]):
@@ -228,7 +229,7 @@ class EnhancedSampling(ABC):
         """
         self.the_cv.requires_grad = True
         xi = np.zeros(self.ncoords)
-        grad_xi = np.zeros((self.ncoords, len(self.the_md.forces.ravel())))
+        grad_xi = np.zeros((self.ncoords, len(self.the_md.get_sampling_data().forces.ravel())))
 
         for i in range(self.ncoords):
             xi[i], grad_xi[i] = self.the_cv.get_cv(self.cv[i], self.atoms[i], **kwargs)
@@ -244,7 +245,7 @@ class EnhancedSampling(ABC):
         self.CV_crit_traj.append(np.dot(delta_xi[0], forces))
         self.abs_grad_xi.append(np.linalg.norm(delta_xi))
 
-    def _get_mass_of_cv(self, delta_xi: np.ndarray) -> np.ndarray:
+    def _get_mass_of_cv(self, delta_xi: np.ndarray) -> float:
         """get mass of collective variable for TS theory and kinetics
         only defined for 1D reaction coordinates!
 
@@ -255,7 +256,7 @@ class EnhancedSampling(ABC):
             m_xi_inv: coordinate dependent mass of collective variabl
         """
         if self.ncoords == 1:
-            return np.dot(delta_xi[0], (1.0 / self.the_md.mass) * delta_xi[0])
+            return np.dot(delta_xi[0], (1.0 / self.the_md.get_sampling_data().mass) * delta_xi[0])
         else:
             return 0.0
 
@@ -270,29 +271,29 @@ class EnhancedSampling(ABC):
                 grid /= 0.52917721092e0  # Bohr to Angstrom
 
         # head of data columns
-        out = open(filename, "w")
-        for i in range(self.ncoords):
-            out.write("%14s\t" % "CV{dim}".format(dim=i))
-        for kw in data.keys():
-            out.write("%14s\t" % kw)
-        out.write("\n")
+        with open(filename, "w") as fout:
+            for i in range(self.ncoords):
+                fout.write("%14s\t" % "CV{dim}".format(dim=i))
+            for kw in data.keys():
+                fout.write("%14s\t" % kw)
+            fout.write("\n")
 
-        # write data to columns
-        if self.ncoords == 1:
-            for i in range(self.nbins):
-                out.write("%14.6f\t" % grid[0][i])
-                for dat in data.values():
-                    out.write("%14.6f\t" % dat[0][i])
-                out.write("\n")
-
-        if self.ncoords == 2:
-            for i in range(self.nbins_per_dim[1]):
-                for j in range(self.nbins_per_dim[0]):
-                    out.write("%14.6f\t%14.6f\t" % (grid[1][i], grid[0][j]))
+            # write data to columns
+            if self.ncoords == 1:
+                for i in range(self.nbins):
+                    fout.write("%14.6f\t" % grid[0][i])
                     for dat in data.values():
-                        out.write("%14.6f\t" % dat[i, j])
-                    out.write("\n")
-        out.close()
+                        fout.write("%14.6f\t" % dat[0][i])
+                    fout.write("\n")
+
+            if self.ncoords == 2:
+                for i in range(self.nbins_per_dim[1]):
+                    for j in range(self.nbins_per_dim[0]):
+                        fout.write("%14.6f\t%14.6f\t" % (grid[1][i], grid[0][j]))
+                        for dat in data.values():
+                            fout.write("%14.6f\t" % dat[i, j])
+                        fout.write("\n")
+
 
     def _write_traj(self, data: dict = {}):
         """write trajectory of extended or normal ABF at output times
@@ -314,37 +315,35 @@ class EnhancedSampling(ABC):
         if not os.path.isfile("CV_traj.dat") and step == 0:
             # start new file in first step
 
-            traj_out = open("CV_traj.dat", "w")
-            traj_out.write("%14s\t" % "time [fs]")
-            for i in range(len(self.traj[0])):
-                traj_out.write("%14s\t" % f"Xi{i}")
-            for kw in data.keys():
-                traj_out.write("%14s\t" % kw)
-            if self.kinetics:
-                traj_out.write("%14s\t" % "m_xi_inv [a.u.]")
-                traj_out.write("%14s\t" % "|dU| [a.u.]")
-                traj_out.write("%14s\t" % "|dxi| [a.u.]")
-                traj_out.write("%14s\t" % "dU*dxi [a.u.]")
-            traj_out.close()
+            with open("CV_traj.dat", "w") as traj_out:
+                traj_out.write("%14s\t" % "time [fs]")
+                for i in range(len(self.traj[0])):
+                    traj_out.write("%14s\t" % f"Xi{i}")
+                for kw in data.keys():
+                    traj_out.write("%14s\t" % kw)
+                if self.kinetics:
+                    traj_out.write("%14s\t" % "m_xi_inv [a.u.]")
+                    traj_out.write("%14s\t" % "|dU| [a.u.]")
+                    traj_out.write("%14s\t" % "|dxi| [a.u.]")
+                    traj_out.write("%14s\t" % "dU*dxi [a.u.]")
 
         elif step > 0:
             # append new steps of trajectory since last output
-            traj_out = open("CV_traj.dat", "a")
-            for n in range(self.out_freq):
-                traj_out.write(
-                    "\n%14.6f\t"
-                    % ((step - self.out_freq + n) * self.the_md.dt * atomic_to_fs)
-                )  # time in fs
-                for i in range(len(self.traj[0])):
-                    traj_out.write("%14.6f\t" % (self.traj[-self.out_freq + n][i]))
-                for val in data.values():
-                    traj_out.write("%14.6f\t" % (val[-self.out_freq + n]))
-                if self.kinetics:
-                    traj_out.write("%14.6f\t" % (self.mass_traj[-self.out_freq + n]))
-                    traj_out.write("%14.6f\t" % (self.abs_forces[-self.out_freq + n]))
-                    traj_out.write("%14.6f\t" % (self.abs_grad_xi[-self.out_freq + n]))
-                    traj_out.write("%14.6f\t" % (self.CV_crit_traj[-self.out_freq + n]))
-            traj_out.close()
+            with open("CV_traj.dat", "a") as traj_out:
+                for n in range(self.out_freq):
+                    traj_out.write(
+                        "\n%14.6f\t"
+                        % ((step - self.out_freq + n) * self.the_md.get_sampling_data().dt * atomic_to_fs)
+                    )  # time in fs
+                    for i in range(len(self.traj[0])):
+                        traj_out.write("%14.6f\t" % (self.traj[-self.out_freq + n][i]))
+                    for val in data.values():
+                        traj_out.write("%14.6f\t" % (val[-self.out_freq + n]))
+                    if self.kinetics:
+                        traj_out.write("%14.6f\t" % (self.mass_traj[-self.out_freq + n]))
+                        traj_out.write("%14.6f\t" % (self.abs_forces[-self.out_freq + n]))
+                        traj_out.write("%14.6f\t" % (self.abs_grad_xi[-self.out_freq + n]))
+                        traj_out.write("%14.6f\t" % (self.CV_crit_traj[-self.out_freq + n]))
 
     def _write_restart(self, filename, **kwargs):
         np.savez(filename, **kwargs)

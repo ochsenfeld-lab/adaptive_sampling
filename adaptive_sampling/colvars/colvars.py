@@ -3,6 +3,7 @@ import torch
 import numpy as np
 
 from typing import Union, Tuple
+from ..interface.sampling_data import MDInterface
 from ..units import *
 
 
@@ -18,14 +19,14 @@ class CV:
                                 and saved to self.gradient
     """
 
-    def __init__(self, the_mol: object, requires_grad: bool = False):
+    def __init__(self, the_mol: MDInterface, requires_grad: bool = False):
 
         self.the_mol = the_mol
-        if not hasattr(the_mol, "masses") or not hasattr(the_mol, "coords"):
-            raise ValueError(" >> fatal error: CV missing masses or coords of molecule")
 
-        self.mass = torch.from_numpy(self.the_mol.masses)
-        self.coords = torch.from_numpy(self.the_mol.coords.ravel())
+        md_state = self.the_mol.get_sampling_data()
+
+        self.mass = torch.from_numpy(md_state.mass)
+        self.coords = torch.from_numpy(md_state.coords.ravel())
         self.natoms = len(self.mass)
         self.requires_grad = requires_grad
         self.gradient = None
@@ -35,7 +36,7 @@ class CV:
     def update_coords(self):
         """The coords tensor and ndarray share the same memory.
         Modifications to the tensor will be reflected in the ndarray and vice versa!"""
-        self.coords = torch.from_numpy(self.the_mol.coords.ravel())
+        self.coords = torch.from_numpy(self.the_mol.get_sampling_data().coords.ravel())
 
     @staticmethod
     def partial_derivative(
@@ -66,7 +67,7 @@ class CV:
         if hasattr(atoms, "__len__"):
             # compute center of mass for group of atoms
             com = torch.zeros(3, dtype=torch.float)
-            for _, a in enumerate(atoms):
+            for a in atoms:
                 a = int(a)
                 com += self.coords[3 * a] * self.mass[a]
                 com += self.coords[3 * a + 1] * self.mass[a]
@@ -106,7 +107,7 @@ class CV:
         """
         coords = torch.zeros((3, 3 * self.natoms))
         if hasattr(atoms, "__len__"):
-            for _, a in enumerate(atoms):
+            for a in atoms:
                 a = int(a)
                 coords[0, 3 * a] = self.mass[a] / mass_group
                 coords[1, 3 * a + 1] = self.mass[a] / mass_group
@@ -282,7 +283,7 @@ class CV:
 
         return float(self.cv)
 
-    def linear_combination(self, cv_def: list) -> Tuple[float, np.ndarray]:
+    def linear_combination(self, cv_def: list) -> float:
         """linear combination of distances, angles or dihedrals between atoms or groups of atoms
 
         Args:
@@ -332,11 +333,10 @@ class CV:
         Args:
             our (str): name of output file
         """
-        traj_out = open(out, "a")
-        for lc in self.lc_contribs:
-            traj_out.write("%14.6f\t" % lc)
-        traj_out.write("\n")
-        traj_out.close()
+        with open(out, "a") as traj_out:
+            for lc in self.lc_contribs:
+                traj_out.write("%14.6f\t" % lc)
+            traj_out.write("\n")
 
     def coordination_number(self, cv_def: list, r_0: float = 3.0) -> float:
         """coordination number between two mass centers in range(0, inf) mapped to range(1,0)
@@ -381,7 +381,7 @@ class CV:
 
         return float(self.cv)
 
-    def custom_lin_comb(self, cvs: list, **kwargs):
+    def custom_lin_comb(self, cvs: list, **kwargs) -> float:
         """custom linear combination of arbitrary functions"""
         self.update_coords()
         cv = 0.0
@@ -428,6 +428,7 @@ class CV:
             self.type = None
         elif cv.lower() == "coordination_number":
             xi = self.coordination_number(atoms)
+            self.type = None
         elif cv.lower() == "lin_comb_custom":
             xi = self.custom_lin_comb(atoms)
             self.type = None

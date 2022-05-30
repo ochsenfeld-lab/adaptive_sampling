@@ -3,7 +3,7 @@ from typing import Union, Tuple
 
 
 def diff(
-    a: Union[np.ndarray, float], b: Union[np.ndarray, float], cv_type: list
+    a: Union[np.ndarray, float], b: Union[np.ndarray, float], cv_type: str
 ) -> Union[np.ndarray, float]:
     """get difference of elements of numbers or arrays
     in range(-inf, inf) if is_angle is False or in range(-pi, pi) if is_angle is True
@@ -18,7 +18,7 @@ def diff(
     diff = a - b
 
     # wrap to range(-pi,pi) for angle
-    if hasattr(diff, "__len__") and cv_type == "angle":
+    if isinstance(diff, np.ndarray) and cv_type == "angle":
 
         diff[diff > np.pi] -= 2 * np.pi
         diff[diff < -np.pi] += 2 * np.pi

@@ -25,30 +25,29 @@ This package implements various sampling algorithms for the calculation of free 
 * scipy >= 1.8
 
 ## Basic usage:
-To use adaptive sampling with your MD code of choice add a function called get_sampling_data to the corresponding python interface that returns an object containing all required data:
+To use adaptive sampling with your MD code of choice add a function called `get_sampling_data()` to the corresponding python interface that returns an object containing all required data. Hard-coded dependencies can be avoided by wrapping the `adaptive_sampling` import in a `try/except` clause:
 
 ```
-from adaptive_sampling.interface.sampling_data import SamplingData
-
 class MD:
-	"""Python interface of MD code"""
-	
-	def __init__(self):
-		...
+    # Your MD code
+    ...
 
-	def get_sampling_data(self):
-        """provides interface to adaptive_sampling"""
-        return SamplingData(
-            self.masses: np.ndarray,    # atom masses in atomic units (len(natoms))
-            self.coords: np.ndarray,	# cartesian coordinates in Bohr (len(3*natoms))
-            self.forces: np.ndarray,	# forces in Hartree/Bohr (len(3*natoms))
-            self.epot: float,			# potential energy in Hartree	
-            self.temp: float,           # temperature in Kelvin
-            self.natoms: int,           # number of atoms 
-            self.step: int,             # MD step number
-            self.dt: float,             # MD step size in fs 
-        )
+    def get_sampling_data(self):
+        try:
+            from adaptive_sampling.interface.sampling_data import SamplingData
 
+            mass   = ...
+            coords = ...
+            forces = ...
+            epot   = ...
+            temp   = ...
+            natoms = ...
+            step   = ...
+            dt     = ...
+
+            return SamplingData(mass, coords, forces, epot, temp, natoms, step, dt)
+        except ImportError as e:
+            raise NotImplementedError("`get_sampling_data()` is missing `adaptive_sampling` package") from e
 ```
 The bias force on atoms in the N-th step can be obtained by calling step_bias on any sampling algorithm:
 ```
