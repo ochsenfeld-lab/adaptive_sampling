@@ -6,9 +6,10 @@ from ..units import *
 
 class GaMD(EnhancedSampling):
     """Gaussian-accelerated Molecular Dynamics
+       
        see: Miao et. al., J. Chem. Theory Comput. (2015); https://doi.org/10.1021/acs.jctc.5b00436
 
-       Apply an harmonic boost bias potential to potential energy. Independent of Collective Variable.
+       Apply an harmonic boost potential to potential energy. Independent of Collective Variable.
 
     Args:
         gamd_sigma0: upper limit of standard deviation of boost potential

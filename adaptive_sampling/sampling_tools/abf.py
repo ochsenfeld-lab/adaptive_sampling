@@ -7,9 +7,10 @@ from ..units import *
 
 class ABF(EnhancedSampling):
     """Adaptive Biasing Force Method
+       
        see: Comer et. al., J. Phys. Chem. B (2015); https://doi.org/10.1021/jp506633n
 
-    args:
+    Args:
         nfull: Number of force samples per bin where full bias is applied, 
                if nsamples < nfull the bias force is scaled down by nsamples/nfull
         md: Object of the MD Interface
@@ -137,7 +138,7 @@ class ABF(EnhancedSampling):
     def write_restart(self, filename: str = "restart_abf"):
         """write restart file
 
-        args:
+        Args:
             filename: name of restart file
         """
         self._write_restart(
@@ -152,7 +153,7 @@ class ABF(EnhancedSampling):
     def restart(self, filename: str = "restart_abf"):
         """restart from restart file
 
-        args:
+        Args:
             filename: name of restart file
         """
         try:

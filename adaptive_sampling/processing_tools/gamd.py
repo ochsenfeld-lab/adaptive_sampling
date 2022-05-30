@@ -14,14 +14,14 @@ def gamd_correction_n(
 ) -> Tuple[np.ndarray, np.ndarray]:
     """Correction to PMF from GaMD using kth cumulant expansion 
 
-    args:
+    Args:
         grid: grid for reaction coordinate
         cv: trajectory of reaction coordinate
         delta_V: trajectory of GaMD bias potential
         korder: order of cumulant expansion, supported up to 4
         equil_temp: equilibrium temperature
 
-    returns:
+    Returns:
         corr: correction to PMF from GaMD
         hist: histogram of cv on grid
     """
@@ -57,14 +57,14 @@ def gamd_pmf(
     """compute pmf from GaMD simulation 
     by correcting probability density with kth order cumulant expansion 
 
-    args:
+    Args:
         grid: grid for reaction coordinate
         cv: trajectory of reaction coordinate
         delta_V: trajectory of GaMD bias potential
         korder: order of cumulant expansion, supported up to 4
         equil_temp: equilibrium temperature
 
-    returns:
+    Returns:
         pmf: potential of mean force
         rho: probability density
     """

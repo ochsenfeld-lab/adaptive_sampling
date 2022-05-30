@@ -10,7 +10,7 @@ class WTMeABF(eABF, WTM, EnhancedSampling):
     """Well-Tempered Metadynamics extended-system Adaptive Biasing Force method
        see: Fu et. al., J. Phys. Chem. Lett. (2018); https://doi.org/10.1021/acs.jpclett.8b01994
 
-    The collective variable is coupled to an fictitious particle with an harmonic force.
+    The collective variable is coupled to a fictitious particle with an harmonic force.
     The dynamics of the fictitious particel is biased using a combination of ABF and Metadynamics.
 
     Args:

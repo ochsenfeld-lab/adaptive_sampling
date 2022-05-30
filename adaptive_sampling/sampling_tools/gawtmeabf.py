@@ -10,8 +10,10 @@ from ..units import *
 class GaWTMeABF(WTMeABF, GaMD, EnhancedSampling):
     """Gaussian-accelerated Well-Tempered Metadynamics extended-system Adaptive Biasing Force Method
 
-    The collective variable (CV) is coupled to an fictitious particle with an harmonic force.
-    The dynamics of the fictitious particel is biased using a combination of ABF and Metadynamics.
+    see: Chen et. al., J. Chem. Theory Comput. (2021); https://doi.org/10.1021/acs.jctc.1c00103
+
+    The collective variable (CV) is coupled to a fictitious particle with an harmonic force.
+    The dynamics of the fictitious particel is biased using a combination of ABF and metadynamics.
     The dynamics of the pysical system is biased with CV-independend an GaMD boost potential
 
     Args:
@@ -28,6 +30,7 @@ class GaWTMeABF(WTMeABF, GaMD, EnhancedSampling):
         md: Object of the MD Inteface
         cv_def: definition of the Collective Variable (CV) (see adaptive_sampling.colvars)
                 [["cv_type", [atom_indices], minimum, maximum, bin_width], [possible second dimension]]
+        do_wtm: if False, no metadynamics potential is applied (Gaussian-accelerated eABF)
         hill_drop_freq: frequency of hill creation in steps
         well_tempered_temp: effective temperature for WTM, if None, hills are not scaled down (normal metadynamics)
         force_from_grid: forces are accumulated on grid for performance, 

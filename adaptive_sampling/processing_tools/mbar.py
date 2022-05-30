@@ -15,7 +15,9 @@ def run_mbar(
     equil_temp: float = 300.0,
     dV_list: List[np.ndarray] = None,
 ) -> np.ndarray:
-    """self-consistent MBAR algorithm
+    """Self-consistent Multistate Bannett Acceptance Ratio (MBAR)
+       
+       see: Shirts et. al., J. Chem. Phys. (2008); https://doi.org/10.1063/1.2978177
 
     Args:
         traj_list: List of biased trajectories
@@ -28,7 +30,7 @@ def run_mbar(
         dV_list: optional, list of GaMD boost potentials (has to match frames of traj_list)
 
     Returns:
-        W: array of statistical weigths of each frame
+        W: array containing statistical weigths of each frame
     """
     RT = R_in_SI * equil_temp / 1000.0
     beta = 1.0 / RT
@@ -121,7 +123,7 @@ def run_mbar(
 
     # final values
     weights = np.multiply(frames_per_traj * np.exp(beta_Ai), exp_U.T)
-    weights = 1.0 / np.sum(weights, axis=1)
+    weights = 1.0 / np.sum(weights, axis=1) 
 
     return weights
 
@@ -133,19 +135,20 @@ def get_windows(
     sigma: float,
     equil_temp: float = 300.0,
 ) -> Tuple[List[np.ndarray], np.ndarray, np.ndarray]:
-    """generate US windows from eABF trajectory
+    """generate mixture distribution of Gaussian shaped windows from eABF trajectory
+       see: Hulm et. al., J. Chem. Phys. (2022) (in press)
 
     Args:
-        centers (np.ndarray): centers of Umbrella windows
-        xi (np.ndarray): Trajectory of the reaction coordinate
-        la (np.ndarray): Trajectory of the extended variable
-        sigma (float): Thermal width of coupling of xi and la
-        equil_temp (float): equillibrium temperature
+        centers: centers of windows
+        xi: Trajectory of the reaction coordinate
+        la: Trajectory of the extended variable
+        sigma: Thermal width of coupling of xi and la
+        equil_temp: equillibrium temperature
 
     Returns:
-        traj_list (list): list of window trajectories,
-        index_list (np.ndarray): list of frame indices in original trajectory,
-        meta_f (np.ndarray): window information for MBAR
+        traj_list: list of window trajectories,
+        index_list: list of frame indices in original trajectory,
+        meta_f: window information for MBAR (compatible with other popular MBAR/WHAM implementations)
     """
     RT = R_in_SI * equil_temp / 1000.0
     k = RT / (sigma * sigma)
@@ -170,13 +173,13 @@ def get_windows(
 def pmf_from_weights(
     grid: np.array, cv: np.array, weights: np.array, equil_temp: float = 300.0
 ) -> Tuple[np.array, np.array]:
-    """make free energy surface from MBAR result
+    """make free energy surface from statistical weigths obtained by MBAR
 
     Args:
         grid: grid along cv
         cv: trajectory of cv
         weights: boltzmann weights of frames in trajectory
-        T: Temperature of simulation
+        equil_temp: Temperature of simulation
 
     Returns:
         Potential of mean force (PMF), probability density
@@ -200,13 +203,13 @@ def pmf_from_weights(
 def deltaf_from_weights(
     TS: float, cv: np.array, weights: np.array, equil_temp: float = 300.0
 ) -> Tuple[np.array, np.array]:
-    """Compute free energy difference from weights
+    """Compute free energy difference from statistical weigths obtained by MBAR
 
     Args:
         TS: position of transition state on CV
         cv: trajectory of CV
         weights: MBAR weights of data points
-        T: temperature
+        equil_temp: temperature
 
     Returns:
         deltaF: free energy difference

@@ -52,7 +52,9 @@ def czar(
     sigma: float,
     equil_temp: float = 300.0,
 ) -> np.ndarray:
-    """Corrected z-averaged restrained (Lesage et al. 2016)
+    """Corrected z-averaged Restrained (CZAR)
+       
+       see: Lesage et. al., J. Phys. Chem. B (2017); https://doi.org/10.1021/acs.jpcb.6b10055
 
     Args:
         grid: grid for reaction coordinate

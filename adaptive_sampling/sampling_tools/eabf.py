@@ -12,7 +12,7 @@ class eABF(ABF, EnhancedSampling):
     """Extended-system adaptive biasing Force method
        see: Lesage et. al., J. Phys. Chem. B (2017); https://doi.org/10.1021/acs.jpcb.6b10055
 
-    The collective variable is coupled to an fictitious particle with an harmonic force.
+    The collective variable is coupled to a fictitious particle with an harmonic force.
     The dynamics of the fictitious particel is biased with the ABF algorithm. 
 
     Args:
