@@ -54,25 +54,57 @@ class MD:
 The bias force on atoms in the N-th step can be obtained by calling `step_bias()` on any sampling algorithm:
 ```python
 from adaptive_sampling.sampling_tools import *
+
+# initialize MD code
 the_md = MD(...)
-collective_var = ["distance", list_of_atom_indices, minimum, maximum, bin_width]
-the_bias = eABF(ext_sigma, ext_mass, the_md, collective_variable, output_freq=10, f_conf=100, equil_temp=300.0)
-the_md.forces += eABF.step_bias(write_output=True, write_traj=True)
+
+# collective variable
+atom_indices = [0, 1] 
+minimum   = 1.0  # Angstrom
+maximum   = 3.5  # Angstrom
+bin_width = 0.1  # Angstrom 
+collective_var = ["distance", atom_indices, minimum, maximum, bin_width]
+
+# extended-system eABF 
+ext_sigma = 0.1  # thermal width of coupling between CV and extended variable in Angstrom
+ext_mass = 20.0  # mass of extended variable
+the_bias = eABF(
+    ext_sigma, 
+    ext_mass, 
+    the_md, 
+    collective_var, 
+    output_freq=10, 
+    f_conf=100, 
+    equil_temp=300.0
+)
+
+for md_step in range(steps):
+    # calc forces and propagate
+    ... 
+    bias_force = eABF.step_bias(write_output=True, write_traj=True)
+    the_md.forces += bias_force
+    ...
+    # finish md_step
 ```
 This automatically writes an on-the-fly free energy estimate in the output file and all necessary data for post-processing in a trajectory file.
-For extended-system dynamics unbiased statistical weigths of individual frames can be obtained using the MBAR estimator:
+For extended-system dynamics unbiased statistical weights of individual frames can be obtained using the MBAR estimator:
 ```python
 import numpy as np
 from adaptive_sampling.processing_tools import mbar
 
 traj_dat = np.loadtxt('CV_traj.dat', skiprows=1)
-ext_sigma = 2.0
-bin_width = 2.0
-grid = np.arange(70.0, 170.0, bin_width)
+ext_sigma = 0.1    # thermal width of coupling between CV and extended variable 
+
+# grid for free energy profile can be different than during sampling
+minimum   = 1.0     
+maximum   = 3.5    
+bin_width = 0.1    
+grid = np.arange(minimum, maximum, bin_width)
 
 cv = traj_dat[:,1]  # trajectory of collective variable
 la = traj_dat[:,2]  # trajectory of extended system
 
+# run MBAR and compute free energy profile and propability density from statistical weights
 traj_list, indices, meta_f = mbar.get_windows(grid, cv, la, sigma, equil_temp=300.0)
 
 weigths = mbar.run_mbar(traj_list, meta_f, conv=1.0e-4, conv_errvec=None, outfreq=100, equil_temp=300.0)

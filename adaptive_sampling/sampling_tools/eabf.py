@@ -10,6 +10,7 @@ from ..units import *
 
 class eABF(ABF, EnhancedSampling):
     """Extended-system adaptive biasing Force method
+       
        see: Lesage et. al., J. Phys. Chem. B (2017); https://doi.org/10.1021/acs.jpcb.6b10055
 
     The collective variable is coupled to a fictitious particle with an harmonic force.
@@ -139,7 +140,7 @@ class eABF(ABF, EnhancedSampling):
 
         # correction for kinetics
         if self.kinetics:
-            self.kinetics(delta_xi)
+            self._kinetics(delta_xi)
 
         if md_state.step % self.out_freq == 0:
             # write output
@@ -313,6 +314,9 @@ class eABF(ABF, EnhancedSampling):
         self.m2_force = data["m2"]
         self.ext_hist = data["ext_hist"]
         self.correction_czar = data["czar_corr"]
+        
+        if self.verbose:
+            print(f" >>> Info: Adaptive sampling restartet from {filename}!")
 
     def write_traj(self):
         """save trajectory for post-processing"""

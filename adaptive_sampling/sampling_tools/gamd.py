@@ -119,7 +119,7 @@ class GaMD(EnhancedSampling):
 
         # correction for kinetics
         if self.kinetics:
-            self.kinetics(delta_xi)
+            self._kinetics(delta_xi)
 
         if md_state.step % self.out_freq == 0:
             # write output
@@ -245,6 +245,9 @@ class GaMD(EnhancedSampling):
         self.pot_min = data["pot_min"]
         self.pot_max = data["pot_max"]
         self.k0 = data["k0"]
+
+        if self.verbose:
+            print(f" >>> Info: Adaptive sampling restartet from {filename}!")
 
     def write_traj(self):
         """save trajectory for post-processing"""

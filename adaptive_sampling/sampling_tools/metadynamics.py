@@ -6,6 +6,7 @@ from ..units import *
 
 class WTM(EnhancedSampling):
     """Well-Tempered Metadynamics
+       
        see: Barducci et. al., Phys. rev. lett. (2008); https://doi.org/10.1103/PhysRevLett.100.020603
 
     An repulsive biasing potential is built by a superposition of Gaussian hills along the reaction coordinate.
@@ -80,7 +81,7 @@ class WTM(EnhancedSampling):
 
         # correction for kinetics
         if self.kinetics:
-            self.kinetics(delta_xi)
+            self._kinetics(delta_xi)
 
         if self.the_md.step % self.out_freq == 0:
             # write output
@@ -264,6 +265,9 @@ class WTM(EnhancedSampling):
         self.bias = data["force"]
         self.metapot = data["metapot"]
         self.center = data["centers"].tolist()
+        
+        if self.verbose:
+            print(f" >>> Info: Adaptive sampling restartet from {filename}!")
 
     def write_traj(self):
         """save trajectory for post-processing"""

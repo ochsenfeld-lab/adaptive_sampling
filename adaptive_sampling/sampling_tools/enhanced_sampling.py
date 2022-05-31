@@ -64,6 +64,9 @@ class EnhancedSampling(ABC):
         self.traj = np.array([xi])
         self.temp = [md_state.temp]
         self.epot = [md_state.epot]
+        
+        self.mass = md_state.mass              # shape(natoms,)
+        self.masses = np.repeat(self.mass, 3)  # shape(3*natoms,)
 
         # get number of bins (1D or 2D)
         self.nbins_per_dim = np.array([1, 1])
@@ -96,7 +99,7 @@ class EnhancedSampling(ABC):
 
         # trajectory of mass of CV for postprocessing of kinetics
         self.kinetics = kinetics
-        if self.kinetics and self.ncoords == 0:
+        if self.kinetics and self.ncoords == 1:
             self.mass_traj = [self._get_mass_of_cv(delta_xi)]
             self.abs_forces = [np.linalg.norm(md_state.forces)]
             self.CV_crit_traj = [np.abs(np.dot(md_state.forces, delta_xi[0]))]
@@ -265,7 +268,7 @@ class EnhancedSampling(ABC):
             m_xi_inv: coordinate dependent mass of collective variabl
         """
         if self.ncoords == 1:
-            return np.dot(delta_xi[0], (1.0 / self.the_md.get_sampling_data().mass) * delta_xi[0])
+            return np.dot(delta_xi[0], (1.0 / self.masses) * delta_xi[0])
         else:
             return 0.0
 

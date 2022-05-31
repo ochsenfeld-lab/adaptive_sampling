@@ -8,6 +8,7 @@ from ..units import *
 
 class WTMeABF(eABF, WTM, EnhancedSampling):
     """Well-Tempered Metadynamics extended-system Adaptive Biasing Force method
+       
        see: Fu et. al., J. Phys. Chem. Lett. (2018); https://doi.org/10.1021/acs.jpclett.8b01994
 
     The collective variable is coupled to a fictitious particle with an harmonic force.
@@ -16,17 +17,25 @@ class WTMeABF(eABF, WTM, EnhancedSampling):
     Args:
         ext_sigma: thermal width of coupling between collective and extended variable
         ext_mass: mass of extended variable in atomic units
-
         nfull: Number of force samples per bin where full bias is applied, 
                if nsamples < nfull the bias force is scaled down by nsamples/nfull
-        friction: friction coefficient for Lagevin dynamics of the extended-system
-        seed_in: random seed for Langevin dynamics of extended-system
         hill_height: height of Gaussian hills in kJ/mol
         hill_std: standard deviation of Gaussian hills in units of the CV (can be Bohr, Degree, or None)
+        md: Object of the MD Inteface
+        cv_def: definition of the Collective Variable (CV) (see adaptive_sampling.colvars)
+                [["cv_type", [atom_indices], minimum, maximum, bin_width], [possible second dimension]]
+        friction: friction coefficient for Lagevin dynamics of the extended-system
+        seed_in: random seed for Langevin dynamics of extended-system
         hill_drop_freq: frequency of hill creation in steps
         well_tempered_temp: effective temperature for WTM, if None, hills are not scaled down (normal metadynamics)
         force_from_grid: forces are accumulated on grid for performance, 
                          if False, forces are calculated from sum of Gaussians in every step 
+        equil_temp: equillibrium temperature of MD
+        verbose: print verbose information
+        kinetice: calculate necessary data to obtain kinetics of reaction
+        f_conf: force constant for confinement of system to the range of interest in CV space
+        output_freq: frequency in steps for writing outputs
+        
     """
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -96,7 +105,7 @@ class WTMeABF(eABF, WTM, EnhancedSampling):
 
         # correction for kinetics
         if self.kinetics:
-            self.kinetics(delta_xi)
+            self._kinetics(delta_xi)
 
         if md_state.step % self.out_freq == 0:
             # write output
@@ -163,6 +172,10 @@ class WTMeABF(eABF, WTM, EnhancedSampling):
         self.abf_forces = data["abf_force"]
         self.center = data["center"].tolist()
         self.metapot = data["self.metapot"]
+
+        if self.verbose:
+            print(f" >>> Info: Adaptive sampling restartet from {filename}!")
+
 
     def write_traj(self):
         """save trajectory for post-processing"""

@@ -50,7 +50,7 @@ class Reference(EnhancedSampling):
 
         # correction for kinetics
         if self.kinetics:
-            self.kinetics(delta_xi)
+            self._kinetics(delta_xi)
 
         if md_state % self.out_freq == 0:
             # write output
@@ -149,6 +149,9 @@ class Reference(EnhancedSampling):
 
         self.histogram = data["hist"]
         self.pmf = data["pmf"]
+        
+        if self.verbose:
+            print(f" >>> Info: Sampling restartet from {filename}!")
 
     def write_traj(self):
         """save trajectory for post-processing"""

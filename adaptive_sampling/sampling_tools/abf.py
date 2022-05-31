@@ -11,11 +11,11 @@ class ABF(EnhancedSampling):
        see: Comer et. al., J. Phys. Chem. B (2015); https://doi.org/10.1021/jp506633n
 
     Args:
-        nfull: Number of force samples per bin where full bias is applied, 
-               if nsamples < nfull the bias force is scaled down by nsamples/nfull
         md: Object of the MD Interface
         cv_def: definition of the Collective Variable (CV) (see adaptive_sampling.colvars)
                 [["cv_type", [atom_indices], minimum, maximum, bin_width], [possible second dimension]]
+        nfull: Number of force samples per bin where full bias is applied, 
+               if nsamples < nfull the bias force is scaled down by nsamples/nfull
         equil_temp: equillibrium temperature of MD
         verbose: print verbose information
         kinetice: calculate necessary data to obtain kinetics of reaction
@@ -57,7 +57,7 @@ class ABF(EnhancedSampling):
                 # apply bias force
                 force_sample = np.dot(
                     md_state.forces, v_i
-                ) - kB_in_atomic * self.equil_temp * self.divergence_xi(
+                ) - kB_in_atomic * self.equil_temp * self._divergence_xi(
                     xi[i], self.cv_type[i]
                 )
 
@@ -83,7 +83,7 @@ class ABF(EnhancedSampling):
 
         # correction for kinetics
         if self.kinetics:
-            self.kinetics(delta_xi)
+            self._kinetics(delta_xi)
 
         if md_state.step % self.out_freq == 0:
             # write output
@@ -119,8 +119,8 @@ class ABF(EnhancedSampling):
         """TODO"""
         pass
 
-    def divergence_xi(self, xi, cv):
-
+    def _divergence_xi(self, xi, cv):
+        """Calculate divergence of collective variable"""
         div = np.zeros(self.ncoords)
         if cv.lower() == "x":
             pass
@@ -166,6 +166,9 @@ class ABF(EnhancedSampling):
         self.bias = data["force"]
         self.var_force = data["var"]
         self.m2_force = data["m2"]
+        
+        if self.verbose:
+            print(f" >>> Info: Adaptive sampling restartet from {filename}!")
 
     def write_traj(self):
         """save trajectory for post-processing"""
