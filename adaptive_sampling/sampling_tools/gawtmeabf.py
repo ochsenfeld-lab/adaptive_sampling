@@ -27,6 +27,9 @@ class GaWTMeABF(WTMeABF, GaMD, EnhancedSampling):
         hill_height: height of Gaussian hills in kJ/mol
         hill_std: standard deviation of Gaussian hills in units of the CV (can be Bohr, Degree, or None)
         gamd_sigma0: upper limit of standard deviation of boost potential
+        gamd_init_step: initial steps where no bias is applied to estimate min, max and var of potential energy
+        gamd_equil_steps: equilibration steps, min, max and var of potential energy is still updated
+                          force constant of coupling is calculated from previous steps
         md: Object of the MD Inteface
         cv_def: definition of the Collective Variable (CV) (see adaptive_sampling.colvars)
                 [["cv_type", [atom_indices], minimum, maximum, bin_width], [possible second dimension]]
@@ -35,9 +38,6 @@ class GaWTMeABF(WTMeABF, GaMD, EnhancedSampling):
         well_tempered_temp: effective temperature for WTM, if None, hills are not scaled down (normal metadynamics)
         force_from_grid: forces are accumulated on grid for performance, 
                          if False, forces are calculated from sum of Gaussians in every step 
-        gamd_init_step: initial steps where no bias is applied to estimate min, max and var of potential energy
-        gamd_equil_steps: equilibration steps, min, max and var of potential energy is still updated
-                          force constant of coupling is calculated from previous steps
         gamd_bound: "lower": use lower bound for GaMD boost
                     "upper: use upper bound for GaMD boost
         equil_temp: equillibrium temperature of MD
@@ -168,7 +168,6 @@ class GaWTMeABF(WTMeABF, GaMD, EnhancedSampling):
                 self.get_pmf()
                 output = {"hist": self.histogram, "free energy": self.pmf}
                 for i in range(self.ncoords):
-                    output[f"metaforce {i}"] = self.bias[i]
                     output[f"abf force {i}"] = self.abf_forces[i]
                     output[f"czar force {i}"] = self.czar_force[i]
                 output[f"metapot"] = self.metapot
@@ -295,9 +294,9 @@ class GaWTMeABF(WTMeABF, GaMD, EnhancedSampling):
         data = {}
         for i in range(self.ncoords):
             if self.cv_type[i] == "angle":
-                self.ext_traj[:, i] /= np.pi / 180.0
+                self.ext_traj[:, i] *= DEGREES_per_RADIAN
             elif self.cv_type[i] == "distance":
-                self.ext_traj[:, i] *= 0.52917721092e0
+                self.ext_traj[:, i] *= BOHR_to_ANGSTROM
             data[f"lambda{i}"] = self.ext_traj[:, i]
         data[f"E_gamd [H]"] = self.gamd_pot_traj
         data["Epot [H]"] = self.epot

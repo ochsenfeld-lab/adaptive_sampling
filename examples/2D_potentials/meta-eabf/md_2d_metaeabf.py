@@ -6,7 +6,7 @@ from adaptive_sampling.units import *
 ################# Imput Section ####################
 # MD
 seed = 42
-nsteps = 50000  # number of MD steps
+nsteps = 100000  # number of MD steps
 dt = 5.0e0  # stepsize in fs
 target_temp = 300.0  # Kelvin
 mass = 10.0  # a.u.
@@ -35,7 +35,7 @@ the_abm = WTMeABF(
     ats,
     hill_drop_freq=100,
     output_freq=10,
-    f_conf=100,
+    f_conf=1000.0,
     equil_temp=300.0,
 )
 # the_abm.restart()

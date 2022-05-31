@@ -3,17 +3,16 @@ import time
 import sys
 from adaptive_sampling.sampling_tools.gamd import GaMD
 from adaptive_sampling.interface.interfaceMD_2D import *
-
-bohr2angs = 0.52917721092e0
+from adaptive_sampling.units import *
 
 ################# Imput Section ####################
 
 # MD
 seed = 42
-nsteps = 10000000  # number of MD steps
-dt = 5.0e0  # stepsize in fs
-target_temp = 300.0  # Kelvin
-mass = 10.0  # a.u.
+nsteps = 1100000    # number of MD steps
+dt = 5.0e0          # stepsize in fs
+target_temp = 300.0 # Kelvin
+mass = 10.0         # a.u.
 potential = "1"
 
 # eABF
@@ -32,15 +31,15 @@ the_md = MD(
 )
 the_abm = GaMD(
     3.5,
+    1000,
     10000,
-    50000,
     the_md,
     ats,
     gamd_bound="lower",
     output_freq=1000,
     f_conf=100,
     equil_temp=300.0,
-    kinetics=True,
+    confine=True,
 )
 # the_abm.restart()
 
@@ -57,7 +56,7 @@ print(
 print(
     "%11.2f\t%14.6f\t%14.6f\t%14.6f\t%14.6f\t%14.6f\t%14.6f"
     % (
-        the_md.step * the_md.dt * it2fs,
+        the_md.step * the_md.dt * atomic_to_fs,
         the_md.coords[0],
         the_md.coords[1],
         the_md.epot,
@@ -83,7 +82,7 @@ while step_count < nsteps:
     print(
         "%11.2f\t%14.6f\t%14.6f\t%14.6f\t%14.6f\t%14.6f\t%14.6f"
         % (
-            the_md.step * the_md.dt * it2fs,
+            the_md.step * the_md.dt * atomic_to_fs,
             the_md.coords[0],
             the_md.coords[1],
             the_md.epot,

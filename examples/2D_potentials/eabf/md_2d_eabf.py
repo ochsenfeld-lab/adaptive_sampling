@@ -11,7 +11,7 @@ bohr2angs = 0.52917721092e0
 
 # MD
 seed = 42
-nsteps = 1000000  # number of MD steps
+nsteps = 10000  # number of MD steps
 dt = 5.0e0  # stepsize in fs
 target_temp = 300.0  # Kelvin
 mass = 10.0  # a.u.

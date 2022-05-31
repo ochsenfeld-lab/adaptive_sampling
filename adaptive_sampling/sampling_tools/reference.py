@@ -52,7 +52,7 @@ class Reference(EnhancedSampling):
         if self.kinetics:
             self._kinetics(delta_xi)
 
-        if md_state % self.out_freq == 0:
+        if md_state.step % self.out_freq == 0:
             # write output
 
             if write_traj:

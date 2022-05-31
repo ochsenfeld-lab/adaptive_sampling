@@ -8,9 +8,9 @@ bohr2angs = 0.52917721092e0
 
 # MD
 seed = 42
-nsteps = 60000  # number of MD steps
+nsteps = 110000  # number of MD steps
 dt = 5.0e0  # stepsize in fs
-target_temp = 300.0  # Kelvin
+target_temp = 300.0 # Kelvin
 mass = 10.0  # a.u.
 potential = "1"
 
@@ -60,7 +60,7 @@ print(
 print(
     "%11.2f\t%14.6f\t%14.6f\t%14.6f\t%14.6f\t%14.6f\t%14.6f"
     % (
-        the_md.step * the_md.dt * it2fs,
+        the_md.step * the_md.dt * atomic_to_fs,
         the_md.coords[0],
         the_md.coords[1],
         the_md.epot,
@@ -85,7 +85,7 @@ while step_count < nsteps:
     print(
         "%11.2f\t%14.6f\t%14.6f\t%14.6f\t%14.6f\t%14.6f\t%14.6f"
         % (
-            the_md.step * the_md.dt * it2fs,
+            the_md.step * the_md.dt * atomic_to_fs,
             the_md.coords[0],
             the_md.coords[1],
             the_md.epot,

@@ -130,9 +130,9 @@ class EnhancedSampling(ABC):
                     )
                 else:
                     output_dat = (self.minx[i], self.maxx[i], self.dx[i], "")
-                print(f"\t Minimum{i}:\t\t\t{output_dat[0]} {output_dat[3]}")
-                print(f"\t Maximum{i}:\t\t\t{output_dat[1]} {output_dat[3]}")
-                print(f"\t Bin width{i}:\t\t\t{output_dat[2]} {output_dat[3]}")
+                print(f"\t Minimum{i}:\t{output_dat[0]} {output_dat[3]}")
+                print(f"\t Maximum{i}:\t{output_dat[1]} {output_dat[3]}")
+                print(f"\t Bin width{i}:\t{output_dat[2]} {output_dat[3]}")
             print("\t--------------------------------------")
             print(f"\t Total number of bins:\t\t{self.nbins}\n")
 
@@ -281,11 +281,10 @@ class EnhancedSampling(ABC):
         """
         grid = np.copy(self.grid)
         for i in range(self.ncoords):
-            # @AH: the conversions below are the opposite of the comments!
             if self.the_cv.type == "angle":
-                grid *= np.pi / 180.0  # radians to degree
+                grid *= DEGREES_per_RADIAN
             elif self.the_cv.type == "distance":
-                grid /= 0.52917721092e0  # Bohr to Angstrom
+                grid *= BOHR_to_ANGSTROM
 
         # head of data columns
         with open(filename, "w") as fout:
@@ -363,4 +362,5 @@ class EnhancedSampling(ABC):
                         traj_out.write("%14.6f\t" % (self.CV_crit_traj[-self.out_freq + n]))
 
     def _write_restart(self, filename, **kwargs):
+        """save **kwargs in .npz file"""
         np.savez(filename, **kwargs)

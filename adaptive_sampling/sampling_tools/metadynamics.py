@@ -91,9 +91,11 @@ class WTM(EnhancedSampling):
 
             if write_output:
                 self.get_pmf()
-                output = {"hist": self.histogram, "free energy": self.pmf}
-                for i in range(self.ncoords):
-                    output[f"metapot {i}"] = self.metapot * atomic_to_kJmol
+                output = {
+                    "hist": self.histogram, 
+                    "free energy": self.pmf,
+                    "metapot": self.metapot * atomic_to_kJmol,
+                }
 
                 self.write_output(output, filename="wtm.out")
                 self.write_restart()

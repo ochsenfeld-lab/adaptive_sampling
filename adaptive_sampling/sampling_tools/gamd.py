@@ -45,7 +45,8 @@ class GaMD(EnhancedSampling):
         self.gamd_init_steps = gamd_init_steps
         self.gamd_equil_steps = gamd_equil_steps
         self.gamd_bound = gamd_bound.lower()
-
+        self.confine = confine
+        
         self.pot_count = 0
         self.pot_var = 0.0
         self.pot_std = 0.0

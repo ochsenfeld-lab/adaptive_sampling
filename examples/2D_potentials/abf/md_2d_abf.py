@@ -3,6 +3,7 @@ import time
 import sys
 from adaptive_sampling.sampling_tools.abf import ABF
 from adaptive_sampling.interface.interfaceMD_2D import *
+from adaptive_sampling.units import *
 
 bohr2angs = 0.52917721092e0
 
@@ -31,7 +32,7 @@ the_md = MD(
     seed_in=seed,
 )
 the_abm = ABF(
-    the_md, ats, output_freq=1000, f_conf=100, equil_temp=300.0, kinetics=True
+    the_md, ats, output_freq=1000, f_conf=100, equil_temp=300.0
 )
 # the_abm.restart()
 
@@ -48,7 +49,7 @@ print(
 print(
     "%11.2f\t%14.6f\t%14.6f\t%14.6f\t%14.6f\t%14.6f\t%14.6f"
     % (
-        the_md.step * the_md.dt * it2fs,
+        the_md.step * the_md.dt * atomic_to_fs,
         the_md.coords[0],
         the_md.coords[1],
         the_md.epot,
@@ -74,7 +75,7 @@ while step_count < nsteps:
     print(
         "%11.2f\t%14.6f\t%14.6f\t%14.6f\t%14.6f\t%14.6f\t%14.6f"
         % (
-            the_md.step * the_md.dt * it2fs,
+            the_md.step * the_md.dt * atomic_to_fs,
             the_md.coords[0],
             the_md.coords[1],
             the_md.epot,
