@@ -5,8 +5,6 @@ from adaptive_sampling.sampling_tools.abf import ABF
 from adaptive_sampling.interface.interfaceMD_2D import *
 from adaptive_sampling.units import *
 
-bohr2angs = 0.52917721092e0
-
 ################# Imput Section ####################
 
 # MD

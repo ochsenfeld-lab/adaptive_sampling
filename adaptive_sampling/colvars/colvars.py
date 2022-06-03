@@ -27,8 +27,8 @@ class CV:
 
         md_state = self.the_mol.get_sampling_data()
 
-        self.mass = torch.from_numpy(md_state.mass)
-        self.coords = torch.from_numpy(md_state.coords.ravel())
+        self.mass = torch.from_numpy(md_state.mass).float()
+        self.coords = torch.from_numpy(md_state.coords.ravel()).float()
         self.natoms = len(self.mass)
         self.requires_grad = requires_grad
         self.gradient = None
@@ -55,29 +55,15 @@ class CV:
         """
         if hasattr(atoms, "__len__"):
             # compute center of mass for group of atoms
-            com = torch.zeros(3, dtype=torch.float)
-            for a in atoms:
-                a = int(a)
-                com += self.coords[3 * a] * self.mass[a]
-                com += self.coords[3 * a + 1] * self.mass[a]
-                com += self.coords[3 * a + 2] * self.mass[a]
-
+            center = torch.matmul(self.coords.view((self.natoms, 3))[atoms].T, self.mass[atoms])
             m_tot = self.mass[atoms].sum()
-            com /= m_tot
+            com = center / m_tot
 
         else:
             # only one atom
             atom = int(atoms)
             m_tot = self.mass[atom]
-            com = torch.tensor(
-                [
-                    self.coords[3 * atom],
-                    self.coords[3 * atom + 1],
-                    self.coords[3 * atom + 2],
-                ]
-            )
-        com = com.float()
-        com.requires_grad = self.requires_grad
+            com = self.coords[3*atom : 3*atom+3]
 
         return com, m_tot
 
@@ -111,18 +97,22 @@ class CV:
     def x(self) -> float:
         """use x axis as cv for numerical examples"""
         self.update_coords()
-        if self.requires_grad:
-            self.gradient = np.array([1.0, 0.0])
         self.cv = self.coords[0]
-        return self.cv
+        if self.requires_grad:
+            self.gradient = torch.autograd.grad(self.cv, self.coords, allow_unused=True)[0]
+            self.gradient = self.gradient.numpy()
+            
+        return float(self.cv)
 
     def y(self) -> float:
         """use y axis as cv for numerical examples"""
         self.update_coords()
-        if self.requires_grad:
-            self.gradient = np.array([0.0, 1.0])
         self.cv = self.coords[1]
-        return self.cv
+        if self.requires_grad:
+            self.gradient = torch.autograd.grad(self.cv, self.coords, allow_unused=True)[0]
+            self.gradient = self.gradient.numpy()
+            
+        return float(self.cv)
 
     def distance(self, cv_def: list) -> float:
         """distance between two mass centers in range(0, inf)
@@ -147,23 +137,12 @@ class CV:
 
         # get distance
         r12 = p2 - p1
-        self.cv = torch.linalg.norm(r12, dtype=torch.float)
+        self.cv = torch.linalg.norm(r12)
 
         # get forces
         if self.requires_grad:
-            # @AH: why don't you do? Does this not work?
-            #            self.gradient = self.partial_derivative(self.cv, self.coords)
-            atom_grads = _partial_derivative(self.cv, (p1, p2))
-            self.gradient = torch.matmul(
-                atom_grads[0], self._get_atom_weights(m0, cv_def[0])
-            )
-            self.gradient += torch.matmul(
-                atom_grads[1], self._get_atom_weights(m1, cv_def[1])
-            )
+            self.gradient = torch.autograd.grad(self.cv, self.coords, allow_unused=True)[0]
             self.gradient = self.gradient.numpy()
-        
-        # AH: this returns (None,), I don't know why.
-        #       self.gradient = torch.autograd.grad(self.cv, self.coords, allow_unused=True)
 
         return float(self.cv)
 
@@ -203,16 +182,7 @@ class CV:
 
         # get forces
         if self.requires_grad:
-            atom_grads = _partial_derivative(self.cv, (p1, p2, p3))
-            self.gradient = torch.matmul(
-                atom_grads[0], self._get_atom_weights(m0, cv_def[0])
-            )
-            self.gradient += torch.matmul(
-                atom_grads[1], self._get_atom_weights(m1, cv_def[1])
-            )
-            self.gradient += torch.matmul(
-                atom_grads[2], self._get_atom_weights(m2, cv_def[2])
-            )
+            self.gradient = torch.autograd.grad(self.cv, self.coords, allow_unused=True)[0]
             self.gradient = self.gradient.numpy()
 
         return float(self.cv)
@@ -257,19 +227,7 @@ class CV:
 
         # get forces
         if self.requires_grad:
-            atom_grads = _partial_derivative(self.cv, (p1, p2, p3, p4))
-            self.gradient = torch.matmul(
-                atom_grads[0], self._get_atom_weights(m1, cv_def[0])
-            )
-            self.gradient += torch.matmul(
-                atom_grads[1], self._get_atom_weights(m2, cv_def[1])
-            )
-            self.gradient += torch.matmul(
-                atom_grads[2], self._get_atom_weights(m3, cv_def[2])
-            )
-            self.gradient += torch.matmul(
-                atom_grads[3], self._get_atom_weights(m4, cv_def[3])
-            )
+            self.gradient = torch.autograd.grad(self.cv, self.coords, allow_unused=True)[0]
             self.gradient = self.gradient.numpy()
 
         return float(self.cv)
@@ -337,7 +295,7 @@ class CV:
                 distorted distance beteen atoms: [ind0, ind1]
                 distorted distance between mass centers: [[ind00, ind01, ...],
                                                           [ind10, ind11, ...]]
-
+            r_0 (float): distance in Angstrom at which the CN function has the value 0.5
         Returns:
             distorted distance (float): computed distance
         """
@@ -355,19 +313,18 @@ class CV:
 
         # get distance
         r12 = p2 - p1
-        d = torch.linalg.norm(r12, dtype=torch.float) / r_0
+        norm = torch.linalg.norm(r12, dtype=torch.float) 
+        # to prevent numerical instability
+        if norm == r_0:
+            d = norm / (r_0*1.000001)
+        else:
+            d = norm / r_0
 
         self.cv = (1.0 - torch.pow(d, 6)) / (1.0 - torch.pow(d, 12))
 
         # get forces
         if self.requires_grad:
-            atom_grads = _partial_derivative(self.cv, (p1, p2))
-            self.gradient = torch.matmul(
-                atom_grads[0], self._get_atom_weights(m0, cv_def[0])
-            )
-            self.gradient += torch.matmul(
-                atom_grads[1], self._get_atom_weights(m1, cv_def[1])
-            )
+            self.gradient = torch.autograd.grad(self.cv, self.coords, allow_unused=True)[0]
             self.gradient = self.gradient.numpy()
 
         return float(self.cv)

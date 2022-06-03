@@ -206,7 +206,7 @@ class MD:
     def get_sampling_data(self):
         """interface to adaptive_sampling"""
         return SamplingData(
-            self.masses,    
+            self.mass,    
             self.coords,
             self.forces,
             self.epot,
