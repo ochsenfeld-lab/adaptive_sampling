@@ -34,7 +34,7 @@ the_abm = WTMeABF(
     the_md,
     ats,
     hill_drop_freq=100,
-    output_freq=10,
+    output_freq=1000,
     f_conf=1000.0,
     equil_temp=300.0,
 )

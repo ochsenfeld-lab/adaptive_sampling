@@ -1,8 +1,9 @@
-# Adaptive Sampling
+Adaptive Sampling
+=================
 
 This package implements various sampling algorithms for the calculation of free energy profiles of molecular transitions. 
 
-### Available sampling methods include:
+## Available sampling methods include:
 *	Adaptive Biasing Force (ABF) method [3] 
 	
 * 	Extended-system ABF (eABF) [4]
@@ -16,7 +17,7 @@ This package implements various sampling algorithms for the calculation of free 
 * 	Gaussian-accelerated MD (GaMD) [7] and GaWTM-eABF [8]
 
 ## Install:
-To install adaptive_sampling with dependencies type:
+To install adaptive_sampling and requirements type:
 ```shell
 $ pip install adaptive_sampling 
 ```
@@ -27,7 +28,7 @@ $ pip install adaptive_sampling
 * torch >= 1.10
 * scipy >= 1.8
 
-## Basic usage:
+## Basic Usage:
 To use adaptive sampling with your MD code of choice add a function called `get_sampling_data()` to the corresponding python interface that returns an object containing all required data. Hard-coded dependencies can be avoided by wrapping the `adaptive_sampling` import in a `try/except` clause:
 
 ```python
@@ -64,11 +65,11 @@ atom_indices = [0, 1]
 minimum   = 1.0  # Angstrom
 maximum   = 3.5  # Angstrom
 bin_width = 0.1  # Angstrom 
-collective_var = ["distance", atom_indices, minimum, maximum, bin_width]
+collective_var = [["distance", atom_indices, minimum, maximum, bin_width]]
 
 # extended-system eABF 
 ext_sigma = 0.1  # thermal width of coupling between CV and extended variable in Angstrom
-ext_mass = 20.0  # mass of extended variable
+ext_mass = 20.0  # mass of extended variable 
 the_bias = eABF(
     ext_sigma, 
     ext_mass, 
@@ -80,7 +81,7 @@ the_bias = eABF(
 )
 
 for md_step in range(steps):
-    # calc forces and propagate
+    # propagate langevin dynamics and calc forces 
     ... 
     bias_force = eABF.step_bias(write_output=True, write_traj=True)
     the_md.forces += bias_force
@@ -108,8 +109,8 @@ la = traj_dat[:,2]  # trajectory of extended system
 # run MBAR and compute free energy profile and propability density from statistical weights
 traj_list, indices, meta_f = mbar.get_windows(grid, cv, la, sigma, equil_temp=300.0)
 
-weigths = mbar.run_mbar(traj_list, meta_f, conv=1.0e-4, conv_errvec=None, outfreq=100, equil_temp=300.0)
-pmf, rho = mbar.pmf_from_weights(grid, cv[indices], W, equil_temp=300.0)
+weights = mbar.run_mbar(traj_list, meta_f, conv=1.0e-4, conv_errvec=None, outfreq=100, equil_temp=300.0)
+pmf, rho = mbar.pmf_from_weights(grid, cv[indices], weights, equil_temp=300.0)
 ```
 
 ## Documentation:

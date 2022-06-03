@@ -150,7 +150,10 @@ class eABF(ABF, EnhancedSampling):
 
             if write_output:
                 self.get_pmf()
-                output = {"hist": self.histogram, "free energy": self.pmf}
+                output = {
+                    "hist": self.histogram, 
+                    "free energy": self.pmf
+                }
                 for i in range(self.ncoords):
                     output[f"bias force {i}"] = self.bias[i]
                     output[f"var force {i}"] = self.var_force[i]

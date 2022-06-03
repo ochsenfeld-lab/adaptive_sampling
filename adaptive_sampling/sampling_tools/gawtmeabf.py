@@ -187,7 +187,7 @@ class GaWTMeABF(WTMeABF, GaMD, EnhancedSampling):
         )
         avg_force = cond_avg(self.correction_czar, self.histogram)
 
-        self.gamd_corr = -self.gamd_c1 - self.gamd_c2 / (
+        self.gamd_corr = - self.gamd_c1 - self.gamd_c2 / (
             2.0 * kB_in_atomic * self.equil_temp
         )
 
