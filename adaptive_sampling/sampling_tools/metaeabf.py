@@ -119,9 +119,9 @@ class WTMeABF(eABF, WTM, EnhancedSampling):
                 for i in range(self.ncoords):
                     output[f"metaforce {i}"] = self.bias[i]
                     output[f"abf force {i}"] = self.abf_forces[i]
-                    # TODO: give variance of CZAR not bias
-                    output[f"var force {i}"] = self.var_force[i]
                     output[f"czar force {i}"] = self.czar_force[i]
+                    # TODO: output variance of CZAR for error estimate
+                    #output[f"var force {i}"] = self.var_force[i]
                 output[f"metapot"] = self.metapot
 
                 self.write_output(output, filename="wtmeabf.out")

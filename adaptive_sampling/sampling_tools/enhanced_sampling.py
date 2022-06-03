@@ -11,12 +11,12 @@ from ..units import *
 
 
 class EnhancedSampling(ABC):
-    """Abstract class for sampling algorithms with Molecular Dynamics (MD)
+    """Abstract class for molecular dynamics based sampling algorithms 
     
     Args:
         md: Object of the MD Inteface
         cv_def: definition of the Collective Variable (CV) (see adaptive_sampling.colvars)
-                [["cv_type", [atom_indices], minimum, maximum, bin_width], [possible second dimension]]
+            [["cv_type", [atom_indices], minimum, maximum, bin_width], [possible second dimension]]
         equil_temp: equillibrium temperature of MD
         verbose: print verbose information
         kinetice: calculate necessary data to obtain kinetics of reaction
@@ -148,6 +148,18 @@ class EnhancedSampling(ABC):
     def shared_bias(self):
         pass
 
+    @abstractmethod
+    def write_restart(self):
+        pass
+
+    @abstractmethod
+    def restart(self):
+        pass
+
+    @abstractmethod
+    def write_traj(self):
+        pass
+
     def harmonic_walls(
         self,
         xi: np.ndarray,
@@ -192,7 +204,7 @@ class EnhancedSampling(ABC):
         return bin_x
 
     def unit_conversion_cv(self, *args):
-        """convert input to bohr and radians
+        """convert input to atomic units
 
         Args:
             args: arrays to convert of size(dimensions)
@@ -200,19 +212,16 @@ class EnhancedSampling(ABC):
         Returns:
             args in atomic units
         """
-        bohr2angs = 0.52917721092e0  # bohr to angstrom
-        deg2rad = np.pi / 180.0  # degree to radians
-
         for i in range(self.ncoords):
             for arg in args:
                 if self.the_cv.type == "angle":
-                    arg[i] *= deg2rad
+                    arg[i] /= DEGREES_per_RADIAN
                 elif self.the_cv.type == "distance":
-                    arg[i] /= bohr2angs
+                    arg[i] /= BOHR_to_ANGSTROM
         return args
 
     def unit_conversion_force(self, *args):
-        """convert input to bohr and radians
+        """convert input to atomic units
 
         Args:
             *args: arrays to convert of size(dimensions)
@@ -224,7 +233,6 @@ class EnhancedSampling(ABC):
         for i in range(self.ncoords):
             for arg in args:
                 if self.cv_type == "angle":
-                    # @AH: Please check that this is correct, what was here before looked suspicous
                     arg[i] *= DEGREES_per_RADIAN * DEGREES_per_RADIAN / atomic_to_kJmol
                 elif self.cv_type == "distance":
                     arg[i] *= BOHR_to_ANGSTROM * BOHR_to_ANGSTROM / atomic_to_kJmol
