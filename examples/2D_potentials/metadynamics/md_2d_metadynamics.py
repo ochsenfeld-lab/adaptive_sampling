@@ -33,11 +33,11 @@ the_abm = WTM(
     ats,
     hill_drop_freq=100,
     output_freq=10,
-    force_from_grid=True,
+    force_from_grid=False,
     f_conf=1000,
     equil_temp=300.0,
 )
-the_abm.restart()
+#the_abm.restart()
 
 the_md.calc_init()
 the_abm.step_bias()

@@ -190,15 +190,13 @@ class WTM(EnhancedSampling):
 
         if self.ncoords == 1:
                 
-            dx = np.ma.array(
-                diff(xi[0], np.asarray(self.center), self.cv_type[0])
-            )
-            indices = np.ma.indices((len(self.center),))[0]
-            
-            indices[abs(dx) > 3 * self.hill_std[0]] = np.ma.masked
+            dx = diff(xi[0], np.asarray(self.center), self.cv_type[0])
+            ind = np.ma.indices((len(self.center),))[0]
+            ind = np.ma.masked_array(ind)    
+            ind[abs(dx) > 3 * self.hill_std[0]] = np.ma.masked
             
             # can get slow in long run, so only iterate over significant elements
-            for i in np.nditer(indices.compressed(), flags=["zerosize_ok"]):
+            for i in np.nditer(ind.compressed(), flags=["zerosize_ok"]):
                     
                 if self.well_tempered:
                     w = self.hill_height * np.exp(
