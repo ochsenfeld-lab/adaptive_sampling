@@ -3,7 +3,6 @@ import torch
 import numpy as np
 
 from typing import Union, Tuple
-from .utils import _partial_derivative
 from ..interface.sampling_data import MDInterface
 from ..units import *
 
@@ -44,7 +43,6 @@ class CV:
 
     def _get_com(self, atoms: Union[int, list]) -> Tuple[torch.tensor, float]:
         """get center of mass (com) of group of atoms
-        if self.require_grad = True partial derivative with respect to com can be calculated using torch.autograd.grad
 
         Args:
             atoms (Union[int, list]): atom index or list of atom indices
@@ -62,37 +60,9 @@ class CV:
         else:
             # only one atom
             atom = int(atoms)
-            m_tot = self.mass[atom]
             com = self.coords[3*atom : 3*atom+3]
 
-        return com, m_tot
-
-    def _get_atom_weights(
-        self, mass_group: float, atoms: Union[int, list]
-    ) -> torch.tensor:
-        """get mass weights of atoms for gradient of group of atoms
-
-        Args:
-            mass_group (float): sum of mass of atoms
-            atoms (Union[int, list]): atom index or list of atom indices
-
-        Returns:
-            coords (torch.tensor): 3*3N array of mass weights of atoms
-        """
-        coords = torch.zeros((3, 3 * self.natoms))
-        if hasattr(atoms, "__len__"):
-            for a in atoms:
-                a = int(a)
-                coords[0, 3 * a] = self.mass[a] / mass_group
-                coords[1, 3 * a + 1] = self.mass[a] / mass_group
-                coords[2, 3 * a + 2] = self.mass[a] / mass_group
-        else:
-            atoms = int(atoms)
-            coords[0, 3 * atoms] = 1.0
-            coords[1, 3 * atoms + 1] = 1.0
-            coords[2, 3 * atoms + 2] = 1.0
-
-        return coords
+        return com
 
     def x(self) -> float:
         """use x axis as cv for numerical examples"""
@@ -132,8 +102,8 @@ class CV:
 
         self.update_coords()
 
-        (p1, m0) = self._get_com(cv_def[0])
-        (p2, m1) = self._get_com(cv_def[1])
+        p1 = self._get_com(cv_def[0])
+        p2 = self._get_com(cv_def[1])
 
         # get distance
         r12 = p2 - p1
@@ -164,9 +134,9 @@ class CV:
 
         self.update_coords()
 
-        (p1, m0) = self._get_com(cv_def[0])
-        (p2, m1) = self._get_com(cv_def[1])
-        (p3, m2) = self._get_com(cv_def[2])
+        p1 = self._get_com(cv_def[0])
+        p2 = self._get_com(cv_def[1])
+        p3 = self._get_com(cv_def[2])
 
         # get angle
         q12 = p1 - p2
@@ -208,10 +178,10 @@ class CV:
 
         self.update_coords()
 
-        (p1, m1) = self._get_com(cv_def[0])
-        (p2, m2) = self._get_com(cv_def[1])
-        (p3, m3) = self._get_com(cv_def[2])
-        (p4, m4) = self._get_com(cv_def[3])
+        p1 = self._get_com(cv_def[0])
+        p2 = self._get_com(cv_def[1])
+        p3 = self._get_com(cv_def[2])
+        p4 = self._get_com(cv_def[3])
 
         # get dihedral
         q12 = p2 - p1
@@ -276,17 +246,6 @@ class CV:
         self.cv = np.asarray(self.lc_contribs).sum()
         return float(self.cv)
 
-    def write_lc_traj(self, out: str = "lc_traj.dat"):
-        """write out seperate trajectory for contributions to linear combination
-
-        Args:
-            our (str): name of output file
-        """
-        with open(out, "a") as traj_out:
-            for lc in self.lc_contribs:
-                traj_out.write("%14.6f\t" % lc)
-            traj_out.write("\n")
-
     def coordination_number(self, cv_def: list, r_0: float = 3.0) -> float:
         """coordination number between two mass centers in range(0, inf) mapped to range(1,0)
 
@@ -308,8 +267,8 @@ class CV:
 
         r_0 /= BOHR_to_ANGSTROM
 
-        (p1, m0) = self._get_com(cv_def[0])
-        (p2, m1) = self._get_com(cv_def[1])
+        p1 = self._get_com(cv_def[0])
+        p2 = self._get_com(cv_def[1])
 
         # get distance
         r12 = p2 - p1
@@ -328,20 +287,6 @@ class CV:
             self.gradient = self.gradient.numpy()
 
         return float(self.cv)
-
-    def custom_lin_comb(self, cvs: list, **kwargs) -> float:
-        """custom linear combination of arbitrary functions"""
-        self.update_coords()
-        cv = 0.0
-        gradient = np.zeros(len(self.gradient))
-        for _, cv_def in enumerate(cvs):
-            z, dz = self.get_cv(cv_def[0], cv_def[2])
-            cv += cv_def[1] * z
-            gradient += cv_def[1] * dz
-
-        self.cv = cv
-        self.gradient = gradient
-        return float(cv)
 
     def get_cv(self, cv: str, atoms: list, **kwargs) -> Tuple[float, np.ndarray]:
         """get state of collective variable from cv definition of sampling_tools

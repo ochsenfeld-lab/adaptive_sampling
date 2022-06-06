@@ -1,5 +1,4 @@
 import numpy as np
-import pytest
 from adaptive_sampling.colvars import CV
 from adaptive_sampling.interface.sampling_data import SamplingData
 
@@ -20,12 +19,24 @@ def four_particles():
     coords = [0, 0, 0, 1, 0, 0, 1, 1, 0, 1, 1, 1]
     return MD(masses, coords)
 
+def four_particles2():
+    masses = [1, 3, 1, 10]
+    coords = [0, 0, 0, 3, 0, 0, 1, 0, 0, 1, 1, 1]
+    return MD(masses, coords)
+
 
 def test_distance():
     cv = CV(four_particles(), requires_grad=True)
     f, grad = cv.get_cv("distance", [0, 1])
     assert f == 1
     assert (grad == np.asarray([-1, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0])).all()
+
+
+def test_distance_groups():
+    cv = CV(four_particles2(), requires_grad=True)
+    f = cv.distance([[0, 1], 2])
+    assert f == 1.25
+    assert (cv.gradient == np.asarray([0.25, 0, 0, 0.75, 0, 0, -1, 0, 0, 0, 0, 0])).all()
 
 
 def test_angle():

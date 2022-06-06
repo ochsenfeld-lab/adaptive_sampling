@@ -1,7 +1,7 @@
 import numpy as np
 from typing import Tuple
 from .enhanced_sampling import EnhancedSampling
-from .utils import diff
+from .utils import diff, sum
 from ..units import *
 
 
@@ -128,7 +128,7 @@ class WTM(EnhancedSampling):
             self.center.append(xi[0]) if self.ncoords == 1 else self.center.append(xi)
 
         is_in_bounds = (xi <= self.maxx).all() and (xi >= self.minx).all() 
-        
+        bias_force = [0, 0]
         if is_in_bounds:
             bias_force = self._accumulate_wtm_force(xi)
             
@@ -219,34 +219,35 @@ class WTM(EnhancedSampling):
         return bias_force, local_pot
 
     def _smooth_boundary_grid(self, xi: np.ndarray, w: float):
-        """ensures linear profile at boundary
+        """ensures linear profile of bias potential at boundary
 
         see: Crespo et al. (2010), https://doi.org/10.1103/PhysRevE.81.055701           
         
         Args:
             xi: Collective variable
         """
-        dmax = xi - self.maxx 
-        dmin = self.minx - xi
-    
+        chi1 = 3.0 * self.hill_std
+
         if self.ncoords == 1:
             dx_list = []
             w_list = []
 
-            if 0.0 < dmax[0] <= 3.0 * self.hill_std[0]:
-                dx_list.append(diff(self.grid[0], self.maxx[0] + dmax[0], self.cv_type[0]))
+            if diff(self.maxx[0], chi1[0], self.cv_type[0]) <= xi[0] <= self.maxx[0]:
+                center_out = self.maxx[0] + diff(self.maxx[0], xi[0], self.cv_type[0])
+                dx_list.append(diff(self.grid[0], center_out, self.cv_type[0]))
                 w_list.append(w)
             else:
                 # TODO: scale height of hills to ensure flat potential at boundary
                 pass
 
-            if 0.0 < dmin[0] <= 3.0 * self.hill_std[0]:
-                dx_list.append(diff(self.grid[0], self.minx[0] - dmin[0], self.cv_type[0]))
+            if self.minx[0] <= xi[0] <= sum(self.minx[0], chi1[0], self.cv_type[0]):
+                center_out = self.minx[0] - diff(xi[0], self.minx[0], self.cv_type[0])
+                dx_list.append(diff(self.grid[0], center_out, self.cv_type[0]))
                 w_list.append(w)
             else:
                 # TODO: scale height of hills to ensure flat potential at boundary
                 pass
-
+            
             for dx, W in zip(dx_list, w_list):
                 epot = W * np.exp(-(dx * dx) / (2.0 * self.hill_var[0]))
                 self.metapot[0] += epot
@@ -264,20 +265,28 @@ class WTM(EnhancedSampling):
         Args:
             xi: Collective variable
         """  
-        if self.ncoords == 1:
-            dmax = center - self.maxx[0]
-            if 0.0 < dmax <= 3.0 * self.hill_std[0]:
-                val = diff(xi[0], self.maxx[0] + dmax, self.cv_type[0])
-                epot = w * np.exp(-(val * val) / (2.0 * self.hill_var[0]))
-                local_pot += epot
-                bias_force[0] -= epot * val / self.hill_var[0]
+        chi1 = 3.0 * self.hill_std
 
-            dmin = self.minx[0] - center
-            if 0.0 < dmin <= 3.0 * self.hill_std[0]:
-                val = diff(xi[0], self.minx[0] - dmin, self.cv_type[0])
+        if self.ncoords == 1:
+            if diff(self.maxx[0], chi1[0], self.cv_type[0]) <= center <= self.maxx[0]:
+                center_out = self.maxx[0] + diff(self.maxx[0], center, self.cv_type[0])
+                val = diff(xi[0], center_out, self.cv_type[0])
                 epot = w * np.exp(-(val * val) / (2.0 * self.hill_var[0]))
                 local_pot += epot
                 bias_force[0] -= epot * val / self.hill_var[0]
+            else:
+                # TODO: scale height of hills to ensure flat potential at boundary
+                pass
+
+            if self.minx[0] <= center <= sum(self.minx[0], chi1[0], self.cv_type[0]):
+                center_out = self.minx[0] - diff(center, self.minx[0], self.cv_type[0])
+                val = diff(xi[0], center_out, self.cv_type[0])
+                epot = w * np.exp(-(val * val) / (2.0 * self.hill_var[0]))
+                local_pot += epot
+                bias_force[0] -= epot * val / self.hill_var[0]
+            else:
+                # TODO: scale height of hills to ensure flat potential at boundary
+                pass
         
         return local_pot, bias_force
 

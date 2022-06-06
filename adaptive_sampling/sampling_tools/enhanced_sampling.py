@@ -65,9 +65,6 @@ class EnhancedSampling(ABC):
         self.temp = [md_state.temp]
         self.epot = [md_state.epot]
         
-        self.mass = md_state.mass              # shape(natoms,)
-        self.masses = np.repeat(self.mass, 3)  # shape(3*natoms,)
-
         # get number of bins (1D or 2D)
         self.nbins_per_dim = np.array([1, 1])
         self.grid = []
@@ -276,7 +273,7 @@ class EnhancedSampling(ABC):
             m_xi_inv: coordinate dependent mass of collective variabl
         """
         if self.ncoords == 1:
-            return np.dot(delta_xi[0], (1.0 / self.masses) * delta_xi[0])
+            return np.dot(delta_xi[0], (1.0 / np.repeat(self.the_md.mass, 3)) * delta_xi[0])
         else:
             return 0.0
 

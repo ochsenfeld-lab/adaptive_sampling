@@ -171,7 +171,7 @@ class WTMeABF(eABF, WTM, EnhancedSampling):
         self.correction_czar = data["czar_corr"]
         self.abf_forces = data["abf_force"]
         self.center = data["center"].tolist()
-        self.metapot = data["self.metapot"]
+        self.metapot = data["metapot"]
 
         if self.verbose:
             print(f" >>> Info: Adaptive sampling restartet from {filename}!")

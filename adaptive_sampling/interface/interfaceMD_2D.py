@@ -1,5 +1,4 @@
 #!/usr/bin/env python
-import sys
 import random
 import numpy as np
 from typing import Tuple
@@ -142,8 +141,7 @@ class MD:
             )
 
         else:
-            print("\n\tInvalid Potential!")
-            sys.exit(1)
+            raise ValueError(" >>> Invalid Potential!")
 
         return (self.epot, self.forces)
 
@@ -206,7 +204,7 @@ class MD:
     def get_sampling_data(self):
         """interface to adaptive_sampling"""
         return SamplingData(
-            self.mass,    
+            self.masses,    
             self.coords,
             self.forces,
             self.epot,

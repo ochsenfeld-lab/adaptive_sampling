@@ -8,9 +8,9 @@ This package implements various sampling algorithms for the calculation of free 
 	
 * 	Extended-system ABF (eABF) [4]
 
-	* On-the-fly free energy estimate from the Corrected z-Averaged Restraint (CZAR) [4]
+	* On-the-fly free energy estimate from the Corrected Z-Averaged Restraint (CZAR) [4]
 	
-	* Application of Multistate Bannet's Acceptance Ration (MBAR) [2] to recover full statistical information in post-processing [1]
+	* Application of Multistate Bannett's Acceptance Ratio (MBAR) [2] to recover full statistical information in post-processing [1]
 	
 * 	Well-Tempered Metadynamics (WTM) [5] and WTM-eABF [6]
 
@@ -121,12 +121,12 @@ $ pdoc --html adaptive_sampling -o doc/
 ```
 ## References:
 This work:
-1. 	Hulm et. al., J. Chem. Phys. (in press)
+1.  Hulm et. al., J. Chem. Phys. (in press)
 
 Implemented methods:
 
 2.  Shirts et. al., J. Chem. Phys. (2008); <https://doi.org/10.1063/1.2978177>
-3.	Comer et. al., J. Phys. Chem. B (2015); <https://doi.org/10.1021/jp506633n> 
+3.  Comer et. al., J. Phys. Chem. B (2015); <https://doi.org/10.1021/jp506633n> 
 4.  Lesage et. al., J. Phys. Chem. B (2017); <https://doi.org/10.1021/acs.jpcb.6b10055>
 5.  Barducci et. al., Phys. rev. lett. (2008); <https://doi.org/10.1103/PhysRevLett.100.020603>
 6.  Fu et. al., J. Phys. Chem. Lett. (2018); <https://doi.org/10.1021/acs.jpclett.8b01994>

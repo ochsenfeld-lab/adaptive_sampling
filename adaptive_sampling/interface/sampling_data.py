@@ -24,7 +24,7 @@ class SamplingData:
 class MDInterface(Protocol):
     def get_sampling_data(self) -> SamplingData:
         """Define this function for your MD class to provide the
-        required sampling data for adaptive biasing. If you do not
+        required sampling data for adaptive sampling. If you do not
         wish to have this package as a dependency, wrap the import
         in a `try`/`except` clause, e.g.,
 

@@ -33,6 +33,37 @@ def diff(
     return diff
 
 
+def sum(
+    a: Union[np.ndarray, float], b: Union[np.ndarray, float], cv_type: str
+) -> Union[np.ndarray, float]:
+    """get sum of elements of numbers or arrays
+    in range(-inf, inf) if is_angle is False or in range(-pi, pi) if is_angle is True
+
+    Args:
+        a: number or array
+        b: number or array
+
+    Returns:
+        diff: element-wise difference (a-b)
+    """
+    sum = a + b
+
+    # wrap to range(-pi,pi) for angle
+    if isinstance(diff, np.ndarray) and cv_type == "angle":
+
+        sum[sum > np.pi] -= 2 * np.pi
+        sum[sum < -np.pi] += 2 * np.pi
+
+    elif cv_type == "angle":
+
+        if sum < -np.pi:
+            sum += 2 * np.pi
+        elif sum > np.pi:
+            sum -= 2 * np.pi
+
+    return sum
+
+
 def welford_var(
     count: float, mean: float, M2: float, newValue: float
 ) -> Tuple[float, float, float]:
