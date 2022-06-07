@@ -49,7 +49,6 @@ class CV:
 
         Returns:
             com (torch.tensor): Center of Mass
-            m_tot(float): Total mass of involved atoms
         """
         if hasattr(atoms, "__len__"):
             # compute center of mass for group of atoms
@@ -70,7 +69,7 @@ class CV:
         self.cv = self.coords[0]
         if self.requires_grad:
             self.gradient = torch.autograd.grad(self.cv, self.coords, allow_unused=True)[0]
-            self.gradient = self.gradient.numpy()
+            self.gradient = self.gradient.detach().numpy()
             
         return float(self.cv)
 
@@ -80,7 +79,7 @@ class CV:
         self.cv = self.coords[1]
         if self.requires_grad:
             self.gradient = torch.autograd.grad(self.cv, self.coords, allow_unused=True)[0]
-            self.gradient = self.gradient.numpy()
+            self.gradient = self.gradient.detach().numpy()
             
         return float(self.cv)
 
@@ -112,7 +111,7 @@ class CV:
         # get forces
         if self.requires_grad:
             self.gradient = torch.autograd.grad(self.cv, self.coords, allow_unused=True)[0]
-            self.gradient = self.gradient.numpy()
+            self.gradient = self.gradient.detach().numpy()
 
         return float(self.cv)
 
@@ -153,7 +152,7 @@ class CV:
         # get forces
         if self.requires_grad:
             self.gradient = torch.autograd.grad(self.cv, self.coords, allow_unused=True)[0]
-            self.gradient = self.gradient.numpy()
+            self.gradient = self.gradient.detach().numpy()
 
         return float(self.cv)
 
@@ -198,7 +197,7 @@ class CV:
         # get forces
         if self.requires_grad:
             self.gradient = torch.autograd.grad(self.cv, self.coords, allow_unused=True)[0]
-            self.gradient = self.gradient.numpy()
+            self.gradient = self.gradient.detach().numpy()
 
         return float(self.cv)
 
@@ -284,7 +283,7 @@ class CV:
         # get forces
         if self.requires_grad:
             self.gradient = torch.autograd.grad(self.cv, self.coords, allow_unused=True)[0]
-            self.gradient = self.gradient.numpy()
+            self.gradient = self.gradient.detach().numpy()
 
         return float(self.cv)
 
@@ -325,9 +324,6 @@ class CV:
             self.type = None
         elif cv.lower() == "coordination_number":
             xi = self.coordination_number(atoms, **kwargs)
-            self.type = None
-        elif cv.lower() == "lin_comb_custom":
-            xi = self.custom_lin_comb(atoms, **kwargs)
             self.type = None
         else:
             print(" >>> Error in CV: Unknown coordinate")

@@ -19,7 +19,7 @@ This package implements various sampling algorithms for the calculation of free 
 ## Install:
 To install adaptive_sampling download the repository to a local folder and type:
 ```shell
-$ pip install .
+$ pip install adaptive_sampling
 ```
 
 
@@ -27,7 +27,7 @@ $ pip install .
 * python >= 3.8
 * numpy >= 1.19
 * torch >= 1.10
-* scipy >= 1.8
+* scipy >= 1.7
 
 ## Basic Usage:
 To use adaptive sampling with your MD code of choice add a function called `get_sampling_data()` to the corresponding python interface that returns an object containing all required data. Hard-coded dependencies can be avoided by wrapping the `adaptive_sampling` import in a `try/except` clause:
