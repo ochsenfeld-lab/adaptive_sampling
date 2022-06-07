@@ -17,7 +17,7 @@ This package implements various sampling algorithms for the calculation of free 
 * 	Gaussian-accelerated MD (GaMD) [7] and GaWTM-eABF [8]
 
 ## Install:
-To install adaptive_sampling download the repository to a local folder and type:
+To install adaptive_sampling type:
 ```shell
 $ pip install adaptive_sampling
 ```
