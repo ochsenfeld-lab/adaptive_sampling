@@ -15,7 +15,7 @@ setup(
     author="Andreas Hulm",
     author_email="andreas.hulm@cup.uni-muenchen.de", 
     url="https://github.com/ochsenfeld-lab/adaptive_sampling",
-    download_url="https://github.com/ochsenfeld-lab/adaptive_sampling/XXXX",
+    download_url="https://github.com/ochsenfeld-lab/adaptive_sampling/archive/refs/tags/v1.0.0.zip",
     keywords=["computational chemistry", "molecular dynamics", "free energy", "chemical reactions"],
     install_requires=[
         "torch>=1.10.2", 
@@ -25,7 +25,7 @@ setup(
     setup_requires=["pytest"],
     tests_requires=["pytest"],
     classifiers=[
-        'Development Status :: 4 - Beta',  # Chose either "3 - Alpha", "4 - Beta" or "5 - Production/Stable" as the current state of your package
+        'Development Status :: 5 - Production/Stable',  # Chose either "3 - Alpha", "4 - Beta" or "5 - Production/Stable" as the current state of your package
         'Environment :: Console',
         'License :: OSI Approved :: MIT License',   
         'Programming Language :: Python :: 3.8',
