@@ -1,49 +1,61 @@
 #!/usr/bin/env python
-import time
-from adaptive_sampling.sampling_tools.metadynamics import WTM
+from adaptive_sampling.sampling_tools.metaeabf import WTMeABF
 from adaptive_sampling.interface.interfaceMD_2D import *
 from adaptive_sampling.units import *
 
 ################# Imput Section ####################
-
 # MD
-seed = 42
-nsteps = 500000  # number of MD steps
-dt = 5.0e0  # stepsize in fs
-target_temp = 300.0  # Kelvin
-mass = 10.0  # a.u.
-potential = "1"
+seed = 1895912917 
+nsteps = 40000000  # number of MD steps
+dt = 5.0e0  # fs
+target_temp = 300.0     # K
+mass = 10.0
+potential = "2"
 
-ats = [["x", [], 70.0, 170.0, 0.1]]
+# eABF
+ats = [["x", [], -50.0, 50.0, 2.0]] 
+N_full = 100
+f_conf = 500.0
 
+# WTM-eABF
+ext_sigma = 2.0
+ext_mass= 20.0
+mtd_std = 6.0
+grid = True
+height = 1.0
+hill_drop_freq = 20
+WT_dT = 4000
+
+#################### Pre-Loop ####################
 step_count = 0
-coords = [80.0, 0]
+coords = [0.0, 0.0]
 the_md = MD(
     mass_in=mass,
     coords_in=coords,
     potential=potential,
     dt_in=dt,
     target_temp_in=target_temp,
-    seed_in=seed,
+    seed_in=seed
 )
-the_abm = WTM(
-    0.1,
-    2.0,
+the_abm = WTMeABF(
+    ext_sigma,
+    ext_mass,
+    height,
+    mtd_std,
     the_md,
     ats,
-    hill_drop_freq=50,
-    output_freq=10,
+    nfull=N_full,
+    hill_drop_freq=hill_drop_freq,
+    well_tempered_temp=WT_dT,
     force_from_grid=True,
-    well_tempered_temp=3000.0,
-    f_conf=1000,
-    equil_temp=300.0,
+    f_conf=f_conf,
+    output_freq=1000,
+    seed_in=seed,
 )
-#the_abm.restart()
 
 the_md.calc_init()
 the_abm.step_bias()
 the_md.calc_etvp()
-
 
 ################# the MD loop ####################
 print(
@@ -63,8 +75,8 @@ print(
     )
 )
 
+#################### the MD loop ####################
 while step_count < nsteps:
-    start_loop = time.perf_counter()
     the_md.step += 1
     step_count += 1
 

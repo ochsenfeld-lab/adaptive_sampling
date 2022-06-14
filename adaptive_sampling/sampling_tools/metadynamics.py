@@ -3,6 +3,7 @@ from typing import Tuple
 from .enhanced_sampling import EnhancedSampling
 from .utils import diff, sum
 from ..units import *
+from ..processing_tools.thermodynamic_integration import integrate
 
 
 class WTM(EnhancedSampling):
@@ -17,8 +18,9 @@ class WTM(EnhancedSampling):
         hill_std: standard deviation of Gaussian hills in units of the CV (can be Bohr, Degree, or None)
         hill_drop_freq: frequency of hill creation in steps
         well_tempered_temp: effective temperature for WTM, if None, hills are not scaled down (normal metadynamics)
-        force_from_grid: forces are accumulated on grid for performance, 
+        force_from_grid: forces are accumulated on grid for performance (recommended), 
                          if False, forces are calculated from sum of Gaussians in every step 
+        estimator: if "TI", PMF is estimated from integral of bias force, else PMF directly estimated from force
     """
     def __init__(
         self,
@@ -28,6 +30,7 @@ class WTM(EnhancedSampling):
         hill_drop_freq: int = 20,
         well_tempered_temp: float = 3000.0,
         force_from_grid: bool = True,
+        estimator: str = "TI",
         **kwargs,
     ):
         super().__init__(*args, **kwargs)
@@ -50,10 +53,11 @@ class WTM(EnhancedSampling):
         self.hill_height = hill_height / atomic_to_kJmol
         self.hill_std = self.unit_conversion_cv(np.asarray(hill_std))[0]
         self.hill_var = self.hill_std * self.hill_std
-        self.update_freq = int(hill_drop_freq)
+        self.hill_drop_freq = int(hill_drop_freq)
         self.well_tempered_temp = well_tempered_temp
         self.well_tempered = False if well_tempered_temp == None else True
         self.force_from_grid = force_from_grid
+        self.estimator = estimator
 
         self.metapot = np.zeros_like(self.histogram)
         self.center = []
@@ -104,11 +108,21 @@ class WTM(EnhancedSampling):
         return bias_force
 
     def get_pmf(self):
-        self.pmf = -self.metapot * atomic_to_kJmol
+        if self.estimator == "TI" and self.ncoords == 1:
+            # PMF from integration of bias force
+            self.pmf[0, :], _ = integrate(
+                -self.bias[0][0], self.dx, equil_temp=self.equil_temp, method="trapezoid"
+            )
+
+        else:
+            # PMF from bias potential
+            self.pmf = - self.metapot 
+            
         if self.well_tempered:
             self.pmf *= (
                 self.equil_temp + self.well_tempered_temp
             ) / self.well_tempered_temp
+        self.pmf *= atomic_to_kJmol
         self.pmf -= self.pmf.min()
 
     def shared_bias(self):
@@ -116,7 +130,7 @@ class WTM(EnhancedSampling):
         pass
 
     def get_wtm_force(self, xi: np.ndarray) -> list:
-        """compute well-tempered metadynamics bias force from superpossiosion of gaussian hills
+        """compute well-tempered metadynamics bias force from superposition of gaussian hills
 
         Args:
             xi: state of collective variable
@@ -124,7 +138,7 @@ class WTM(EnhancedSampling):
         Returns:
             bias_force: bias force from metadynamics
         """
-        if self.the_md.step % self.update_freq == 0:
+        if self.the_md.step % self.hill_drop_freq == 0:
             self.center.append(xi[0]) if self.ncoords == 1 else self.center.append(xi)
 
         is_in_bounds = (xi <= self.maxx).all() and (xi >= self.minx).all() 
@@ -147,7 +161,7 @@ class WTM(EnhancedSampling):
             bias_force: bias force from metadynamics 
         """
         bink = self.get_index(xi)
-        if self.the_md.step % self.update_freq == 0:
+        if self.the_md.step % self.hill_drop_freq == 0:
             if self.ncoords == 1:
 
                 if self.well_tempered:
@@ -321,7 +335,7 @@ class WTM(EnhancedSampling):
         self.center = data["centers"].tolist()
         
         if self.verbose:
-            print(f" >>> Info: Adaptive sampling restartet from {filename}!")
+            print(f" >>> Info: Adaptive sampling restartet from {filename}.npz!")
 
     def write_traj(self):
         """save trajectory for post-processing"""

@@ -107,8 +107,8 @@ grid = np.arange(minimum, maximum, bin_width)
 cv = traj_dat[:,1]  # trajectory of collective variable
 la = traj_dat[:,2]  # trajectory of extended system
 
-# run MBAR and compute free energy profile and propability density from statistical weights
-traj_list, indices, meta_f = mbar.get_windows(grid, cv, la, sigma, equil_temp=300.0)
+# run MBAR and compute free energy profile and probability density from statistical weights
+traj_list, indices, meta_f = mbar.get_windows(grid, cv, la, ext_sigma, equil_temp=300.0)
 
 weights = mbar.run_mbar(traj_list, meta_f, conv=1.0e-4, conv_errvec=None, outfreq=100, equil_temp=300.0)
 pmf, rho = mbar.pmf_from_weights(grid, cv[indices], weights, equil_temp=300.0)

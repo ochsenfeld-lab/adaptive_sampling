@@ -20,8 +20,6 @@ def integrate(
         pmf (np.ndarray): potential of mean force
         rho (np.ndarray): probability density
     """
-    # R = 8.314 / 1000.0  # kJ / K mol
-    # @AH isn't that one time too many by 1000 ? R in J/K should now be imported from units
     RT = R_in_SI * equil_temp / 1000.0
     data = np.copy(mean_force)
 

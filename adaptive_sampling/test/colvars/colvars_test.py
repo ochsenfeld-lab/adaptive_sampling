@@ -40,10 +40,11 @@ def test_distance_groups():
 
 
 def test_angle():
-    cv = CV(four_particles(), requires_grad=False)
-    f = cv.get_cv("angle", [0, 1, 3])
+    cv = CV(four_particles(), requires_grad=True)
+    f, grad = cv.get_cv("angle", [0, 1, 3])
     f /= np.pi / 180.0
     assert int(f) == 90
+    assert (grad.sum() < 1e-7) 
 
 
 def test_torsion():
