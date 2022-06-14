@@ -321,9 +321,7 @@ class eABF(ABF, EnhancedSampling):
         if self.verbose:
             print(f" >>> Info: Adaptive sampling restartet from {filename}!")
 
-    def write_traj(self):
-        """save trajectory for post-processing"""
-
+    def _write_ext_traj(self):
         data = {}
         for i in range(self.ncoords):
             if self.cv_type[i] == "angle":
@@ -331,6 +329,12 @@ class eABF(ABF, EnhancedSampling):
             elif self.cv_type[i] == "distance":
                 self.ext_traj[:, i] *= BOHR_to_ANGSTROM
             data[f"lambda{i}"] = self.ext_traj[:, i]
+        return data
+
+    def write_traj(self):
+        """save trajectory for post-processing"""
+
+        data = self._write_ext_traj()
         data["Epot [H]"] = self.epot
         data["T [K]"] = self.temp
 

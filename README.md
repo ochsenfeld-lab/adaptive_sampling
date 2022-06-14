@@ -19,7 +19,7 @@ This package implements various sampling algorithms for the calculation of free 
 ## Install:
 To install adaptive_sampling type:
 ```shell
-$ pip install adaptive_sampling
+$ pip install adaptive-sampling
 ```
 
 
