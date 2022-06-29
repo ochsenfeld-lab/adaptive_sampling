@@ -1,7 +1,6 @@
 import numpy as np
-from adaptive_sampling.colvars import CV
 from adaptive_sampling.interface.sampling_data import SamplingData
-
+from adaptive_sampling.colvars import CV
 
 class MD:
     def __init__(self, mass, coords):
@@ -60,3 +59,5 @@ def test_linear_combination():
     print(cv.gradient)
     assert f == 3.0
     assert (cv.gradient == np.asarray([-2, 0, 0, 2, 0, 0, 0, 0, -1, 0, 0, 1])).all()
+
+    

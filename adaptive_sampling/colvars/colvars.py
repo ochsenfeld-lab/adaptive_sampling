@@ -5,7 +5,8 @@ import numpy as np
 from typing import Union, Tuple
 from ..interface.sampling_data import MDInterface
 from ..units import *
-
+from .utils import *
+from .kearsley import Kearsley
 
 class CV:
     """Class for Collective Variables
@@ -33,6 +34,7 @@ class CV:
         self.gradient = None
         self.cv = None
         self.type = "default"
+        self.reference = None
 
     def update_coords(self):
         """The coords tensor and ndarray share the same memory.
@@ -287,6 +289,100 @@ class CV:
 
         return float(self.cv)
 
+    def rmsd(self, cv_def: str) -> float:
+        """rmsd to reference structure
+        
+        Args:
+            cv_def: path to xyz file with reference structure
+
+        Returns:
+            cv: root-mean-square deviation to reference structure
+        """
+        self.update_coords()
+
+        if self.reference == None:
+            self.reference = read_xyz(cv_def)
+            self.kearsley = Kearsley()
+        
+        self.cv = self.kearsley.fit(self.coords, self.reference) 
+        
+        if self.requires_grad:
+            self.gradient = torch.autograd.grad(self.cv, self.coords, allow_unused=True)[0]
+            self.gradient = self.gradient.detach().numpy()
+        
+        return float(self.cv)
+
+    def path_progression(self, cv_def: str, n_interpol: int=0, la: float=1.0):
+        """progression along path
+        
+        see: Branduardui et al., J. Chem. Phys. (2007); https://doi.org/10.1063/1.2432340
+
+        Args:
+            cv_def: path to xyz file with path definition
+            n_interpol: number of interpolated images to between to nodes of path
+            la: lambda parameter to smooth the variation of the path variable
+        Returns:
+            cv: collective variable in range(0,1)
+        """
+        self.update_coords()
+
+        if self.reference == None:
+            images = read_traj(cv_def)
+            self.reference = interpolate_coordinates(images, n_interpol=n_interpol)
+            self.kearsley = Kearsley()
+
+        num = 0
+        denom = 0
+        for i, image in enumerate(self.reference):
+            rmsd = self.kearsley.fit(image, self.coords)
+            exp = torch.exp(-la * rmsd)
+            num += (i+1) * exp
+            denom += exp 
+        
+        self.cv = num / denom / len(self.reference)  # path cv normalized to range(0,1)
+
+        # get forces
+        if self.requires_grad:
+            self.gradient = torch.autograd.grad(self.cv, self.coords, allow_unused=True)[0]
+            self.gradient = self.gradient.detach().numpy()
+        
+        return float(self.cv)
+
+    def path_distance(self, cv_def: str, n_interpol: int=20, la: float=1.0):
+        """distance from path
+        
+        see: Branduardui et al., J. Chem. Phys. (2007); https://doi.org/10.1063/1.2432340
+
+        Args:
+            cv_def: path to xyz file with path definition
+            n_interpol: number of interpolated images to between to nodes of path
+            la: lambda parameter to smooth the variation of the path variable
+
+        Returns:
+            cv: distance from path
+        """
+        self.update_coords()
+
+        if self.reference == None:
+            images = read_traj(cv_def)
+            self.reference = interpolate_coordinates(images, n_interpol=n_interpol)
+            self.kearsley = Kearsley()
+
+        m = 0
+        for image in self.reference:
+            rmsd = self.kearsley.fit(image, self.coords)
+            exp = torch.exp(-la * rmsd)
+            m += exp 
+        
+        self.cv = - (1 / la) * torch.log(m) 
+
+        # get forces
+        if self.requires_grad:
+            self.gradient = torch.autograd.grad(self.cv, self.coords, allow_unused=True)[0]
+            self.gradient = self.gradient.detach().numpy()
+        
+        return float(self.cv)    
+
     def get_cv(self, cv: str, atoms: list, **kwargs) -> Tuple[float, np.ndarray]:
         """get state of collective variable from cv definition of sampling_tools
 
@@ -324,6 +420,15 @@ class CV:
             self.type = None
         elif cv.lower() == "coordination_number":
             xi = self.coordination_number(atoms, **kwargs)
+            self.type = None
+        elif cv.lower() == "rmsd":
+            xi = self.rmsd(atoms)
+            self.type = "distance"
+        elif cv.lower() == "path":
+            xi = self.path_progression(atoms, **kwargs)
+            self.type = None
+        elif cv.lower() == "path_distance":
+            xi = self.path_distance(atoms, **kwargs)
             self.type = None
         else:
             print(" >>> Error in CV: Unknown coordinate")

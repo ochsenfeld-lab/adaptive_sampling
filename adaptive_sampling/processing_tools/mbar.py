@@ -13,7 +13,7 @@ def run_mbar(
     conv_errvec: float = None,
     outfreq: int = 100,
     equil_temp: float = 300.0,
-    dV_list: List[np.ndarray] = None,
+    dU_list: List[np.ndarray] = None,
 ) -> np.ndarray:
     """Self-consistent Multistate Bannett Acceptance Ratio (MBAR)
        
@@ -27,7 +27,7 @@ def run_mbar(
         conv_errvec: Convergence criterion based on the error vector, not used if None, largest absolute value in the error vec
         outfreq: Output frequency during self-consistent iteration
         equil_temp: Temperature of simulation
-        dV_list: optional, list of GaMD boost potentials (has to match frames of traj_list)
+        dU_list: optional, list of GaMD boost potentials (has to match frames of traj_list)
 
     Returns:
         W: array containing statistical weigths of each frame
@@ -39,19 +39,19 @@ def run_mbar(
 
     print("Making Boltzmann factors\n")
     all_frames, num_frames, frames_per_traj = join_frames(traj_list)
-    if dV_list is not None:
-        all_dV, dV_num, dV_per_traj = join_frames(dV_list)
-        all_dV *= atomic_to_kJmol  # kJ/mol
-        if (dV_num != num_frames) or (frames_per_traj != dV_per_traj).all():
-            raise ValueError("GaMD frames have to match eABF frames!")
+    if dU_list is not None:
+        all_dU, dU_num, dU_per_traj = join_frames(dU_list)
+        all_dU *= atomic_to_kJmol  # kJ/mol
+        if (dU_num != num_frames) or (frames_per_traj != dU_per_traj).all():
+            raise ValueError(" >>> Error: GaMD frames have to match eABF frames!")
 
     exp_U = []
     for _, line in enumerate(meta_f):
-        if dV_list:
+        if dU_list:
             exp_U.append(
                 np.exp(
                     -beta
-                    * (all_dV + 0.5 * line[2] * np.power(all_frames - line[1], 2)),
+                    * (all_dU + 0.5 * line[2] * np.power(all_frames - line[1], 2)),
                     dtype=float,
                 )
             )
@@ -158,7 +158,7 @@ def get_windows(
 
     traj_list = []
     index_list = np.array([])
-    for i, center in enumerate(centers):
+    for center in centers:
         indices = np.where(np.logical_and(la >= center - dx2, la < center + dx2))
         index_list = np.append(index_list, indices[0])
         traj_list += [xi[indices]]

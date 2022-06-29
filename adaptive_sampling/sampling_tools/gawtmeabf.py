@@ -59,10 +59,7 @@ class GaWTMeABF(WTMeABF, GaMD, EnhancedSampling):
         (xi, delta_xi) = self.get_cv(**kwargs)
 
         self._propagate()
-        if self.do_wtm:
-            bias_force = self._extended_dynamics(xi, delta_xi, self.hill_std)
-        else:
-            bias_force = self._extended_dynamics(xi, delta_xi)
+        bias_force = self._extended_dynamics(xi, delta_xi)
 
         if md_state.step < self.gamd_init_steps:
             self._update_pot_distribution(epot)
