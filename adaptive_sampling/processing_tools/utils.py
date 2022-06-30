@@ -29,10 +29,10 @@ def boltzmann(u_pot: Union[float, np.ndarray], beta: float) -> Union[float, np.n
 
 def join_frames(traj_list: List[np.array]) -> Tuple[np.ndarray, float, np.ndarray]:
     """get one array with all frames from list of trajectories
-    
+
     Args:
         traj_list: list of trajectories
-    
+
     Returns:
         all_frames: array with all samples
         num_frames: total numper of samples
@@ -74,7 +74,8 @@ def welford_var(
     var = M2 / count if count > 2 else 0.0
     return mean, M2, var
 
-def weighted_hist(grid: np.ndarray, obs:np.ndarray, weights: np.ndarray) -> np.ndarray:
+
+def weighted_hist(grid: np.ndarray, obs: np.ndarray, weights: np.ndarray) -> np.ndarray:
     """get weighted histogram of data
 
     Args:
@@ -87,13 +88,14 @@ def weighted_hist(grid: np.ndarray, obs:np.ndarray, weights: np.ndarray) -> np.n
     """
     weights /= weights.sum()
     hist = np.zeros(len(grid))
-    dx = grid[1]-grid[0]
-    idx = np.arange(0,len(obs),1)
+    dx = grid[1] - grid[0]
+    idx = np.arange(0, len(obs), 1)
     for i, x in enumerate(grid):
-        dat_x = idx[np.where(np.logical_and(obs >= x-dx/2., obs <= x+dx/2.))]
+        dat_x = idx[np.where(np.logical_and(obs >= x - dx / 2.0, obs <= x + dx / 2.0))]
         hist[i] = (obs[dat_x] * weights[dat_x]).sum()
-    hist /= (hist.sum()*dx)
+    hist /= hist.sum() * dx
     return hist
+
 
 def ensemble_average(obs: np.ndarray, weights: np.ndarray) -> tuple:
     """ensemble average of observable
@@ -158,13 +160,13 @@ def reaction_freeE(
 ) -> tuple:
     """calculate free energy difference
        see: Dietschreit et al., J. Chem. Phys. 156, 114105 (2022); https://doi.org/10.1063/5.0083423
- 
+
     Args:
         pmf: potential of mean force (free energy surface)
         T: temperature
         min_bin/max_bin: minimum/maximum bin for search of transition state
         TS: alternatively, bin number of TS
- 
+
     Returns:
         dA (float): free energy difference
         dA_grid (np.ndarray): free energy difference on grid
@@ -200,14 +202,14 @@ def activation_freeE(
 ) -> tuple:
     """calculate activation free energy
        see: Dietschreit et al., J. Chem. Phys. XX, XXX (2022); https://doi.org/XXXX
-    
+
     Args:
         pmf: potential of mean force (free energy surface)
         m_xi_inv: z-conditioned average of inverse mass associates with CV, expected units are xi^2/(au_mass * angstrom^2)
         T: temperature
         min_bin/max_bin: minimum/maximum bin for search of transition state
         TS: alternatively, bin number of TS
-    
+
     Returns:
         dA (float): free energy difference
         dA_grid (np.ndarray): free energy difference on grid

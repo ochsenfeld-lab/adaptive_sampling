@@ -5,21 +5,21 @@ from adaptive_sampling.units import *
 
 ################# Imput Section ####################
 # MD
-seed = 1895912917 
+seed = 1895912917
 nsteps = 40000000  # number of MD steps
 dt = 5.0e0  # fs
-target_temp = 300.0     # K
+target_temp = 300.0  # K
 mass = 10.0
 potential = "2"
 
 # eABF
-ats = [["x", [], -50.0, 50.0, 2.0]] 
+ats = [["x", [], -50.0, 50.0, 2.0]]
 N_full = 100
 f_conf = 500.0
 
 # WTM-eABF
 ext_sigma = 2.0
-ext_mass= 20.0
+ext_mass = 20.0
 mtd_std = 6.0
 grid = True
 height = 1.0
@@ -35,7 +35,7 @@ the_md = MD(
     potential=potential,
     dt_in=dt,
     target_temp_in=target_temp,
-    seed_in=seed
+    seed_in=seed,
 )
 the_abm = WTMeABF(
     ext_sigma,

@@ -11,14 +11,15 @@ else:
 @dataclass
 class SamplingData:
     """The necessary sampling data to perform the enhanced sampling."""
-    mass: np.ndarray    # Masses in atomic units, shape (natoms,)
+
+    mass: np.ndarray  # Masses in atomic units, shape (natoms,)
     coords: np.ndarray  # Cartesian coordinates in Bohr, shape (3 * natoms,)
-    forces: np.ndarray	# Forces in Hartree/Bohr, shape (3 * natoms,)
-    epot: float 		# Potential energy in Hartree
-    temp: float         # Temperature in Kelvin
-    natoms: int         # Number of atoms
-    step: int           # MD step number
-    dt: float           # MD step size in fs
+    forces: np.ndarray  # Forces in Hartree/Bohr, shape (3 * natoms,)
+    epot: float  # Potential energy in Hartree
+    temp: float  # Temperature in Kelvin
+    natoms: int  # Number of atoms
+    step: int  # MD step number
+    dt: float  # MD step size in fs
 
 
 class MDInterface(Protocol):

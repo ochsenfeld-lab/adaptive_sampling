@@ -11,8 +11,8 @@ from ..units import *
 
 
 class EnhancedSampling(ABC):
-    """Abstract class for molecular dynamics based sampling algorithms 
-    
+    """Abstract class for molecular dynamics based sampling algorithms
+
     Args:
         md: Object of the MD Inteface
         cv_def: definition of the Collective Variable (CV) (see adaptive_sampling.colvars)
@@ -64,7 +64,7 @@ class EnhancedSampling(ABC):
         self.traj = np.array([xi])
         self.temp = [md_state.temp]
         self.epot = [md_state.epot]
-        
+
         # get number of bins (1D or 2D)
         self.nbins_per_dim = np.array([1, 1])
         self.grid = []
@@ -246,7 +246,9 @@ class EnhancedSampling(ABC):
         """
         self.the_cv.requires_grad = True
         xi = np.zeros(self.ncoords)
-        grad_xi = np.zeros((self.ncoords, len(self.the_md.get_sampling_data().forces.ravel())))
+        grad_xi = np.zeros(
+            (self.ncoords, len(self.the_md.get_sampling_data().forces.ravel()))
+        )
 
         for i in range(self.ncoords):
             xi[i], grad_xi[i] = self.the_cv.get_cv(self.cv[i], self.atoms[i], **kwargs)
@@ -273,14 +275,16 @@ class EnhancedSampling(ABC):
             m_xi_inv: coordinate dependent mass of collective variabl
         """
         if self.ncoords == 1:
-            return np.dot(delta_xi[0], (1.0 / np.repeat(self.the_md.mass, 3)) * delta_xi[0])
+            return np.dot(
+                delta_xi[0], (1.0 / np.repeat(self.the_md.mass, 3)) * delta_xi[0]
+            )
         else:
             return 0.0
 
     def write_output(self, data: dict, filename="free_energy.dat"):
         """write results to output file
 
-        Args: 
+        Args:
             data: results to write
             filename: name of output file
         """
@@ -314,7 +318,6 @@ class EnhancedSampling(ABC):
                         for dat in data.values():
                             fout.write("%14.6f\t" % dat[i, j])
                         fout.write("\n")
-
 
     def _write_traj(self, data: dict = {}):
         """write trajectory of extended or normal ABF at output times
@@ -354,17 +357,29 @@ class EnhancedSampling(ABC):
                 for n in range(self.out_freq):
                     traj_out.write(
                         "\n%14.6f\t"
-                        % ((step - self.out_freq + n) * self.the_md.get_sampling_data().dt * atomic_to_fs)
+                        % (
+                            (step - self.out_freq + n)
+                            * self.the_md.get_sampling_data().dt
+                            * atomic_to_fs
+                        )
                     )  # time in fs
                     for i in range(len(self.traj[0])):
                         traj_out.write("%14.6f\t" % (self.traj[-self.out_freq + n][i]))
                     for val in data.values():
                         traj_out.write("%14.6f\t" % (val[-self.out_freq + n]))
                     if self.kinetics:
-                        traj_out.write("%14.6f\t" % (self.mass_traj[-self.out_freq + n]))
-                        traj_out.write("%14.6f\t" % (self.abs_forces[-self.out_freq + n]))
-                        traj_out.write("%14.6f\t" % (self.abs_grad_xi[-self.out_freq + n]))
-                        traj_out.write("%14.6f\t" % (self.CV_crit_traj[-self.out_freq + n]))
+                        traj_out.write(
+                            "%14.6f\t" % (self.mass_traj[-self.out_freq + n])
+                        )
+                        traj_out.write(
+                            "%14.6f\t" % (self.abs_forces[-self.out_freq + n])
+                        )
+                        traj_out.write(
+                            "%14.6f\t" % (self.abs_grad_xi[-self.out_freq + n])
+                        )
+                        traj_out.write(
+                            "%14.6f\t" % (self.CV_crit_traj[-self.out_freq + n])
+                        )
 
     def _write_restart(self, filename, **kwargs):
         """save **kwargs in .npz file"""

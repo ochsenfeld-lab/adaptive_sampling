@@ -9,10 +9,10 @@ from adaptive_sampling.units import *
 
 # MD
 seed = 42
-nsteps = 1100000    # number of MD steps
-dt = 5.0e0          # stepsize in fs
-target_temp = 300.0 # Kelvin
-mass = 10.0         # a.u.
+nsteps = 1100000  # number of MD steps
+dt = 5.0e0  # stepsize in fs
+target_temp = 300.0  # Kelvin
+mass = 10.0  # a.u.
 potential = "1"
 
 # eABF

@@ -1,22 +1,23 @@
 import torch
 from scipy.spatial.transform import Rotation
 
-class Kearsley():
-    '''
+
+class Kearsley:
+    """
     A Kearsley transformation.
     Algorithm to minimize the sum of the squared distances between two sets of points.
     Author: Simon K. Kearsley
     Paper: "On the orthogonal transformation used for structural comparisons"
     https://doi.org/10.1107/S0108767388010128
-    
+
     Args:
         rot: Rotation
              A scipy.spatial.transform Rotation in 3 dimensions.
         trans: ndarray, shape (3,)
              The 3D translation.
-    
+
     Examples:
-    
+
     Given two sets of 3D points u and v:
     >>> u
     array([[0, 0, 0],
@@ -47,7 +48,7 @@ class Kearsley():
            [ 0.38899835, -0.9191329 ,  0.06224948]])
     >>> k.trans
     array([ 30.46560753, -20.15086287,  -7.34422276])
-    
+
     Once fitted you can apply the transformation:
     >>> v_transform = k.transform(v)
     >>> v_transform
@@ -70,82 +71,60 @@ class Kearsley():
            [ 9.0219524 ,  9.067236  ,  7.08333594],
            [ 9.06692944,  8.9276801 ,  7.95255679],
            [ 8.92463409,  8.93635832,  8.95139744]])
-    '''
+    """
 
-    def __init__(self, requires_grad: bool=True):
-        '''The attributes are filled with a rotation of zero degrees and a translation of zero. 
-        '''
+    def __init__(self, requires_grad: bool = True):
+        """The attributes are filled with a rotation of zero degrees and a translation of zero."""
         self.requires_grad = requires_grad
         self.rot = Rotation.from_quat([0, 0, 0, 1])
         self.trans = torch.zeros(3)
 
     def _kearsley_matrix(self, x: torch.tensor, y: torch.tensor) -> torch.tensor:
-        '''
+        """
         Calculates the Kearsley matrix.
-        
+
         Args:
             x: shape (N, 3), Input array with 3D points, centered at zero.
             y: shape (N, 3), Input array with 3D points, centered at zero.
-        
+
         Returns:
             K: shape (4, 4), The Kearsley matrix.
-        '''
+        """
         # diff and sum quantities
         d, s = x - y, x + y
 
         # extract columns to simplify notation
-        d0, d1, d2 = d[:,0], d[:,1], d[:,2]
-        s0, s1, s2 = s[:,0], s[:,1], s[:,2]
+        d0, d1, d2 = d[:, 0], d[:, 1], d[:, 2]
+        s0, s1, s2 = s[:, 0], s[:, 1], s[:, 2]
 
         # fill kearsley matrix
         K = torch.zeros((4, 4))
-        K[0,0] = torch.matmul(d0, d0) + torch.matmul(d1, d1) + torch.matmul(d2, d2)
-        K[1,0] = torch.matmul(s1, d2) - torch.matmul(d1, s2)
-        K[2,0] = torch.matmul(d0, s2) - torch.matmul(s0, d2)
-        K[3,0] = torch.matmul(s0, d1) - torch.matmul(d0, s1)
-        K[1,1] = torch.matmul(s1, s1) + torch.matmul(s2, s2) + torch.matmul(d0, d0)
-        K[2,1] = torch.matmul(d0, d1) - torch.matmul(s0, s1)
-        K[3,1] = torch.matmul(d0, d2) - torch.matmul(s0, s2)
-        K[2,2] = torch.matmul(s0, s0) + torch.matmul(s2, s2) + torch.matmul(d1, d1)
-        K[3,2] = torch.matmul(d1, d2) - torch.matmul(s1, s2)
-        K[3,3] = torch.matmul(s0, s0) + torch.matmul(s1, s1) + torch.matmul(d2, d2)
+        K[0, 0] = torch.matmul(d0, d0) + torch.matmul(d1, d1) + torch.matmul(d2, d2)
+        K[1, 0] = torch.matmul(s1, d2) - torch.matmul(d1, s2)
+        K[2, 0] = torch.matmul(d0, s2) - torch.matmul(s0, d2)
+        K[3, 0] = torch.matmul(s0, d1) - torch.matmul(d0, s1)
+        K[1, 1] = torch.matmul(s1, s1) + torch.matmul(s2, s2) + torch.matmul(d0, d0)
+        K[2, 1] = torch.matmul(d0, d1) - torch.matmul(s0, s1)
+        K[3, 1] = torch.matmul(d0, d2) - torch.matmul(s0, s2)
+        K[2, 2] = torch.matmul(s0, s0) + torch.matmul(s2, s2) + torch.matmul(d1, d1)
+        K[3, 2] = torch.matmul(d1, d2) - torch.matmul(s1, s2)
+        K[3, 3] = torch.matmul(s0, s0) + torch.matmul(s1, s1) + torch.matmul(d2, d2)
 
         return K
 
-    def transform(self, u: torch.matmul) -> torch.matmul:
-        '''
-        Transforms a list of 3D points with a rotation and a translation.
-
-        Args:
-            u: shape (N, 3), Input array with 3D points.
-        
-        Returns:
-            t: shape (N, 3), Input points transformed.
-        
-        Raises:
-            ValueError: If the input points don't have the correct shape.
-        '''
-        if len(u.size(dim=0)) != 2:
-            raise ValueError('Input array must have 2 dimensions')
-
-        if u.sizre(dim=1) != 3:
-            raise ValueError('Input array must have 3 columns')
-
-        return self.rot.apply(u - self.trans)
-
     def fit(self, u: torch.tensor, v: torch.tensor) -> torch.tensor:
-        '''
+        """
         Calculates the rotation and translation that best fits both sets of points.
 
         Args:
             u: shape (3*N,), Input array with 3D points.
             v: shape (3*N,), Input array with 3D points.
-        
+
         Returns:
             rmsd: The root mean squared deviation.
-        '''
-        u_r = torch.reshape(u, (int(len(u)/3),3))
-        v_r = torch.reshape(v, (int(len(v)/3),3))
+        """
+        u_r = torch.reshape(u, (int(len(u) / 3), 3))
+        v_r = torch.reshape(v, (int(len(v) / 3), 3))
 
         # centroids
         centroid_u = u_r.mean(axis=0)
@@ -162,35 +141,56 @@ class Kearsley():
 
         # calculate rotation and translation
         if self.requires_grad == False:
-            q = eig_vecs[:,0]
+            q = eig_vecs[:, 0]
             q = torch.roll(q, 3)
-            
-            # this breaks autograd!
+
+            # this would break autograd!
             self.rot = Rotation.from_quat(q).inv()
             self.trans = centroid_v - self.rot.inv().apply(centroid_u)
 
         # calculate rmsd
         eig_val = torch.abs(eig_vals[0])
-        rmsd = torch.sqrt(eig_val/u_r.size(dim=0))
+        rmsd = torch.sqrt(eig_val / u_r.size(dim=0))
 
         return rmsd
 
+    def transform(self, u: torch.matmul) -> torch.matmul:
+        """
+        Transforms a list of 3D points with a rotation and a translation.
+
+        Args:
+            u: shape (N, 3), Input array with 3D points.
+
+        Returns:
+            t: shape (N, 3), Input points transformed.
+
+        Raises:
+            ValueError: If the input points don't have the correct shape.
+        """
+        if len(u.size(dim=0)) != 2:
+            raise ValueError("Input array must have 2 dimensions")
+
+        if u.sizre(dim=1) != 3:
+            raise ValueError("Input array must have 3 columns")
+
+        return self.rot.apply(u - self.trans)
+
     def fit_transform(self, u: torch.tensor, v: torch.tensor) -> tuple:
-        '''
+        """
         Calculates the rotation and translation that best fits both sets of points and
         applies the transformation to the second set.
-        
+
         Args:
             u: shape (N, 3), Input array with 3D points.
             v: shape (N, 3), Input array with 3D points.
-        
+
         Returns:
             array: shape (N, 3), Input points transformed.
             rmsd: The root mean squared deviation.
 
         Raises:
             ValueError: If the input points don't have the correct shape, or don't have the same number of points.
-        '''
+        """
         self.requires_grad = False
         rmsd = self.fit(u, v)
         return self.transform(v), rmsd

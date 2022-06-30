@@ -8,7 +8,7 @@ from ..units import *
 
 class WTMeABF(eABF, WTM, EnhancedSampling):
     """Well-Tempered Metadynamics extended-system Adaptive Biasing Force method
-       
+
        see: Fu et. al., J. Phys. Chem. Lett. (2018); https://doi.org/10.1021/acs.jpclett.8b01994
 
     The collective variable is coupled to a fictitious particle with an harmonic force.
@@ -17,7 +17,7 @@ class WTMeABF(eABF, WTM, EnhancedSampling):
     Args:
         ext_sigma: thermal width of coupling between collective and extended variable
         ext_mass: mass of extended variable in atomic units
-        nfull: Number of force samples per bin where full bias is applied, 
+        nfull: Number of force samples per bin where full bias is applied,
                if nsamples < nfull the bias force is scaled down by nsamples/nfull
         hill_height: height of Gaussian hills in kJ/mol
         hill_std: standard deviation of Gaussian hills in units of the CV (can be Bohr, Degree, or None)
@@ -28,15 +28,16 @@ class WTMeABF(eABF, WTM, EnhancedSampling):
         seed_in: random seed for Langevin dynamics of extended-system
         hill_drop_freq: frequency of hill creation in steps
         well_tempered_temp: effective temperature for WTM, if None, hills are not scaled down (normal metadynamics)
-        force_from_grid: forces are accumulated on grid for performance, 
-                         if False, forces are calculated from sum of Gaussians in every step 
+        force_from_grid: forces are accumulated on grid for performance,
+                         if False, forces are calculated from sum of Gaussians in every step
         equil_temp: equillibrium temperature of MD
         verbose: print verbose information
         kinetice: calculate necessary data to obtain kinetics of reaction
         f_conf: force constant for confinement of system to the range of interest in CV space
         output_freq: frequency in steps for writing outputs
-        
+
     """
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.abf_forces = np.zeros_like(self.bias)
@@ -48,7 +49,7 @@ class WTMeABF(eABF, WTM, EnhancedSampling):
         self._propagate()
 
         mtd_forces = self.get_wtm_force(self.ext_coords)
-        bias_force = self._extended_dynamics(xi, delta_xi) #, self.hill_std)
+        bias_force = self._extended_dynamics(xi, delta_xi)  # , self.hill_std)
 
         if (self.ext_coords <= self.maxx).all() and (
             self.ext_coords >= self.minx
@@ -75,8 +76,7 @@ class WTMeABF(eABF, WTM, EnhancedSampling):
                     self.ext_hist[bink[1], bink[0]],
                     self.abf_forces[i][bink[1], bink[0]],
                     self.m2_force[i][bink[1], bink[0]],
-                    self.ext_k[i] 
-                    * diff(self.ext_coords[i], xi[i], self.cv_type[i]),
+                    self.ext_k[i] * diff(self.ext_coords[i], xi[i], self.cv_type[i]),
                 )
                 self.ext_forces -= (
                     ramp * self.abf_forces[i][bink[1], bink[0]] - mtd_forces[i]
@@ -121,7 +121,7 @@ class WTMeABF(eABF, WTM, EnhancedSampling):
                     output[f"abf force {i}"] = self.abf_forces[i]
                     output[f"czar force {i}"] = self.czar_force[i]
                     # TODO: output variance of CZAR for error estimate
-                    #output[f"var force {i}"] = self.var_force[i]
+                    # output[f"var force {i}"] = self.var_force[i]
                 output[f"metapot"] = self.metapot
 
                 self.write_output(output, filename="wtmeabf.out")
@@ -175,7 +175,6 @@ class WTMeABF(eABF, WTM, EnhancedSampling):
 
         if self.verbose:
             print(f" >>> Info: Adaptive sampling restartet from {filename}!")
-
 
     def write_traj(self):
         """save trajectory for post-processing"""

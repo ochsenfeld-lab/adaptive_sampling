@@ -29,9 +29,7 @@ the_md = MD(
     target_temp_in=target_temp,
     seed_in=seed,
 )
-the_abm = ABF(
-    the_md, ats, output_freq=1000, f_conf=100, equil_temp=300.0
-)
+the_abm = ABF(the_md, ats, output_freq=1000, f_conf=100, equil_temp=300.0)
 # the_abm.restart()
 
 the_md.calc_init()

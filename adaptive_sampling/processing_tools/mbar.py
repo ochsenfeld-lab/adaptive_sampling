@@ -16,7 +16,7 @@ def run_mbar(
     dU_list: List[np.ndarray] = None,
 ) -> np.ndarray:
     """Self-consistent Multistate Bannett Acceptance Ratio (MBAR)
-       
+
        see: Shirts et. al., J. Chem. Phys. (2008); https://doi.org/10.1063/1.2978177
 
     Args:
@@ -89,7 +89,10 @@ def run_mbar(
         max_err_vec = np.abs(_error_vec(frames_per_traj, beta_Ai, exp_U)).max()
 
         if count % outfreq == 0 or count == 1:
-            print("Iter %4d:\tConv=%14.10f\tConv_errvec=%14.6f" % (count, np.max(delta_Ai[1:]), max_err_vec))
+            print(
+                "Iter %4d:\tConv=%14.10f\tConv_errvec=%14.6f"
+                % (count, np.max(delta_Ai[1:]), max_err_vec)
+            )
             sys.stdout.flush()
 
         if conv_errvec == None:
@@ -123,7 +126,7 @@ def run_mbar(
 
     # final values
     weights = np.multiply(frames_per_traj * np.exp(beta_Ai), exp_U.T)
-    weights = 1.0 / np.sum(weights, axis=1) 
+    weights = 1.0 / np.sum(weights, axis=1)
 
     return weights
 
@@ -224,9 +227,7 @@ def deltaf_from_weights(
 
 
 def _error_vec(
-    n_frames: np.ndarray, 
-    beta_Ai: np.ndarray, 
-    exp_U: np.ndarray
+    n_frames: np.ndarray, beta_Ai: np.ndarray, exp_U: np.ndarray
 ) -> np.ndarray:
     """error vector for MBAR"""
     denominator = np.multiply(n_frames * np.exp(beta_Ai), exp_U.T)

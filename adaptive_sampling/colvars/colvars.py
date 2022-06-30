@@ -8,6 +8,7 @@ from ..units import *
 from .utils import *
 from .kearsley import Kearsley
 
+
 class CV:
     """Class for Collective Variables
 
@@ -54,14 +55,16 @@ class CV:
         """
         if hasattr(atoms, "__len__"):
             # compute center of mass for group of atoms
-            center = torch.matmul(self.coords.view((self.natoms, 3))[atoms].T, self.mass[atoms])
+            center = torch.matmul(
+                self.coords.view((self.natoms, 3))[atoms].T, self.mass[atoms]
+            )
             m_tot = self.mass[atoms].sum()
             com = center / m_tot
 
         else:
             # only one atom
             atom = int(atoms)
-            com = self.coords[3*atom : 3*atom+3]
+            com = self.coords[3 * atom : 3 * atom + 3]
 
         return com
 
@@ -70,9 +73,11 @@ class CV:
         self.update_coords()
         self.cv = self.coords[0]
         if self.requires_grad:
-            self.gradient = torch.autograd.grad(self.cv, self.coords, allow_unused=True)[0]
+            self.gradient = torch.autograd.grad(
+                self.cv, self.coords, allow_unused=True
+            )[0]
             self.gradient = self.gradient.detach().numpy()
-            
+
         return float(self.cv)
 
     def y(self) -> float:
@@ -80,9 +85,11 @@ class CV:
         self.update_coords()
         self.cv = self.coords[1]
         if self.requires_grad:
-            self.gradient = torch.autograd.grad(self.cv, self.coords, allow_unused=True)[0]
+            self.gradient = torch.autograd.grad(
+                self.cv, self.coords, allow_unused=True
+            )[0]
             self.gradient = self.gradient.detach().numpy()
-            
+
         return float(self.cv)
 
     def distance(self, cv_def: list) -> float:
@@ -112,7 +119,9 @@ class CV:
 
         # get forces
         if self.requires_grad:
-            self.gradient = torch.autograd.grad(self.cv, self.coords, allow_unused=True)[0]
+            self.gradient = torch.autograd.grad(
+                self.cv, self.coords, allow_unused=True
+            )[0]
             self.gradient = self.gradient.detach().numpy()
 
         return float(self.cv)
@@ -153,7 +162,9 @@ class CV:
 
         # get forces
         if self.requires_grad:
-            self.gradient = torch.autograd.grad(self.cv, self.coords, allow_unused=True)[0]
+            self.gradient = torch.autograd.grad(
+                self.cv, self.coords, allow_unused=True
+            )[0]
             self.gradient = self.gradient.detach().numpy()
 
         return float(self.cv)
@@ -198,7 +209,9 @@ class CV:
 
         # get forces
         if self.requires_grad:
-            self.gradient = torch.autograd.grad(self.cv, self.coords, allow_unused=True)[0]
+            self.gradient = torch.autograd.grad(
+                self.cv, self.coords, allow_unused=True
+            )[0]
             self.gradient = self.gradient.detach().numpy()
 
         return float(self.cv)
@@ -273,10 +286,10 @@ class CV:
 
         # get distance
         r12 = p2 - p1
-        norm = torch.linalg.norm(r12, dtype=torch.float) 
+        norm = torch.linalg.norm(r12, dtype=torch.float)
         # to prevent numerical instability
         if norm == r_0:
-            d = norm / (r_0*1.000001)
+            d = norm / (r_0 * 1.000001)
         else:
             d = norm / r_0
 
@@ -284,14 +297,16 @@ class CV:
 
         # get forces
         if self.requires_grad:
-            self.gradient = torch.autograd.grad(self.cv, self.coords, allow_unused=True)[0]
+            self.gradient = torch.autograd.grad(
+                self.cv, self.coords, allow_unused=True
+            )[0]
             self.gradient = self.gradient.detach().numpy()
 
         return float(self.cv)
 
     def rmsd(self, cv_def: str) -> float:
         """rmsd to reference structure
-        
+
         Args:
             cv_def: path to xyz file with reference structure
 
@@ -303,18 +318,20 @@ class CV:
         if self.reference == None:
             self.reference = read_xyz(cv_def)
             self.kearsley = Kearsley()
-        
-        self.cv = self.kearsley.fit(self.coords, self.reference) 
-        
+
+        self.cv = self.kearsley.fit(self.coords, self.reference)
+
         if self.requires_grad:
-            self.gradient = torch.autograd.grad(self.cv, self.coords, allow_unused=True)[0]
+            self.gradient = torch.autograd.grad(
+                self.cv, self.coords, allow_unused=True
+            )[0]
             self.gradient = self.gradient.detach().numpy()
-        
+
         return float(self.cv)
 
-    def path_progression(self, cv_def: str, n_interpol: int=0, la: float=1.0):
+    def path_progression(self, cv_def: str, n_interpol: int = 0, la: float = 1.0):
         """progression along path
-        
+
         see: Branduardui et al., J. Chem. Phys. (2007); https://doi.org/10.1063/1.2432340
 
         Args:
@@ -336,21 +353,23 @@ class CV:
         for i, image in enumerate(self.reference):
             rmsd = self.kearsley.fit(image, self.coords)
             exp = torch.exp(-la * rmsd)
-            num += (i+1) * exp
-            denom += exp 
-        
+            num += (i + 1) * exp
+            denom += exp
+
         self.cv = num / denom / len(self.reference)  # path cv normalized to range(0,1)
 
         # get forces
         if self.requires_grad:
-            self.gradient = torch.autograd.grad(self.cv, self.coords, allow_unused=True)[0]
+            self.gradient = torch.autograd.grad(
+                self.cv, self.coords, allow_unused=True
+            )[0]
             self.gradient = self.gradient.detach().numpy()
-        
+
         return float(self.cv)
 
-    def path_distance(self, cv_def: str, n_interpol: int=20, la: float=1.0):
+    def path_distance(self, cv_def: str, n_interpol: int = 20, la: float = 1.0):
         """distance from path
-        
+
         see: Branduardui et al., J. Chem. Phys. (2007); https://doi.org/10.1063/1.2432340
 
         Args:
@@ -372,22 +391,24 @@ class CV:
         for image in self.reference:
             rmsd = self.kearsley.fit(image, self.coords)
             exp = torch.exp(-la * rmsd)
-            m += exp 
-        
-        self.cv = - (1 / la) * torch.log(m) 
+            m += exp
+
+        self.cv = -(1 / la) * torch.log(m)
 
         # get forces
         if self.requires_grad:
-            self.gradient = torch.autograd.grad(self.cv, self.coords, allow_unused=True)[0]
+            self.gradient = torch.autograd.grad(
+                self.cv, self.coords, allow_unused=True
+            )[0]
             self.gradient = self.gradient.detach().numpy()
-        
-        return float(self.cv)    
+
+        return float(self.cv)
 
     def get_cv(self, cv: str, atoms: list, **kwargs) -> Tuple[float, np.ndarray]:
         """get state of collective variable from cv definition of sampling_tools
 
         Args:
-            cv: type of CV 
+            cv: type of CV
             atoms: indices of atoms
 
         Returns:

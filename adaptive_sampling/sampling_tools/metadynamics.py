@@ -8,7 +8,7 @@ from ..processing_tools.thermodynamic_integration import integrate
 
 class WTM(EnhancedSampling):
     """Well-Tempered Metadynamics
-       
+
        see: Barducci et. al., Phys. rev. lett. (2008); https://doi.org/10.1103/PhysRevLett.100.020603
 
     An repulsive biasing potential is built by a superposition of Gaussian hills along the reaction coordinate.
@@ -18,10 +18,11 @@ class WTM(EnhancedSampling):
         hill_std: standard deviation of Gaussian hills in units of the CV (can be Bohr, Degree, or None)
         hill_drop_freq: frequency of hill creation in steps
         well_tempered_temp: effective temperature for WTM, if None, hills are not scaled down (normal metadynamics)
-        force_from_grid: forces are accumulated on grid for performance (recommended), 
-                         if False, forces are calculated from sum of Gaussians in every step 
+        force_from_grid: forces are accumulated on grid for performance (recommended),
+                         if False, forces are calculated from sum of Gaussians in every step
         estimator: if "TI", PMF is estimated from integral of bias force, else PMF directly estimated from force
     """
+
     def __init__(
         self,
         hill_height: float,
@@ -78,7 +79,7 @@ class WTM(EnhancedSampling):
             for i in range(self.ncoords):
                 bias_force += mtd_force[i] * delta_xi[i]
 
-        bias_force += self.harmonic_walls(xi, delta_xi)  #, 1.6 * self.hill_std)
+        bias_force += self.harmonic_walls(xi, delta_xi)  # , 1.6 * self.hill_std)
 
         self.traj = np.append(self.traj, [xi], axis=0)
         self.temp.append(md_state.temp)
@@ -97,7 +98,7 @@ class WTM(EnhancedSampling):
             if write_output:
                 self.get_pmf()
                 output = {
-                    "hist": self.histogram, 
+                    "hist": self.histogram,
                     "free energy": self.pmf,
                     "metapot": self.metapot * atomic_to_kJmol,
                 }
@@ -111,13 +112,16 @@ class WTM(EnhancedSampling):
         if self.estimator == "TI" and self.ncoords == 1:
             # PMF from integration of bias force
             self.pmf[0, :], _ = integrate(
-                -self.bias[0][0], self.dx, equil_temp=self.equil_temp, method="trapezoid"
+                -self.bias[0][0],
+                self.dx,
+                equil_temp=self.equil_temp,
+                method="trapezoid",
             )
 
         else:
             # PMF from bias potential
-            self.pmf = - self.metapot 
-            
+            self.pmf = -self.metapot
+
         if self.well_tempered:
             self.pmf *= (
                 self.equil_temp + self.well_tempered_temp
@@ -141,11 +145,11 @@ class WTM(EnhancedSampling):
         if self.the_md.step % self.hill_drop_freq == 0:
             self.center.append(xi[0]) if self.ncoords == 1 else self.center.append(xi)
 
-        is_in_bounds = (xi <= self.maxx).all() and (xi >= self.minx).all() 
+        is_in_bounds = (xi <= self.maxx).all() and (xi >= self.minx).all()
         bias_force = [0, 0]
         if is_in_bounds:
             bias_force = self._accumulate_wtm_force(xi)
-            
+
         if not is_in_bounds or not self.force_from_grid:
             bias_force, _ = self._analytic_wtm_force(xi)
 
@@ -153,12 +157,12 @@ class WTM(EnhancedSampling):
 
     def _accumulate_wtm_force(self, xi: np.ndarray) -> list:
         """accumulate metadynamics potential and its gradient on grid
-        
+
         Args:
             xi: state of collective variable
 
         Returns:
-            bias_force: bias force from metadynamics 
+            bias_force: bias force from metadynamics
         """
         bink = self.get_index(xi)
         if self.the_md.step % self.hill_drop_freq == 0:
@@ -181,7 +185,9 @@ class WTM(EnhancedSampling):
 
             else:
                 # TODO: implement for 2D
-                raise NotImplementedError(" >>> Error: metadynamics currently only supported for 1D coordinates")
+                raise NotImplementedError(
+                    " >>> Error: metadynamics currently only supported for 1D coordinates"
+                )
 
         return [self.bias[i][bink[1], bink[0]] for i in range(self.ncoords)]
 
@@ -190,28 +196,28 @@ class WTM(EnhancedSampling):
 
         Args:
             xi: state of collective variable
-        
+
         Returns:
-            bias_force: bias force from metadynamics 
+            bias_force: bias force from metadynamics
         """
         local_pot = 0.0
         bias_force = [0.0 for _ in range(self.ncoords)]
-            
+
         if len(self.center) == 0:
             if self.verbose:
                 print(" >>> Warning: no metadynamics hills stored")
             return bias_force
 
         if self.ncoords == 1:
-                
+
             dx = diff(xi[0], np.asarray(self.center), self.cv_type[0])
             ind = np.ma.indices((len(self.center),))[0]
-            ind = np.ma.masked_array(ind)    
+            ind = np.ma.masked_array(ind)
             ind[abs(dx) > 3 * self.hill_std[0]] = np.ma.masked
-            
+
             # can get slow in long run, so only iterate over significant elements
             for i in np.nditer(ind.compressed(), flags=["zerosize_ok"]):
-                    
+
                 if self.well_tempered:
                     w = self.hill_height * np.exp(
                         -local_pot / (kB_in_atomic * self.well_tempered_temp)
@@ -223,18 +229,20 @@ class WTM(EnhancedSampling):
                 local_pot += epot
                 bias_force[0] -= epot * dx[i] / self.hill_var[0]
 
-                local_pot, bias_force = self._smooth_boundary_analytic(xi, w, self.center[i], local_pot, bias_force)
+                local_pot, bias_force = self._smooth_boundary_analytic(
+                    xi, w, self.center[i], local_pot, bias_force
+                )
         else:
             # TODO: implement for 2D
             pass
-        
+
         return bias_force, local_pot
 
     def _smooth_boundary_grid(self, xi: np.ndarray, w: float):
         """ensures linear profile of bias potential at boundary
 
-        see: Crespo et al. (2010), https://doi.org/10.1103/PhysRevE.81.055701           
-        
+        see: Crespo et al. (2010), https://doi.org/10.1103/PhysRevE.81.055701
+
         Args:
             xi: Collective variable
         """
@@ -259,7 +267,7 @@ class WTM(EnhancedSampling):
             else:
                 # TODO: scale height of hills to ensure flat potential at boundary
                 pass
-            
+
             for dx, W in zip(dx_list, w_list):
                 epot = W * np.exp(-(dx * dx) / (2.0 * self.hill_var[0]))
                 self.metapot[0] += epot
@@ -272,11 +280,11 @@ class WTM(EnhancedSampling):
     def _smooth_boundary_analytic(self, xi, w, center, local_pot, bias_force):
         """ensures linear profile at boundary
 
-        see: Crespo et al. (2010), https://doi.org/10.1103/PhysRevE.81.055701           
-        
+        see: Crespo et al. (2010), https://doi.org/10.1103/PhysRevE.81.055701
+
         Args:
             xi: Collective variable
-        """  
+        """
         chi1 = 3.0 * self.hill_std
 
         if self.ncoords == 1:
@@ -299,7 +307,7 @@ class WTM(EnhancedSampling):
             else:
                 # TODO: scale height of hills to ensure flat potential at boundary
                 pass
-        
+
         return local_pot, bias_force
 
     def write_restart(self, filename: str = "restart_wtm"):
@@ -333,7 +341,7 @@ class WTM(EnhancedSampling):
         self.bias = data["force"]
         self.metapot = data["metapot"]
         self.center = data["centers"].tolist()
-        
+
         if self.verbose:
             print(f" >>> Info: Adaptive sampling restartet from {filename}.npz!")
 

@@ -9,7 +9,7 @@ from .enhanced_sampling import EnhancedSampling
 class Reference(EnhancedSampling):
     """Unbiased simulation with restraint to region of interest in cv space with harmonic walls
     Can be used for equilibration prior to production or free energy estimation from unbiased simulation
-    
+
     Args:
         md: Object of the MD Inteface
         cv_def: definition of the Collective Variable (CV) (see adaptive_sampling.colvars)
@@ -20,6 +20,7 @@ class Reference(EnhancedSampling):
         f_conf: force constant for confinement of system to the range of interest in CV space
         output_freq: frequency in steps for writing outputs
     """
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
@@ -69,7 +70,8 @@ class Reference(EnhancedSampling):
     def get_pmf(self) -> np.ndarray:
         """get free energy profile from histogram"""
         self.pmf = (
-            -R_in_SI / 1000.0   # kJ/mol
+            -R_in_SI
+            / 1000.0  # kJ/mol
             * self.equil_temp
             * np.log(
                 self.histogram,
@@ -149,7 +151,7 @@ class Reference(EnhancedSampling):
 
         self.histogram = data["hist"]
         self.pmf = data["pmf"]
-        
+
         if self.verbose:
             print(f" >>> Info: Sampling restartet from {filename}!")
 

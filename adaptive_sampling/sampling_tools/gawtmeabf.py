@@ -20,7 +20,7 @@ class GaWTMeABF(WTMeABF, GaMD, EnhancedSampling):
         ext_sigma: thermal width of coupling between collective and extended variable
         ext_mass: mass of extended variable in atomic units
 
-        nfull: Number of force samples per bin where full bias is applied, 
+        nfull: Number of force samples per bin where full bias is applied,
                if nsamples < nfull the bias force is scaled down by nsamples/nfull
         friction: friction coefficient for Lagevin dynamics of the extended-system
         seed_in: random seed for Langevin dynamics of extended-system
@@ -36,8 +36,8 @@ class GaWTMeABF(WTMeABF, GaMD, EnhancedSampling):
         do_wtm: if False, no metadynamics potential is applied (Gaussian-accelerated eABF)
         hill_drop_freq: frequency of hill creation in steps
         well_tempered_temp: effective temperature for WTM, if None, hills are not scaled down (normal metadynamics)
-        force_from_grid: forces are accumulated on grid for performance, 
-                         if False, forces are calculated from sum of Gaussians in every step 
+        force_from_grid: forces are accumulated on grid for performance,
+                         if False, forces are calculated from sum of Gaussians in every step
         gamd_bound: "lower": use lower bound for GaMD boost
                     "upper: use upper bound for GaMD boost
         equil_temp: equillibrium temperature of MD
@@ -46,7 +46,8 @@ class GaWTMeABF(WTMeABF, GaMD, EnhancedSampling):
         f_conf: force constant for confinement of system to the range of interest in CV space
         output_freq: frequency in steps for writing output
     """
-    def __init__(self, *args, do_wtm: bool=True, **kwargs):
+
+    def __init__(self, *args, do_wtm: bool = True, **kwargs):
         super().__init__(*args, **kwargs)
         self.do_wtm = do_wtm
 
@@ -111,10 +112,8 @@ class GaWTMeABF(WTMeABF, GaMD, EnhancedSampling):
                             self.ext_k[i]
                             * diff(self.ext_coords[i], xi[i], self.cv_type[i]),
                         )
-                        self.ext_forces -= (
-                            ramp * self.abf_forces[i][bink[1], bink[0]] 
-                        )
-                        
+                        self.ext_forces -= ramp * self.abf_forces[i][bink[1], bink[0]]
+
                         if self.do_wtm:
                             self.ext_forces += mtd_forces[i]
 
@@ -184,13 +183,13 @@ class GaWTMeABF(WTMeABF, GaMD, EnhancedSampling):
         )
         avg_force = cond_avg(self.correction_czar, self.histogram)
 
-        self.gamd_corr = - self.gamd_c1 - self.gamd_c2 / (
+        self.gamd_corr = -self.gamd_c1 - self.gamd_c2 / (
             2.0 * kB_in_atomic * self.equil_temp
         )
 
         if self.ncoords == 1:
             self.czar_force[0] = (
-                - kB_in_atomic * self.equil_temp * np.gradient(log_rho[0], self.grid[0])
+                -kB_in_atomic * self.equil_temp * np.gradient(log_rho[0], self.grid[0])
                 + avg_force[0]
             )
             self.pmf[0, :], _ = integrate(
@@ -281,7 +280,7 @@ class GaWTMeABF(WTMeABF, GaMD, EnhancedSampling):
         self.pot_min = data["pot_min"]
         self.pot_max = data["pot_max"]
         self.k0 = data["k0"]
-        
+
         if self.verbose:
             print(f" >>> Info: Adaptive sampling restartet from {filename}!")
 

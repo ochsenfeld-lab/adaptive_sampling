@@ -35,13 +35,7 @@ the_md = MD(
 ext_sigma = 2.0
 ext_mass = 20.0
 the_abm = eABF(
-    ext_sigma, 
-    ext_mass, 
-    the_md, 
-    ats, 
-    output_freq=10, 
-    f_conf=100, 
-    equil_temp=300.0
+    ext_sigma, ext_mass, the_md, ats, output_freq=10, f_conf=100, equil_temp=300.0
 )
 # the_abm.restart()
 

@@ -6,7 +6,7 @@ from ..units import *
 
 class GaMD(EnhancedSampling):
     """Gaussian-accelerated Molecular Dynamics
-       
+
        see: Miao et. al., J. Chem. Theory Comput. (2015); https://doi.org/10.1021/acs.jctc.5b00436
 
        Apply an harmonic boost potential to potential energy. Independent of Collective Variable.
@@ -29,6 +29,7 @@ class GaMD(EnhancedSampling):
         output_freq: frequency in steps for writing outputs
 
     """
+
     def __init__(
         self,
         gamd_sigma0: float,
@@ -46,7 +47,7 @@ class GaMD(EnhancedSampling):
         self.gamd_equil_steps = gamd_equil_steps
         self.gamd_bound = gamd_bound.lower()
         self.confine = confine
-        
+
         self.pot_count = 0
         self.pot_var = 0.0
         self.pot_std = 0.0

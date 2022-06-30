@@ -38,7 +38,7 @@ the_abm = WTM(
     f_conf=1000,
     equil_temp=300.0,
 )
-#the_abm.restart()
+# the_abm.restart()
 
 the_md.calc_init()
 the_abm.step_bias()

@@ -5,6 +5,7 @@ from typing import Tuple
 from .sampling_data import SamplingData
 from ..units import *
 
+
 class MD:
     """Class for MD on test potentials"""
 
@@ -170,7 +171,9 @@ class MD:
         """
         if langevin == True:
             prefac = 2.0 / (2.0 + friction * self.dt_fs)
-            rand_push = np.sqrt(self.target_temp * friction * self.dt_fs * kB_in_atomic / 2.0e0)
+            rand_push = np.sqrt(
+                self.target_temp * friction * self.dt_fs * kB_in_atomic / 2.0e0
+            )
             self.rand_gauss = np.zeros(shape=(len(self.momenta),), dtype=np.double)
             self.rand_gauss[0] = random.gauss(0, 1)
             self.rand_gauss[1] = random.gauss(0, 1)
@@ -189,11 +192,13 @@ class MD:
 
         Args:
            langevin                (bool, True)
-           friction                (float, 10^-3 1/fs)           
+           friction                (float, 10^-3 1/fs)
         """
         if langevin == True:
             prefac = (2.0e0 - friction * self.dt_fs) / (2.0e0 + friction * self.dt_fs)
-            rand_push = np.sqrt(self.target_temp * friction * self.dt_fs * kB_in_atomic / 2.0e0)
+            rand_push = np.sqrt(
+                self.target_temp * friction * self.dt_fs * kB_in_atomic / 2.0e0
+            )
             self.momenta *= prefac
             self.momenta += np.sqrt(self.masses) * rand_push * self.rand_gauss
             self.momenta -= 0.5e0 * self.dt * self.forces
@@ -204,7 +209,7 @@ class MD:
     def get_sampling_data(self):
         """interface to adaptive_sampling"""
         return SamplingData(
-            self.masses,    
+            self.masses,
             self.coords,
             self.forces,
             self.epot,

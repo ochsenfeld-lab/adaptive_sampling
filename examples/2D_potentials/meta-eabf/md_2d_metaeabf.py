@@ -39,7 +39,7 @@ the_abm = WTMeABF(
     equil_temp=300.0,
     force_from_grid=True,
 )
-#the_abm.restart()
+# the_abm.restart()
 
 the_md.calc_init()
 the_abm.step_bias()
