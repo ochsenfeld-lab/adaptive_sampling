@@ -112,19 +112,24 @@ class Kearsley:
 
         return K
 
-    def fit(self, u: torch.tensor, v: torch.tensor) -> torch.tensor:
+    def fit(self, u: torch.tensor, v: torch.tensor, indices: list=None) -> torch.tensor:
         """
         Calculates the rotation and translation that best fits both sets of points.
 
         Args:
             u: shape (3*N,), Input array with 3D points.
             v: shape (3*N,), Input array with 3D points.
+            indices: list of indices that are included in calculation of rmsd
 
         Returns:
             rmsd: The root mean squared deviation.
         """
         u_r = torch.reshape(u, (int(len(u) / 3), 3))
         v_r = torch.reshape(v, (int(len(v) / 3), 3))
+
+        if indices != None:
+            u_r = u_r[indices]
+            v_r = v_r[indices]
 
         # centroids
         centroid_u = u_r.mean(axis=0)

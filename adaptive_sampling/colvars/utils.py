@@ -81,12 +81,14 @@ def interpolate_coordinates(images: list, n_interpol: int = 20) -> list:
         unit_vec = r / d
         step = d / n_interpol
 
-        for j in range(n_interpol):
+        path.append(a)
+        for j in range(1, n_interpol):
             # interpolation
             p = a + unit_vec * j * step
             path.append(p)
-
-    path.append(b)
+ 
+        path.append(b)
+    
     return path
 
 
@@ -96,7 +98,11 @@ def rmsd(V, W):
     return torch.sqrt(torch.sum(diff * diff) / len(V))
 
 
-def kabsch_rmsd(coords1: torch.tensor, coords2: torch.tensor) -> torch.tensor:
+def kabsch_rmsd(
+    coords1: torch.tensor, 
+    coords2: torch.tensor, 
+    indices: bool=None,
+) -> torch.tensor:
     """minimize rmsd between cartesian coordinates by kabsch algorithm
 
     Args:
@@ -109,6 +115,10 @@ def kabsch_rmsd(coords1: torch.tensor, coords2: torch.tensor) -> torch.tensor:
     n = len(coords1)
     coords1 = torch.reshape(coords1, (int(n / 3), 3)).float()
     coords2 = torch.reshape(coords2, (int(n / 3), 3)).float()
+
+    if indices != None:
+        coords1 = coords1[indices]
+        coords2 = coords2[indices]
 
     # translate centroids of molecules onto each other
     coords1_new = coords1 - centroid(coords1)

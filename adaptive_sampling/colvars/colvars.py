@@ -304,22 +304,37 @@ class CV:
 
         return float(self.cv)
 
-    def rmsd(self, cv_def: str) -> float:
+    def rmsd(
+        self, 
+        cv_def: Union[str, list],
+        method: str='kabsch',
+    ) -> float:
         """rmsd to reference structure
 
         Args:
             cv_def: path to xyz file with reference structure
+                    definition: 'path to xyz' or
+                                ['path to reference xyz', [atom indices]]
+            method: 'kabsch' or 'kearsley' algorithm for optimal alignment
 
         Returns:
             cv: root-mean-square deviation to reference structure
         """
         self.update_coords()
 
+        if isinstance(cv_def, list):
+            atom_indices = cv_def[1]
+            cv_def = cv_def[0]
+        else:
+            atom_indices = None
+
         if self.reference == None:
             self.reference = read_xyz(cv_def)
-            self.kearsley = Kearsley()
 
-        self.cv = self.kearsley.fit(self.coords, self.reference)
+        if method.lower() == 'kabsch':
+            self.cv = kabsch_rmsd(self.coords, self.reference, indices=atom_indices)
+        else:
+            self.cv = Kearsley().fit(self.coords, self.reference, indices=atom_indices)
 
         if self.requires_grad:
             self.gradient = torch.autograd.grad(
@@ -329,13 +344,20 @@ class CV:
 
         return float(self.cv)
 
-    def path_progression(self, cv_def: str, n_interpol: int = 0, la: float = 1.0):
+    def path_progression(
+        self, 
+        cv_def: Union[str, list], 
+        n_interpol: int = 20, 
+        la: float = 1.0
+    ) -> float:
         """progression along path
 
         see: Branduardui et al., J. Chem. Phys. (2007); https://doi.org/10.1063/1.2432340
 
         Args:
-            cv_def: path to xyz file with path definition
+            cv_def: path to xyz file with reference structure
+                    definition: 'path to xyz' or
+                                ['path to reference xyz', [atom indices]]            
             n_interpol: number of interpolated images to between to nodes of path
             la: lambda parameter to smooth the variation of the path variable
         Returns:
@@ -343,20 +365,26 @@ class CV:
         """
         self.update_coords()
 
+        if isinstance(cv_def, list):
+            atom_indices = cv_def[1]
+            cv_def = cv_def[0]
+        else:
+            atom_indices = None
+
         if self.reference == None:
             images = read_traj(cv_def)
             self.reference = interpolate_coordinates(images, n_interpol=n_interpol)
-            self.kearsley = Kearsley()
-
+            
         num = 0
         denom = 0
+
         for i, image in enumerate(self.reference):
-            rmsd = self.kearsley.fit(image, self.coords)
+            rmsd = kabsch_rmsd(image, self.coords, indices=atom_indices)
             exp = torch.exp(-la * rmsd)
             num += (i + 1) * exp
             denom += exp
 
-        self.cv = num / denom / len(self.reference)  # path cv normalized to range(0,1)
+        self.cv = num / denom  
 
         # get forces
         if self.requires_grad:
@@ -367,13 +395,20 @@ class CV:
 
         return float(self.cv)
 
-    def path_distance(self, cv_def: str, n_interpol: int = 20, la: float = 1.0):
+    def path_distance(
+        self, 
+        cv_def: Union[str, list], 
+        n_interpol: int = 20, 
+        la: float = 1.0
+    ) -> float:
         """distance from path
 
         see: Branduardui et al., J. Chem. Phys. (2007); https://doi.org/10.1063/1.2432340
 
         Args:
-            cv_def: path to xyz file with path definition
+            cv_def: path to xyz file with reference structure
+                    definition: 'path to xyz' or
+                                ['path to reference xyz', [atom indices]]            
             n_interpol: number of interpolated images to between to nodes of path
             la: lambda parameter to smooth the variation of the path variable
 
@@ -382,14 +417,19 @@ class CV:
         """
         self.update_coords()
 
+        if isinstance(cv_def, list):
+            atom_indices = cv_def[1]
+            cv_def = cv_def[0]
+        else:
+            atom_indices = None
+
         if self.reference == None:
             images = read_traj(cv_def)
             self.reference = interpolate_coordinates(images, n_interpol=n_interpol)
-            self.kearsley = Kearsley()
 
         m = 0
         for image in self.reference:
-            rmsd = self.kearsley.fit(image, self.coords)
+            rmsd = kabsch_rmsd(image, self.coords, indices=atom_indices)
             exp = torch.exp(-la * rmsd)
             m += exp
 
