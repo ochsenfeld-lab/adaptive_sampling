@@ -307,7 +307,7 @@ class CV:
     def rmsd(
         self, 
         cv_def: Union[str, list],
-        method: str='kabsch',
+        method: str='quaternion',
     ) -> float:
         """rmsd to reference structure
 
@@ -315,7 +315,8 @@ class CV:
             cv_def: path to xyz file with reference structure
                     definition: 'path to xyz' or
                                 ['path to reference xyz', [atom indices]]
-            method: 'kabsch' or 'kearsley' algorithm for optimal alignment
+            method: 'kabsch', 'quaternion' or 'kearsley' algorithm for optimal alignment
+                    gradient of kabsch algorithm numerical unstable!
 
         Returns:
             cv: root-mean-square deviation to reference structure
@@ -333,9 +334,11 @@ class CV:
 
         if method.lower() == 'kabsch':
             self.cv = kabsch_rmsd(self.coords, self.reference, indices=atom_indices)
-        else:
+        elif method.lower() == 'kearsley':
             self.cv = Kearsley().fit(self.coords, self.reference, indices=atom_indices)
-
+        else: # 'quaternion':
+            self.cv = quaternion_rmsd(self.coords, self.reference, indices=atom_indices)
+        
         if self.requires_grad:
             self.gradient = torch.autograd.grad(
                 self.cv, self.coords, allow_unused=True
@@ -348,7 +351,8 @@ class CV:
         self, 
         cv_def: Union[str, list], 
         n_interpol: int = 20, 
-        la: float = 1.0
+        la: float = 1.0,
+        method: str='quaternion',
     ) -> float:
         """progression along path
 
@@ -360,6 +364,8 @@ class CV:
                                 ['path to reference xyz', [atom indices]]            
             n_interpol: number of interpolated images to between to nodes of path
             la: lambda parameter to smooth the variation of the path variable
+            method: 'kabsch', 'quaternion' or 'kearsley' algorithm for optimal alignment
+                    gradient of kabsch algorithm numerical unstable!
         Returns:
             cv: collective variable in range(0,1)
         """
@@ -379,6 +385,14 @@ class CV:
         denom = 0
 
         for i, image in enumerate(self.reference):
+            
+            if method.lower() == 'kabsch':
+                self.cv = kabsch_rmsd(image, self.coords, indices=atom_indices)
+            elif method.lower() == 'kearsley':
+                self.cv = Kearsley().fit(image, self.coords, indices=atom_indices)
+            else: # 'quaternion':
+                self.cv = quaternion_rmsd(image, self.coords, indices=atom_indices)
+            
             rmsd = kabsch_rmsd(image, self.coords, indices=atom_indices)
             exp = torch.exp(-la * rmsd)
             num += (i + 1) * exp
@@ -399,7 +413,8 @@ class CV:
         self, 
         cv_def: Union[str, list], 
         n_interpol: int = 20, 
-        la: float = 1.0
+        la: float = 1.0,
+        method: str='quaternion',
     ) -> float:
         """distance from path
 
@@ -411,6 +426,8 @@ class CV:
                                 ['path to reference xyz', [atom indices]]            
             n_interpol: number of interpolated images to between to nodes of path
             la: lambda parameter to smooth the variation of the path variable
+            method: 'kabsch', 'quaternion' or 'kearsley' algorithm for optimal alignment
+                    gradient of kabsch algorithm numerical unstable!
 
         Returns:
             cv: distance from path
@@ -429,7 +446,14 @@ class CV:
 
         m = 0
         for image in self.reference:
-            rmsd = kabsch_rmsd(image, self.coords, indices=atom_indices)
+
+            if method.lower() == 'kabsch':
+                self.cv = kabsch_rmsd(image, self.coords, indices=atom_indices)
+            elif method.lower() == 'kearsley':
+                self.cv = Kearsley().fit(image, self.coords, indices=atom_indices)
+            else: # 'quaternion':
+                self.cv = quaternion_rmsd(image, self.coords, indices=atom_indices)
+
             exp = torch.exp(-la * rmsd)
             m += exp
 
