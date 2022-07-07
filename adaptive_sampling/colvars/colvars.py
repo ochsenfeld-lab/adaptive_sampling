@@ -351,7 +351,7 @@ class CV:
     def path_progression(
         self, 
         cv_def: Union[str, list], 
-        n_interpol: int = 5, 
+        n_interpol: int = 40, 
         la: float = 1.0,
         gpath: bool=True, 
         method: str='quaternion',
@@ -387,20 +387,23 @@ class CV:
             if len(self.reference[0]) != len(self.coords):
                 raise ValueError(" >>> Error: number of cartesian coordinates has to match reference coordinates")
             
+            if gpath:
+                self.close_index = find_closest_points(self.coords, indices=atom_indices)
+            
         if gpath:
             # use geometrical path definition in internal coordinates
-            self.coords_internal = get_internal_coords(self.coords, indices=atom_indices)
+            self.coords_internal = get_internal_coords(self.coords, self.close_index, indices=atom_indices)
             if self.reference_internal == None:
                 self.reference_internal = []
                 for image in self.reference:
-                    self.reference_internal.append(get_internal_coords(image, indices=atom_indices))
+                    self.reference_internal.append(get_internal_coords(image, self.close_index, indices=atom_indices))
 
+            # find index of nearest image on path
             rmsds = []
             for i, image in enumerate(self.reference_internal):
                 rmsds.append(torch.linalg.norm(image - self.coords_internal))
             rmsds = torch.stack(rmsds)
 
-            # find index of nearest image on path
             nearest_image = torch.argmin(rmsds)
             if int(nearest_image) == 0:
                 nearest_image += 1
@@ -409,13 +412,9 @@ class CV:
             
             # compute path cv
             M = len(self.reference)
-            image_0 = self.reference_internal[nearest_image-1]
-            image_1 = self.reference_internal[nearest_image]
-            image_2 = self.reference_internal[nearest_image+1]
-
-            v1 = image_1 - self.coords_internal
-            v2 = self.coords_internal - image_0
-            v3 = image_2 - image_1
+            v1 = self.reference_internal[nearest_image] - self.coords_internal
+            v2 = self.coords_internal - self.reference_internal[nearest_image-1]
+            v3 = self.reference_internal[nearest_image+1] - self.reference_internal[nearest_image]
             
             v1_n2 = torch.pow(torch.linalg.norm(v1), 2)
             v2_n2 = torch.pow(torch.linalg.norm(v2), 2)
@@ -427,9 +426,9 @@ class CV:
             self.cv = (torch.sqrt(torch.pow(dot13, 2) - v3_n2 * (v1_n2 - v2_n2)) / denom) - ((dot13 - v3_n2) / denom)
 
             if rmsds[nearest_image-1] < rmsds[nearest_image+1]:
-                self.cv = float(nearest_image/M) - self.cv
+                self.cv = float(nearest_image)/float(M) - self.cv
             else:
-                self.cv = float(nearest_image/M) + self.cv
+                self.cv = float(nearest_image)/float(M) + self.cv
 
         else:
             num = 0

@@ -354,5 +354,22 @@ def test_rmsd(coords1, coords2, rmsd_fit):
 )
 def test_internals(coords, internals):
     coords = coords.float()
-    ints = get_internal_coords(coords)
+    close_indices = find_closest_points(coords)
+    ints = get_internal_coords(coords, close_indices)
     assert torch.allclose(ints, internals)
+
+
+@pytest.mark.parametrize(
+    "coords, close_points",
+    [
+        (
+            torch.tensor([0,0,0,1,0,0,2,0,0,3,0,0]),
+            [np.array([1,2,3]), np.array([2,0,3]), np.array([1,3,0]), np.array([2,1,0])],
+        )
+    ]
+)
+def test_find_close_points(coords, close_points):
+    points = find_closest_points(coords)
+    close_points = np.stack(close_points)
+    points = np.stack(points)
+    assert np.allclose(points, close_points)

@@ -92,21 +92,34 @@ def interpolate_coordinates(images: list, n_interpol: int = 20) -> list:
     path.append(b)
     return path
 
-def get_internal_coords(coords: torch.tensor, indices: list=None) -> torch.tensor:
+def find_closest_points(coords: torch.tensor, indices: list=None) -> list:
+
+    coords_tree = coords.detach()
+    coords_tree = torch.reshape(coords_tree, (int(len(coords_tree) / 3), 3)).float()
+    
+    if indices != None:
+        coords_tree = coords_tree[indices]
+    
+    kdtree = KDTree(coords_tree)
+    
+    close_indices = []
+    for xyz in coords_tree:
+        # find three closest atoms (first point is same atom)
+        _, indices = kdtree.query(xyz, 4)
+        close_indices.append(indices[1:])
+        
+    return close_indices
+
+def get_internal_coords(coords: torch.tensor, close_indices: list, indices: list=None) -> torch.tensor:
     coords = torch.reshape(coords, (int(len(coords) / 3), 3)).float()
     if indices != None:
         coords = coords[indices]
     
-    coords_tree = coords.detach()
-    kdtree = KDTree(coords_tree)
-
     internals = []
-    for i in coords_tree:
-        _, points = kdtree.query(i, 4)
-        for j in range(4):
-            dist = torch.linalg.norm(i - coords[points[j]])
-            if dist > 0.0:
-                internals.append(dist)
+    for xyz, indices in zip(coords, close_indices):
+        for j in indices:
+            dist = torch.linalg.norm(xyz - coords[j])
+            internals.append(dist)
     internals = torch.stack(internals)
     return internals
 
