@@ -8,7 +8,6 @@ from ..units import *
 from .utils import *
 from .kearsley import Kearsley
 
-
 class CV:
     """Class for Collective Variables
 
@@ -36,7 +35,8 @@ class CV:
         self.cv = None
         self.type = "default"
         self.reference = None
-
+        self.reference_internal = None
+    
     def update_coords(self):
         """The coords tensor and ndarray share the same memory.
         Modifications to the tensor will be reflected in the ndarray and vice versa!"""
@@ -260,8 +260,8 @@ class CV:
         self.cv = np.asarray(self.lc_contribs).sum()
         return float(self.cv)
 
-    def coordination_number(self, cv_def: list, r_0: float = 3.0) -> float:
-        """coordination number between two mass centers in range(0, inf) mapped to range(1,0)
+    def distorted_distance(self, cv_def: list, r_0: float = 3.0) -> float:
+        """distorted distance between two mass centers in range(0, inf) mapped to range(1,0)
 
         Args:
             cv_def (list):
@@ -269,6 +269,7 @@ class CV:
                 distorted distance between mass centers: [[ind00, ind01, ...],
                                                           [ind10, ind11, ...]]
             r_0 (float): distance in Angstrom at which the CN function has the value 0.5
+        
         Returns:
             distorted distance (float): computed distance
         """
@@ -350,8 +351,9 @@ class CV:
     def path_progression(
         self, 
         cv_def: Union[str, list], 
-        n_interpol: int = 20, 
+        n_interpol: int = 5, 
         la: float = 1.0,
+        gpath: bool=True, 
         method: str='quaternion',
     ) -> float:
         """progression along path
@@ -364,10 +366,12 @@ class CV:
                                 ['path to reference xyz', [atom indices]]            
             n_interpol: number of interpolated images to between to nodes of path
             la: lambda parameter to smooth the variation of the path variable
+            gpath: use geometrical path definition, use definition based on rmsd otherwise (numerically unstable)
             method: 'kabsch', 'quaternion' or 'kearsley' algorithm for optimal alignment
                     gradient of kabsch algorithm numerical unstable!
+
         Returns:
-            cv: collective variable in range(0,1)
+            cv: path collective variable mapped to range(0,1)
         """
         self.update_coords()
 
@@ -380,25 +384,73 @@ class CV:
         if self.reference == None:
             images = read_traj(cv_def)
             self.reference = interpolate_coordinates(images, n_interpol=n_interpol)
+            if len(self.reference[0]) != len(self.coords):
+                raise ValueError(" >>> Error: number of cartesian coordinates has to match reference coordinates")
             
-        num = 0
-        denom = 0
+        if gpath:
+            # use geometrical path definition in internal coordinates
+            self.coords_internal = get_internal_coords(self.coords, indices=atom_indices)
+            if self.reference_internal == None:
+                self.reference_internal = []
+                for image in self.reference:
+                    self.reference_internal.append(get_internal_coords(image, indices=atom_indices))
 
-        for i, image in enumerate(self.reference):
-            
-            if method.lower() == 'kabsch':
-                self.cv = kabsch_rmsd(image, self.coords, indices=atom_indices)
-            elif method.lower() == 'kearsley':
-                self.cv = Kearsley().fit(image, self.coords, indices=atom_indices)
-            else: # 'quaternion':
-                self.cv = quaternion_rmsd(image, self.coords, indices=atom_indices)
-            
-            rmsd = kabsch_rmsd(image, self.coords, indices=atom_indices)
-            exp = torch.exp(-la * rmsd)
-            num += (i + 1) * exp
-            denom += exp
+            rmsds = []
+            for i, image in enumerate(self.reference_internal):
+                rmsds.append(torch.linalg.norm(image - self.coords_internal))
+            rmsds = torch.stack(rmsds)
 
-        self.cv = num / denom  
+            # find index of nearest image on path
+            nearest_image = torch.argmin(rmsds)
+            if int(nearest_image) == 0:
+                nearest_image += 1
+            elif int(nearest_image) == len(self.reference):
+                nearest_image -= 1
+            
+            # compute path cv
+            M = len(self.reference)
+            image_0 = self.reference_internal[nearest_image-1]
+            image_1 = self.reference_internal[nearest_image]
+            image_2 = self.reference_internal[nearest_image+1]
+
+            v1 = image_1 - self.coords_internal
+            v2 = self.coords_internal - image_0
+            v3 = image_2 - image_1
+            
+            v1_n2 = torch.pow(torch.linalg.norm(v1), 2)
+            v2_n2 = torch.pow(torch.linalg.norm(v2), 2)
+            v3_n2 = torch.pow(torch.linalg.norm(v3), 2)
+
+            dot13 = torch.dot(v1, v3)
+            denom = 2.0 * M * v3_n2
+
+            self.cv = (torch.sqrt(torch.pow(dot13, 2) - v3_n2 * (v1_n2 - v2_n2)) / denom) - ((dot13 - v3_n2) / denom)
+
+            if rmsds[nearest_image-1] < rmsds[nearest_image+1]:
+                self.cv = float(nearest_image/M) - self.cv
+            else:
+                self.cv = float(nearest_image/M) + self.cv
+
+        else:
+            num = 0
+            denom = 0
+
+            for i, image in enumerate(self.reference):
+            
+                if method.lower() == 'kabsch':
+                    self.cv = kabsch_rmsd(image, self.coords, indices=atom_indices)
+                elif method.lower() == 'kearsley':
+                    self.cv = Kearsley().fit(image, self.coords, indices=atom_indices)
+                else: # 'quaternion':
+                    self.cv = quaternion_rmsd(image, self.coords, indices=atom_indices)
+            
+                rmsd = kabsch_rmsd(image, self.coords, indices=atom_indices)
+                exp = torch.exp(-la * rmsd)
+                num += (i + 1) * exp
+                denom += exp
+
+            path_cv = num / denom  
+            self.the_cv = path_cv / float(len(self.reference)) 
 
         # get forces
         if self.requires_grad:
@@ -406,7 +458,7 @@ class CV:
                 self.cv, self.coords, allow_unused=True
             )[0]
             self.gradient = self.gradient.detach().numpy()
-
+            
         return float(self.cv)
 
     def path_distance(
@@ -419,15 +471,15 @@ class CV:
         """distance from path
 
         see: Branduardui et al., J. Chem. Phys. (2007); https://doi.org/10.1063/1.2432340
-
+             Leines et. al., Phys. Rev. Lett. (2012), https://link.aps.org/doi/10.1103/PhysRevLett.109.020601
         Args:
             cv_def: path to xyz file with reference structure
                     definition: 'path to xyz' or
                                 ['path to reference xyz', [atom indices]]            
             n_interpol: number of interpolated images to between to nodes of path
             la: lambda parameter to smooth the variation of the path variable
-            method: 'kabsch', 'quaternion' or 'kearsley' algorithm for optimal alignment
-                    gradient of kabsch algorithm numerical unstable!
+            rmsd_method: 'kabsch', 'quaternion' or 'kearsley' algorithm for optimal alignment
+                          gradient of kabsch algorithm numerical unstable!
 
         Returns:
             cv: distance from path
@@ -443,7 +495,7 @@ class CV:
         if self.reference == None:
             images = read_traj(cv_def)
             self.reference = interpolate_coordinates(images, n_interpol=n_interpol)
-
+            
         m = 0
         for image in self.reference:
 
@@ -503,14 +555,17 @@ class CV:
         elif cv.lower() == "linear_combination":
             xi = self.linear_combination(atoms)
             self.type = None
-        elif cv.lower() == "coordination_number":
-            xi = self.coordination_number(atoms, **kwargs)
+        elif cv.lower() == "distorted_distance":
+            xi = self.distorted_distance(atoms, **kwargs)
             self.type = None
         elif cv.lower() == "rmsd":
             xi = self.rmsd(atoms)
             self.type = "distance"
         elif cv.lower() == "path":
-            xi = self.path_progression(atoms, **kwargs)
+            xi = self.path_progression(atoms, gpath=False, **kwargs)
+            self.type = None
+        elif cv.lower() == "gpath":
+            xi = self.path_progression(atoms, gpath=True, **kwargs)
             self.type = None
         elif cv.lower() == "path_distance":
             xi = self.path_distance(atoms, **kwargs)

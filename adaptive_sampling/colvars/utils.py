@@ -1,6 +1,9 @@
 import os
 import itertools
 import torch
+from scipy.spatial import KDTree
+
+from adaptive_sampling.units import BOHR_to_ANGSTROM
 
 
 def read_xyz(xyz_name: str) -> torch.tensor:
@@ -24,9 +27,8 @@ def read_xyz(xyz_name: str) -> torch.tensor:
             mol.append([float(words[1]), float(words[2]), float(words[3])])
 
     mol = itertools.chain(*mol)
-    mol = torch.FloatTensor(list(mol))
+    mol = torch.FloatTensor(list(mol)) / BOHR_to_ANGSTROM
     return mol
-
 
 def read_traj(xyz_name: str) -> list:
     """Read cartesian coordinates of trajectory from file (*.xyz)
@@ -52,7 +54,7 @@ def read_traj(xyz_name: str) -> list:
         elif n == n_atoms:
             n = 0
             mol = itertools.chain(*mol)
-            mol = torch.FloatTensor(list(mol))
+            mol = torch.FloatTensor(list(mol)) / BOHR_to_ANGSTROM
             traj.append(mol)
             mol = []
         elif len(words) >= 4:
@@ -83,14 +85,30 @@ def interpolate_coordinates(images: list, n_interpol: int = 20) -> list:
 
         path.append(a)
         for j in range(1, n_interpol):
-            # interpolation
+            # linear interpolation
             p = a + unit_vec * j * step
             path.append(p)
  
-        path.append(b)
-    
+    path.append(b)
     return path
 
+def get_internal_coords(coords: torch.tensor, indices: list=None) -> torch.tensor:
+    coords = torch.reshape(coords, (int(len(coords) / 3), 3)).float()
+    if indices != None:
+        coords = coords[indices]
+    
+    coords_tree = coords.detach()
+    kdtree = KDTree(coords_tree)
+
+    internals = []
+    for i in coords_tree:
+        _, points = kdtree.query(i, 4)
+        for j in range(4):
+            dist = torch.linalg.norm(i - coords[points[j]])
+            if dist > 0.0:
+                internals.append(dist)
+    internals = torch.stack(internals)
+    return internals
 
 def rmsd(V, W):
     """root-mean-square deviation"""
@@ -173,7 +191,13 @@ def kabsch(P: torch.tensor, Q: torch.tensor):
     return U
 
 
-def quaternion_rmsd(coords1: torch.tensor, coords2: torch.tensor, indices: list=None) -> torch.tensor:
+def quaternion_rmsd(
+    coords1: torch.tensor, 
+    coords2: torch.tensor, 
+    indices: list=None,
+    reshape: bool=True,
+    return_coords: bool=False,
+) -> torch.tensor:
     """
     Rotate coords1 on coords2 and calculate the RMSD
     based on doi:10.1016/1049-9660(91)90036-O
@@ -182,17 +206,20 @@ def quaternion_rmsd(coords1: torch.tensor, coords2: torch.tensor, indices: list=
         coords1 : (natoms*3,) tensor of cartesian coordinates
         coords3 : (natoms*3,) tensor of cartesian coordinates
         indices: list of indices that are included
+        reshape: if False, coords1 not reshaped to (natoms,3)
+        return_coords: if transformed coords1 are returned 
 
-    Returns
-    -------
-    rmsd : float
+    Returns:
+        rmsd: minimized root-mean-square deviation
+        coords1: if return_coords
     """
-    n = len(coords1)
-    coords1 = torch.reshape(coords1, (int(n / 3), 3)).float()
-    coords2 = torch.reshape(coords2, (int(n / 3), 3)).float()
-
+    if reshape:
+        coords1 = torch.reshape(coords1, (int(len(coords1) / 3), 3)).float()
+        if indices != None:
+            coords1 = coords1[indices]
+    
+    coords2 = torch.reshape(coords2, (int(len(coords2) / 3), 3)).float()
     if indices != None:
-        coords1 = coords1[indices]
         coords2 = coords2[indices]
 
     # translate centroids of molecules onto each other
@@ -201,6 +228,9 @@ def quaternion_rmsd(coords1: torch.tensor, coords2: torch.tensor, indices: list=
 
     rot = quaternion_rotate(coords1_new, coords2_new)
     coords1_new = torch.matmul(coords1_new, rot)
+
+    if return_coords:
+        return rmsd(coords1_new, coords2_new), coords1_new
     return rmsd(coords1_new, coords2_new)
 
 
@@ -246,7 +276,7 @@ def quaternion_rotate(X: torch.tensor, Y: torch.tensor) -> torch.tensor:
         Y: (natoms,3) tensor of cartesian coordinates
 
     Returns:
-        rot : Rotation matrix (3,3)
+        rot: Rotation matrix (3,3)
     """
     N = X.size(dim=0)
     W = torch.stack([_makeW(*Y[k]) for k in range(N)])

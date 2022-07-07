@@ -172,6 +172,7 @@ class Kearsley:
         Raises:
             ValueError: If the input points don't have the correct shape.
         """
+        print(u)
         if len(u.size(dim=0)) != 2:
             raise ValueError("Input array must have 2 dimensions")
 
@@ -180,7 +181,7 @@ class Kearsley:
 
         return self.rot.apply(u - self.trans)
 
-    def fit_transform(self, u: torch.tensor, v: torch.tensor) -> tuple:
+    def fit_transform(self, u: torch.tensor, v: torch.tensor, indices: list=None) -> tuple:
         """
         Calculates the rotation and translation that best fits both sets of points and
         applies the transformation to the second set.
@@ -192,10 +193,7 @@ class Kearsley:
         Returns:
             array: shape (N, 3), Input points transformed.
             rmsd: The root mean squared deviation.
-
-        Raises:
-            ValueError: If the input points don't have the correct shape, or don't have the same number of points.
         """
         self.requires_grad = False
-        rmsd = self.fit(u, v)
+        rmsd = self.fit(u, v, indices=indices)
         return self.transform(v), rmsd

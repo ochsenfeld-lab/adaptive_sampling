@@ -287,7 +287,7 @@ def test_interpolate(images, interpolated_images):
     [
         (
             'resources/m1.xyz',
-            torch.tensor([0,0,0,1,0,0,0,1,0,0,0,1]),
+            torch.tensor([0,0,0,1,0,0,0,1,0,0,0,1]) / BOHR_to_ANGSTROM,
         )
     ]
 )
@@ -308,7 +308,7 @@ def test_read_xyz(file, coords):
                 [0,0,0,3,0,0,0,1,0,0,0,1],
                 [0,0,0,4,0,0,0,1,0,0,0,1],
                 [0,0,0,5,0,0,0,1,0,0,0,1],
-            ]),
+            ]) / BOHR_to_ANGSTROM,
         )
     ]
 )
@@ -342,3 +342,17 @@ def test_rmsd(coords1, coords2, rmsd_fit):
     assert np.allclose(grad1, grad2)
     assert np.allclose(grad2, grad3)
 
+
+@pytest.mark.parametrize(
+    "coords, internals",
+    [
+        (
+            torch.tensor([1,0,0,0,1,0,0,0,1,0,0,0]),
+            torch.tensor([1.0000, 1.4142, 1.4142, 1.0000, 1.4142, 1.4142, 1.0000, 1.4142, 1.4142, 1.0000, 1.0000, 1.0000])
+        )
+    ]
+)
+def test_internals(coords, internals):
+    coords = coords.float()
+    ints = get_internal_coords(coords)
+    assert torch.allclose(ints, internals)

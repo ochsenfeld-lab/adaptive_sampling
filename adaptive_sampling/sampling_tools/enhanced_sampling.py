@@ -360,7 +360,6 @@ class EnhancedSampling(ABC):
                         % (
                             (step - self.out_freq + n)
                             * self.the_md.get_sampling_data().dt
-                            * atomic_to_fs
                         )
                     )  # time in fs
                     for i in range(len(self.traj[0])):

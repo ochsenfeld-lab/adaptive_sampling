@@ -69,6 +69,5 @@ def test_torsion():
 def test_linear_combination():
     cv = CV(four_particles(), requires_grad=True)
     f = cv.linear_combination([[1.0, [2, 3]], [2.0, [0, 1]]])
-    print(cv.gradient)
     assert f == 3.0
     assert (cv.gradient == np.asarray([-2, 0, 0, 2, 0, 0, 0, 0, -1, 0, 0, 1])).all()
