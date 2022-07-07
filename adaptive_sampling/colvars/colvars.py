@@ -366,7 +366,7 @@ class CV:
                                 ['path to reference xyz', [atom indices]]            
             n_interpol: number of interpolated images to between to nodes of path
             la: lambda parameter to smooth the variation of the path variable
-            gpath: use geometrical path definition, use definition based on rmsd otherwise (numerically unstable)
+            gpath: use geometrical path definition, use definition based on rmsd otherwise 
             method: 'kabsch', 'quaternion' or 'kearsley' algorithm for optimal alignment
                     gradient of kabsch algorithm numerical unstable!
 
@@ -389,6 +389,10 @@ class CV:
             
             if gpath:
                 self.close_index = find_closest_points(self.coords, indices=atom_indices)
+                print(f"\n >>> Info: Geometrical Path CV defined by {len(self.reference)} nodes.")
+            else:
+                print(f"\n >>> Info: Path CV defined by {len(self.reference)} nodes.")
+                print(f" >>> Info: Optimal alignment of coordinates with nodes uses {method} algorithm.")
             
         if gpath:
             # use geometrical path definition in internal coordinates
@@ -437,19 +441,18 @@ class CV:
             for i, image in enumerate(self.reference):
             
                 if method.lower() == 'kabsch':
-                    self.cv = kabsch_rmsd(image, self.coords, indices=atom_indices)
+                    d = kabsch_rmsd(image, self.coords, indices=atom_indices)
                 elif method.lower() == 'kearsley':
-                    self.cv = Kearsley().fit(image, self.coords, indices=atom_indices)
+                    d = Kearsley().fit(image, self.coords, indices=atom_indices)
                 else: # 'quaternion':
-                    self.cv = quaternion_rmsd(image, self.coords, indices=atom_indices)
+                    d = quaternion_rmsd(image, self.coords, indices=atom_indices)
             
-                rmsd = kabsch_rmsd(image, self.coords, indices=atom_indices)
-                exp = torch.exp(-la * rmsd)
+                exp = torch.exp(-la * d)
                 num += (i + 1) * exp
                 denom += exp
 
-            path_cv = num / denom  
-            self.the_cv = path_cv / float(len(self.reference)) 
+            self.cv = num / denom  
+            self.cv = self.cv / float(len(self.reference)) 
 
         # get forces
         if self.requires_grad:
@@ -495,20 +498,19 @@ class CV:
             images = read_traj(cv_def)
             self.reference = interpolate_coordinates(images, n_interpol=n_interpol)
             
-        m = 0
+        sum = 0
         for image in self.reference:
 
             if method.lower() == 'kabsch':
-                self.cv = kabsch_rmsd(image, self.coords, indices=atom_indices)
+                d = kabsch_rmsd(image, self.coords, indices=atom_indices)
             elif method.lower() == 'kearsley':
-                self.cv = Kearsley().fit(image, self.coords, indices=atom_indices)
+                d = Kearsley().fit(image, self.coords, indices=atom_indices)
             else: # 'quaternion':
-                self.cv = quaternion_rmsd(image, self.coords, indices=atom_indices)
+                d = quaternion_rmsd(image, self.coords, indices=atom_indices)
 
-            exp = torch.exp(-la * rmsd)
-            m += exp
+            sum += torch.exp(-la * d)
 
-        self.cv = -(1 / la) * torch.log(m)
+        self.cv = -(1 / la) * torch.log(sum)
 
         # get forces
         if self.requires_grad:
