@@ -33,6 +33,7 @@ class EnhancedSampling(ABC):
         kinetics: bool = False,
         f_conf: float = 100,
         output_freq: int = 100,
+        **kwargs,
     ):
 
         self.the_md = md

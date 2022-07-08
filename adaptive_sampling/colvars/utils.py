@@ -30,6 +30,7 @@ def read_xyz(xyz_name: str) -> torch.tensor:
     mol = torch.FloatTensor(list(mol)) / BOHR_to_ANGSTROM
     return mol
 
+
 def read_traj(xyz_name: str) -> list:
     """Read cartesian coordinates of trajectory from file (*.xyz)
 
@@ -88,33 +89,37 @@ def interpolate_coordinates(images: list, n_interpol: int = 20) -> list:
             # linear interpolation
             p = a + unit_vec * j * step
             path.append(p)
- 
+
     path.append(b)
     return path
 
-def find_closest_points(coords: torch.tensor, indices: list=None) -> list:
+
+def find_closest_points(coords: torch.tensor, indices: list = None) -> list:
 
     coords_tree = coords.detach()
     coords_tree = torch.reshape(coords_tree, (int(len(coords_tree) / 3), 3)).float()
-    
+
     if indices != None:
         coords_tree = coords_tree[indices]
-    
+
     kdtree = KDTree(coords_tree)
-    
+
     close_indices = []
     for xyz in coords_tree:
         # find three closest atoms (first point is same atom)
         _, indices = kdtree.query(xyz, 4)
         close_indices.append(indices[1:])
-        
+
     return close_indices
 
-def get_internal_coords(coords: torch.tensor, close_indices: list, indices: list=None) -> torch.tensor:
+
+def get_internal_coords(
+    coords: torch.tensor, close_indices: list, indices: list = None
+) -> torch.tensor:
     coords = torch.reshape(coords, (int(len(coords) / 3), 3)).float()
     if indices != None:
         coords = coords[indices]
-    
+
     internals = []
     for xyz, indices in zip(coords, close_indices):
         for j in indices:
@@ -123,6 +128,7 @@ def get_internal_coords(coords: torch.tensor, close_indices: list, indices: list
     internals = torch.stack(internals)
     return internals
 
+
 def rmsd(V, W):
     """root-mean-square deviation"""
     diff = V - W
@@ -130,9 +136,9 @@ def rmsd(V, W):
 
 
 def kabsch_rmsd(
-    coords1: torch.tensor, 
-    coords2: torch.tensor, 
-    indices: bool=None,
+    coords1: torch.tensor,
+    coords2: torch.tensor,
+    indices: bool = None,
 ) -> torch.tensor:
     """minimize rmsd between cartesian coordinates by kabsch algorithm
 
@@ -205,22 +211,22 @@ def kabsch(P: torch.tensor, Q: torch.tensor):
 
 
 def quaternion_rmsd(
-    coords1: torch.tensor, 
-    coords2: torch.tensor, 
-    indices: list=None,
-    reshape: bool=True,
-    return_coords: bool=False,
+    coords1: torch.tensor,
+    coords2: torch.tensor,
+    indices: list = None,
+    reshape: bool = True,
+    return_coords: bool = False,
 ) -> torch.tensor:
     """
     Rotate coords1 on coords2 and calculate the RMSD
     based on doi:10.1016/1049-9660(91)90036-O
-    
+
     Args:
         coords1 : (natoms*3,) tensor of cartesian coordinates
         coords3 : (natoms*3,) tensor of cartesian coordinates
         indices: list of indices that are included
         reshape: if False, coords1 not reshaped to (natoms,3)
-        return_coords: if transformed coords1 are returned 
+        return_coords: if transformed coords1 are returned
 
     Returns:
         rmsd: minimized root-mean-square deviation
@@ -230,7 +236,7 @@ def quaternion_rmsd(
         coords1 = torch.reshape(coords1, (int(len(coords1) / 3), 3)).float()
         if indices != None:
             coords1 = coords1[indices]
-    
+
     coords2 = torch.reshape(coords2, (int(len(coords2) / 3), 3)).float()
     if indices != None:
         coords2 = coords2[indices]
@@ -266,6 +272,7 @@ def _makeW(r1, r2, r3, r4=0):
         ]
     )
     return W
+
 
 def _makeQ(r1, r2, r3, r4=0):
     """matrix involved in quaternion rotation"""

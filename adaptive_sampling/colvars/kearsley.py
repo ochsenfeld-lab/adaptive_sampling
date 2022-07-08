@@ -112,7 +112,9 @@ class Kearsley:
 
         return K
 
-    def fit(self, u: torch.tensor, v: torch.tensor, indices: list=None) -> torch.tensor:
+    def fit(
+        self, u: torch.tensor, v: torch.tensor, indices: list = None
+    ) -> torch.tensor:
         """
         Calculates the rotation and translation that best fits both sets of points.
 
@@ -181,7 +183,9 @@ class Kearsley:
 
         return self.rot.apply(u - self.trans)
 
-    def fit_transform(self, u: torch.tensor, v: torch.tensor, indices: list=None) -> tuple:
+    def fit_transform(
+        self, u: torch.tensor, v: torch.tensor, indices: list = None
+    ) -> tuple:
         """
         Calculates the rotation and translation that best fits both sets of points and
         applies the transformation to the second set.

@@ -8,6 +8,7 @@ from ..units import *
 from .utils import *
 from .kearsley import Kearsley
 
+
 class CV:
     """Class for Collective Variables
 
@@ -36,7 +37,7 @@ class CV:
         self.type = "default"
         self.reference = None
         self.reference_internal = None
-    
+
     def update_coords(self):
         """The coords tensor and ndarray share the same memory.
         Modifications to the tensor will be reflected in the ndarray and vice versa!"""
@@ -269,7 +270,7 @@ class CV:
                 distorted distance between mass centers: [[ind00, ind01, ...],
                                                           [ind10, ind11, ...]]
             r_0 (float): distance in Angstrom at which the CN function has the value 0.5
-        
+
         Returns:
             distorted distance (float): computed distance
         """
@@ -306,9 +307,9 @@ class CV:
         return float(self.cv)
 
     def rmsd(
-        self, 
+        self,
         cv_def: Union[str, list],
-        method: str='quaternion',
+        method: str = "quaternion",
     ) -> float:
         """rmsd to reference structure
 
@@ -333,13 +334,13 @@ class CV:
         if self.reference == None:
             self.reference = read_xyz(cv_def)
 
-        if method.lower() == 'kabsch':
+        if method.lower() == "kabsch":
             self.cv = kabsch_rmsd(self.coords, self.reference, indices=atom_indices)
-        elif method.lower() == 'kearsley':
+        elif method.lower() == "kearsley":
             self.cv = Kearsley().fit(self.coords, self.reference, indices=atom_indices)
-        else: # 'quaternion':
+        else:  # 'quaternion':
             self.cv = quaternion_rmsd(self.coords, self.reference, indices=atom_indices)
-        
+
         if self.requires_grad:
             self.gradient = torch.autograd.grad(
                 self.cv, self.coords, allow_unused=True
@@ -349,12 +350,11 @@ class CV:
         return float(self.cv)
 
     def path_progression(
-        self, 
-        cv_def: Union[str, list], 
-        n_interpol: int = 40, 
-        la: float = 1.0,
-        gpath: bool=True, 
-        method: str='quaternion',
+        self,
+        cv_def: Union[str, list],
+        n_interpol: int = 2,
+        method: str = "quaternion",
+        gpath: bool = False,
     ) -> float:
         """progression along path
 
@@ -363,15 +363,14 @@ class CV:
         Args:
             cv_def: path to xyz file with reference structure
                     definition: 'path to xyz' or
-                                ['path to reference xyz', [atom indices]]            
-            n_interpol: number of interpolated images to between to nodes of path
-            la: lambda parameter to smooth the variation of the path variable
-            gpath: use geometrical path definition, use definition based on rmsd otherwise 
+                                ['path to reference xyz', [atom indices]]
+            n_interpol: number of interpolated images to between two nodes of the reference path
             method: 'kabsch', 'quaternion' or 'kearsley' algorithm for optimal alignment
                     gradient of kabsch algorithm numerical unstable!
+            gpath: use geometrical path definition, use definition based on rmsd otherwise
 
         Returns:
-            cv: path collective variable mapped to range(0,1)
+            cv: path collective variable 
         """
         self.update_coords()
 
@@ -385,22 +384,51 @@ class CV:
             images = read_traj(cv_def)
             self.reference = interpolate_coordinates(images, n_interpol=n_interpol)
             if len(self.reference[0]) != len(self.coords):
-                raise ValueError(" >>> Error: number of cartesian coordinates has to match reference coordinates")
-            
+                raise ValueError(
+                    " >>> Error: number of cartesian coordinates has to match reference coordinates"
+                )
+
             if gpath:
-                self.close_index = find_closest_points(self.coords, indices=atom_indices)
-                print(f"\n >>> Info: Geometrical Path CV defined by {len(self.reference)} nodes.")
+                self.close_index = find_closest_points(
+                    self.coords, indices=atom_indices
+                )
+                print(
+                    f"\n >>> Colvars Info: Geometrical Path CV defined by {len(self.reference)} nodes."
+                )
             else:
-                print(f"\n >>> Info: Path CV defined by {len(self.reference)} nodes.")
-                print(f" >>> Info: Optimal alignment of coordinates with nodes uses {method} algorithm.")
-            
+
+                print(
+                    f"\n >>> Colvars Info: Path CV defined by {len(self.reference)} nodes."
+                )
+                print(
+                    f" >>> Colvars Info: Optimal alignment of coordinates with nodes uses {method} algorithm."
+                )
+                self.la = 0
+                for i in range(1, len(self.reference)):
+                    self.la += torch.linalg.norm(
+                        self.reference[i] - self.reference[i - 1]
+                    )
+                self.la /= float(len(self.reference))
+                self.la = 1.0 / torch.pow(self.la, 2)
+                print(
+                    f" >>> Colvars Info: Setting lambda parameter to {self.la} 1/Bohr^2."
+                )
+
+        M = len(self.reference)
+
         if gpath:
             # use geometrical path definition in internal coordinates
-            self.coords_internal = get_internal_coords(self.coords, self.close_index, indices=atom_indices)
+            self.coords_internal = get_internal_coords(
+                self.coords, self.close_index, indices=atom_indices
+            )
             if self.reference_internal == None:
                 self.reference_internal = []
                 for image in self.reference:
-                    self.reference_internal.append(get_internal_coords(image, self.close_index, indices=atom_indices))
+                    self.reference_internal.append(
+                        get_internal_coords(
+                            image, self.close_index, indices=atom_indices
+                        )
+                    )
 
             # find index of nearest image on path
             rmsds = []
@@ -413,13 +441,15 @@ class CV:
                 nearest_image += 1
             elif int(nearest_image) == len(self.reference):
                 nearest_image -= 1
-            
+
             # compute path cv
-            M = len(self.reference)
             v1 = self.reference_internal[nearest_image] - self.coords_internal
-            v2 = self.coords_internal - self.reference_internal[nearest_image-1]
-            v3 = self.reference_internal[nearest_image+1] - self.reference_internal[nearest_image]
-            
+            v2 = self.coords_internal - self.reference_internal[nearest_image - 1]
+            v3 = (
+                self.reference_internal[nearest_image + 1]
+                - self.reference_internal[nearest_image]
+            )
+
             v1_n2 = torch.pow(torch.linalg.norm(v1), 2)
             v2_n2 = torch.pow(torch.linalg.norm(v2), 2)
             v3_n2 = torch.pow(torch.linalg.norm(v3), 2)
@@ -427,32 +457,34 @@ class CV:
             dot13 = torch.dot(v1, v3)
             denom = 2.0 * M * v3_n2
 
-            self.cv = (torch.sqrt(torch.pow(dot13, 2) - v3_n2 * (v1_n2 - v2_n2)) / denom) - ((dot13 - v3_n2) / denom)
+            self.cv = (
+                torch.sqrt(torch.pow(dot13, 2) - v3_n2 * (v1_n2 - v2_n2)) / denom
+            ) - ((dot13 - v3_n2) / denom)
 
-            if rmsds[nearest_image-1] < rmsds[nearest_image+1]:
-                self.cv = float(nearest_image)/float(M) - self.cv
+            if rmsds[nearest_image - 1] < rmsds[nearest_image + 1]:
+                self.cv = float(nearest_image) / float(M) - self.cv
             else:
-                self.cv = float(nearest_image)/float(M) + self.cv
+                self.cv = float(nearest_image) / float(M) + self.cv
 
         else:
             num = 0
             denom = 0
 
             for i, image in enumerate(self.reference):
-            
-                if method.lower() == 'kabsch':
+
+                if method.lower() == "kabsch":
                     d = kabsch_rmsd(image, self.coords, indices=atom_indices)
-                elif method.lower() == 'kearsley':
+                elif method.lower() == "kearsley":
                     d = Kearsley().fit(image, self.coords, indices=atom_indices)
-                else: # 'quaternion':
+                else:  # 'quaternion':
                     d = quaternion_rmsd(image, self.coords, indices=atom_indices)
-            
-                exp = torch.exp(-la * d)
-                num += (i + 1) * exp
+
+                exp = torch.exp(-self.la * d)
+                num += float(i) * exp
                 denom += exp
 
-            self.cv = num / denom  
-            self.cv = self.cv / float(len(self.reference)) 
+            self.cv = num / denom
+            self.cv = self.cv / float(M)  # normalize to range(0,1)
 
         # get forces
         if self.requires_grad:
@@ -460,15 +492,14 @@ class CV:
                 self.cv, self.coords, allow_unused=True
             )[0]
             self.gradient = self.gradient.detach().numpy()
-            
+
         return float(self.cv)
 
     def path_distance(
-        self, 
-        cv_def: Union[str, list], 
-        n_interpol: int = 20, 
-        la: float = 1.0,
-        method: str='quaternion',
+        self,
+        cv_def: Union[str, list],
+        n_interpol: int = 20,
+        method: str = "quaternion",
     ) -> float:
         """distance from path
 
@@ -477,9 +508,8 @@ class CV:
         Args:
             cv_def: path to xyz file with reference structure
                     definition: 'path to xyz' or
-                                ['path to reference xyz', [atom indices]]            
+                                ['path to reference xyz', [atom indices]]
             n_interpol: number of interpolated images to between to nodes of path
-            la: lambda parameter to smooth the variation of the path variable
             rmsd_method: 'kabsch', 'quaternion' or 'kearsley' algorithm for optimal alignment
                           gradient of kabsch algorithm numerical unstable!
 
@@ -497,20 +527,37 @@ class CV:
         if self.reference == None:
             images = read_traj(cv_def)
             self.reference = interpolate_coordinates(images, n_interpol=n_interpol)
-            
+            if len(self.reference[0]) != len(self.coords):
+                raise ValueError(
+                    " >>> Error: number of cartesian coordinates has to match reference coordinates"
+                )
+
+            print(
+                f"\n >>> Colvars Info: Path CV defined by {len(self.reference)} nodes."
+            )
+            print(
+                f" >>> Colvars Info: Optimal alignment of coordinates with nodes uses {method} algorithm."
+            )
+            self.la = 0
+            for i in range(1, len(self.reference)):
+                self.la += torch.linalg.norm(self.reference[i] - self.reference[i - 1])
+            self.la /= float(len(self.reference))
+            self.la = 1.0 / torch.pow(self.la, 2)
+            print(f" >>> Colvars Info: Setting lambda parameter to {self.la} 1/Bohr^2.")
+
         sum = 0
         for image in self.reference:
 
-            if method.lower() == 'kabsch':
+            if method.lower() == "kabsch":
                 d = kabsch_rmsd(image, self.coords, indices=atom_indices)
-            elif method.lower() == 'kearsley':
+            elif method.lower() == "kearsley":
                 d = Kearsley().fit(image, self.coords, indices=atom_indices)
-            else: # 'quaternion':
+            else:  # 'quaternion':
                 d = quaternion_rmsd(image, self.coords, indices=atom_indices)
 
-            sum += torch.exp(-la * d)
+            sum += torch.exp(-self.la * d)
 
-        self.cv = -(1 / la) * torch.log(sum)
+        self.cv = -(1 / self.la) * torch.log(sum)
 
         # get forces
         if self.requires_grad:

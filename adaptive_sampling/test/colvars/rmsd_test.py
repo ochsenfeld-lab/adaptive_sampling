@@ -6,6 +6,7 @@ from adaptive_sampling.colvars.kearsley import Kearsley
 from adaptive_sampling.colvars.utils import *
 from adaptive_sampling.interface.sampling_data import SamplingData
 
+
 class MD:
     def __init__(self, mass, coords):
         self.masses = np.array(mass)
@@ -108,7 +109,7 @@ def test_kearsley_1(a, b, expected_nofit, expected_fit):
     "a, b, expected_nofit, expected_fit",
     [
         (
-           torch.tensor(
+            torch.tensor(
                 [
                     [0, 0, 0],
                     [0, 0, 1],
@@ -175,15 +176,16 @@ def test_kabsch_1(a, b, expected_nofit, expected_fit):
 
     rmsd_nofit = rmsd(a, b)
     rmsd_kabsch = kabsch_rmsd(a, b)
-    
+
     assert float(rmsd_nofit) == pytest.approx(expected_nofit, abs=1.0e-3)
     assert float(rmsd_kabsch) == pytest.approx(expected_fit, abs=1.0e-3)
+
 
 @pytest.mark.parametrize(
     "a, b, expected_nofit, expected_fit",
     [
         (
-           torch.tensor(
+            torch.tensor(
                 [
                     [0, 0, 0],
                     [0, 0, 1],
@@ -250,7 +252,7 @@ def test_quaternion_1(a, b, expected_nofit, expected_fit):
 
     rmsd_nofit = rmsd(a, b)
     rmsd_quaternion = quaternion_rmsd(a, b)
-    
+
     assert float(rmsd_nofit) == pytest.approx(expected_nofit, abs=1.0e-3)
     assert float(rmsd_quaternion) == pytest.approx(expected_fit, abs=1.0e-3)
 
@@ -286,56 +288,50 @@ def test_interpolate(images, interpolated_images):
     "file, coords",
     [
         (
-            'resources/m1.xyz',
-            torch.tensor([0,0,0,1,0,0,0,1,0,0,0,1]) / BOHR_to_ANGSTROM,
+            "resources/m1.xyz",
+            torch.tensor([0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1]) / BOHR_to_ANGSTROM,
         )
-    ]
+    ],
 )
 def test_read_xyz(file, coords):
     xyz = read_xyz(file)
-    assert torch.allclose(xyz, coords.float())    
+    assert torch.allclose(xyz, coords.float())
 
 
 @pytest.mark.parametrize(
     "file, coords",
     [
         (
-            'resources/traj.xyz',
-            torch.tensor
-            ([
-                [0,0,0,1,0,0,0,1,0,0,0,1],
-                [0,0,0,2,0,0,0,1,0,0,0,1],
-                [0,0,0,3,0,0,0,1,0,0,0,1],
-                [0,0,0,4,0,0,0,1,0,0,0,1],
-                [0,0,0,5,0,0,0,1,0,0,0,1],
-            ]) / BOHR_to_ANGSTROM,
+            "resources/traj.xyz",
+            torch.tensor(
+                [
+                    [0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1],
+                    [0, 0, 0, 2, 0, 0, 0, 1, 0, 0, 0, 1],
+                    [0, 0, 0, 3, 0, 0, 0, 1, 0, 0, 0, 1],
+                    [0, 0, 0, 4, 0, 0, 0, 1, 0, 0, 0, 1],
+                    [0, 0, 0, 5, 0, 0, 0, 1, 0, 0, 0, 1],
+                ]
+            )
+            / BOHR_to_ANGSTROM,
         )
-    ]
+    ],
 )
 def test_read_traj(file, coords):
     xyz = read_traj(file)
     xyz = torch.stack(xyz)
-    assert torch.allclose(xyz, coords.float()) 
+    assert torch.allclose(xyz, coords.float())
 
 
 @pytest.mark.parametrize(
-    "coords1, coords2, rmsd_fit",
-    [
-        (
-            'resources/m1.xyz',
-            'resources/m2.xyz',
-            0.000
-
-        )
-    ]
+    "coords1, coords2, rmsd_fit", [("resources/m1.xyz", "resources/m2.xyz", 0.000)]
 )
 def test_rmsd(coords1, coords2, rmsd_fit):
     xyz1 = read_xyz(coords1)
     the_md = MD([1, 2, 3, 4], xyz1.numpy())
     the_cv = CV(the_md, requires_grad=True)
-    f1, grad1 = the_cv.get_cv("rmsd", coords2, method='kabsch')
-    f2, grad2 = the_cv.get_cv("rmsd", coords2, method='quaternion')
-    f3, grad3 = the_cv.get_cv("rmsd", coords2, method='kearsley')
+    f1, grad1 = the_cv.get_cv("rmsd", coords2, method="kabsch")
+    f2, grad2 = the_cv.get_cv("rmsd", coords2, method="quaternion")
+    f3, grad3 = the_cv.get_cv("rmsd", coords2, method="kearsley")
     assert f1 == pytest.approx(rmsd_fit, abs=1e-3)
     assert f2 == pytest.approx(rmsd_fit, abs=1e-3)
     assert f3 == pytest.approx(rmsd_fit, abs=1e-3)
@@ -347,10 +343,25 @@ def test_rmsd(coords1, coords2, rmsd_fit):
     "coords, internals",
     [
         (
-            torch.tensor([1,0,0,0,1,0,0,0,1,0,0,0]),
-            torch.tensor([1.0000, 1.4142, 1.4142, 1.0000, 1.4142, 1.4142, 1.0000, 1.4142, 1.4142, 1.0000, 1.0000, 1.0000])
+            torch.tensor([1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0]),
+            torch.tensor(
+                [
+                    1.0000,
+                    1.4142,
+                    1.4142,
+                    1.0000,
+                    1.4142,
+                    1.4142,
+                    1.0000,
+                    1.4142,
+                    1.4142,
+                    1.0000,
+                    1.0000,
+                    1.0000,
+                ]
+            ),
         )
-    ]
+    ],
 )
 def test_internals(coords, internals):
     coords = coords.float()
@@ -363,10 +374,15 @@ def test_internals(coords, internals):
     "coords, close_points",
     [
         (
-            torch.tensor([0,0,0,1,0,0,2,0,0,3,0,0]),
-            [np.array([1,2,3]), np.array([2,0,3]), np.array([1,3,0]), np.array([2,1,0])],
+            torch.tensor([0, 0, 0, 1, 0, 0, 2, 0, 0, 3, 0, 0]),
+            [
+                np.array([1, 2, 3]),
+                np.array([2, 0, 3]),
+                np.array([1, 3, 0]),
+                np.array([2, 1, 0]),
+            ],
         )
-    ]
+    ],
 )
 def test_find_close_points(coords, close_points):
     points = find_closest_points(coords)

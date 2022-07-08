@@ -82,10 +82,6 @@ class WTMeABF(eABF, WTM, EnhancedSampling):
                     ramp * self.abf_forces[i][bink[1], bink[0]] - mtd_forces[i]
                 )
 
-        self.traj = np.append(self.traj, [xi], axis=0)
-        self.temp.append(md_state.temp)
-        self.epot.append(md_state.epot)
-
         # xi-conditioned accumulators for CZAR
         if (xi <= self.maxx).all() and (xi >= self.minx).all():
 
@@ -175,6 +171,16 @@ class WTMeABF(eABF, WTM, EnhancedSampling):
 
         if self.verbose:
             print(f" >>> Info: Adaptive sampling restartet from {filename}!")
+
+    def _write_ext_traj(self):
+        data = {}
+        for i in range(self.ncoords):
+            if self.cv_type[i] == "angle":
+                self.ext_traj[:, i] *= DEGREES_per_RADIAN
+            elif self.cv_type[i] == "distance":
+                self.ext_traj[:, i] *= BOHR_to_ANGSTROM
+            data[f"lambda{i}"] = self.ext_traj[:, i]
+        return data
 
     def write_traj(self):
         """save trajectory for post-processing"""
