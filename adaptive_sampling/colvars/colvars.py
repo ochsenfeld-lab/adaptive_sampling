@@ -353,24 +353,26 @@ class CV:
         self,
         cv_def: Union[str, list],
         n_interpol: int = 2,
-        method: str = "quaternion",
-        gpath: bool = False,
+        method: str = "internal",
     ) -> float:
         """progression along path
 
         see: Branduardui et al., J. Chem. Phys. (2007); https://doi.org/10.1063/1.2432340
+             Leines et. al., Phys. Rev. Lett. (2012), https://link.aps.org/doi/10.1103/PhysRevLett.109.020601
+
+        TODO: Adaptive path updates to converge to MFEP 
 
         Args:
             cv_def: path to xyz file with reference structure
                     definition: 'path to xyz' or
                                 ['path to reference xyz', [atom indices]]
             n_interpol: number of interpolated images to between two nodes of the reference path
-            method: 'kabsch', 'quaternion' or 'kearsley' algorithm for optimal alignment
-                    gradient of kabsch algorithm numerical unstable!
+            method: 'gpath' for geometrical path definition based on selected internal distances,
+                    'quaternion', 'kabsch' or 'kearsley' for rmsd based algorithm
             gpath: use geometrical path definition, use definition based on rmsd otherwise
 
         Returns:
-            cv: path collective variable 
+            cv: path collective variable
         """
         self.update_coords()
 
@@ -388,10 +390,10 @@ class CV:
                     " >>> Error: number of cartesian coordinates has to match reference coordinates"
                 )
 
-            if gpath:
-                self.close_index = find_closest_points(
-                    self.coords, indices=atom_indices
-                )
+            if method.lower() == 'gpath':
+                #self.close_index = find_closest_points(
+                #    self.coords, indices=atom_indices
+                #)
                 print(
                     f"\n >>> Colvars Info: Geometrical Path CV defined by {len(self.reference)} nodes."
                 )
@@ -401,13 +403,29 @@ class CV:
                     f"\n >>> Colvars Info: Path CV defined by {len(self.reference)} nodes."
                 )
                 print(
-                    f" >>> Colvars Info: Optimal alignment of coordinates with nodes uses {method} algorithm."
+                    f" >>> Colvars Info: Using {method} algorithm for calculation of RMSD."
                 )
                 self.la = 0
-                for i in range(1, len(self.reference)):
-                    self.la += torch.linalg.norm(
-                        self.reference[i] - self.reference[i - 1]
-                    )
+                if method.lower() == "internal":
+                    if self.reference_internal == None:
+                        self.reference_internal = []
+                        for image in self.reference:
+                            self.reference_internal.append(
+                                get_internal_coords(
+                                    image, atom_indices,
+                                )
+                            )
+                    for i in range(1, len(self.reference_internal)):
+                        self.la += torch.linalg.norm(
+                            self.reference_internal[i] - self.reference_internal[i - 1]
+                        )
+
+                else:    
+                    for i in range(1, len(self.reference)):
+                        self.la += torch.linalg.norm(
+                            self.reference[i] - self.reference[i - 1]
+                        )
+
                 self.la /= float(len(self.reference))
                 self.la = 1.0 / torch.pow(self.la, 2)
                 print(
@@ -416,17 +434,17 @@ class CV:
 
         M = len(self.reference)
 
-        if gpath:
+        if method.lower() == 'gpath':
             # use geometrical path definition in internal coordinates
             self.coords_internal = get_internal_coords(
-                self.coords, self.close_index, indices=atom_indices
+                self.coords, atom_indices,
             )
             if self.reference_internal == None:
                 self.reference_internal = []
                 for image in self.reference:
                     self.reference_internal.append(
                         get_internal_coords(
-                            image, self.close_index, indices=atom_indices
+                            image, atom_indices,
                         )
                     )
 
@@ -435,11 +453,11 @@ class CV:
             for i, image in enumerate(self.reference_internal):
                 rmsds.append(torch.linalg.norm(image - self.coords_internal))
             rmsds = torch.stack(rmsds)
-
+            
             nearest_image = torch.argmin(rmsds)
             if int(nearest_image) == 0:
                 nearest_image += 1
-            elif int(nearest_image) == len(self.reference):
+            elif int(nearest_image) == len(rmsds):
                 nearest_image -= 1
 
             # compute path cv
@@ -467,17 +485,27 @@ class CV:
                 self.cv = float(nearest_image) / float(M) + self.cv
 
         else:
+
+            if method.lower() == "internal":
+                self.coords_internal = get_internal_coords(
+                    self.coords, atom_indices,
+                )
+            
             num = 0
             denom = 0
 
             for i, image in enumerate(self.reference):
 
-                if method.lower() == "kabsch":
+                if method.lower() == "internal":
+                    d = torch.linalg.norm(self.reference_internal[i] - self.coords_internal)
+                elif method.lower() == "kabsch":
                     d = kabsch_rmsd(image, self.coords, indices=atom_indices)
                 elif method.lower() == "kearsley":
                     d = Kearsley().fit(image, self.coords, indices=atom_indices)
-                else:  # 'quaternion':
+                elif method.lower() == 'quaternion':
                     d = quaternion_rmsd(image, self.coords, indices=atom_indices)
+                else:
+                    raise ValueError(" >>> Error: invalid method for calculation of RMSD.")
 
                 exp = torch.exp(-self.la * d)
                 num += float(i) * exp
@@ -504,7 +532,7 @@ class CV:
         """distance from path
 
         see: Branduardui et al., J. Chem. Phys. (2007); https://doi.org/10.1063/1.2432340
-             Leines et. al., Phys. Rev. Lett. (2012), https://link.aps.org/doi/10.1103/PhysRevLett.109.020601
+             
         Args:
             cv_def: path to xyz file with reference structure
                     definition: 'path to xyz' or
@@ -610,10 +638,13 @@ class CV:
             xi = self.rmsd(atoms)
             self.type = "distance"
         elif cv.lower() == "path":
-            xi = self.path_progression(atoms, gpath=False, **kwargs)
+            xi = self.path_progression(atoms, method='quaternion', **kwargs)
+            self.type = None
+        elif cv.lower() == "cv_path":
+            xi = self.path_progression(atoms, method='internal', **kwargs)
             self.type = None
         elif cv.lower() == "gpath":
-            xi = self.path_progression(atoms, gpath=True, **kwargs)
+            xi = self.path_progression(atoms, method='gpath', **kwargs)
             self.type = None
         elif cv.lower() == "path_distance":
             xi = self.path_distance(atoms, **kwargs)

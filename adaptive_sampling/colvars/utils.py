@@ -114,17 +114,13 @@ def find_closest_points(coords: torch.tensor, indices: list = None) -> list:
 
 
 def get_internal_coords(
-    coords: torch.tensor, close_indices: list, indices: list = None
+    coords: torch.tensor, index_pairs: list, #indices: list = None
 ) -> torch.tensor:
     coords = torch.reshape(coords, (int(len(coords) / 3), 3)).float()
-    if indices != None:
-        coords = coords[indices]
-
     internals = []
-    for xyz, indices in zip(coords, close_indices):
-        for j in indices:
-            dist = torch.linalg.norm(xyz - coords[j])
-            internals.append(dist)
+    for pair in index_pairs:
+        dist = torch.linalg.norm(coords[pair[1]] - coords[pair[0]])
+        internals.append(dist)
     internals = torch.stack(internals)
     return internals
 
