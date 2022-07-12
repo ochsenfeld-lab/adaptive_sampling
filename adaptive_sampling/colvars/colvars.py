@@ -365,11 +365,11 @@ class CV:
         Args:
             cv_def: path to xyz file with reference structure
                     definition: 'path to xyz' or
-                                ['path to reference xyz', [atom indices]]
+                                ['path to xyz', [atom indices]]
             n_interpol: number of interpolated images to between two nodes of the reference path
-            method: 'gpath' for geometrical path definition based on selected internal distances,
-                    'quaternion', 'kabsch' or 'kearsley' for rmsd based algorithm
-            gpath: use geometrical path definition, use definition based on rmsd otherwise
+            method: 'gpath' for geometrical path definition based on selected internal distances (Leines et. al.),
+                    'internal' for using RMSD of selected internal distances, 
+                    'quaternion', 'kabsch' or 'kearsley' for RMSD based on optimal alignment of cartesian coordinates,
 
         Returns:
             cv: path collective variable
@@ -402,11 +402,11 @@ class CV:
                 print(
                     f"\n >>> Colvars Info: Path CV defined by {len(self.reference)} nodes."
                 )
-                print(
-                    f" >>> Colvars Info: Using {method} algorithm for calculation of RMSD."
-                )
                 self.la = 0
                 if method.lower() == "internal":
+                    print(
+                        f" >>> Colvars Info: Using internal coordinates for calculation of RMSD."
+                    )
                     if self.reference_internal == None:
                         self.reference_internal = []
                         for image in self.reference:
@@ -421,6 +421,9 @@ class CV:
                         )
 
                 else:    
+                    print(
+                        f" >>> Colvars Info: Using {method} algorithm for calculation of RMSD."
+                    )
                     for i in range(1, len(self.reference)):
                         self.la += torch.linalg.norm(
                             self.reference[i] - self.reference[i - 1]
@@ -526,20 +529,20 @@ class CV:
     def path_distance(
         self,
         cv_def: Union[str, list],
-        n_interpol: int = 20,
+        n_interpol: int = 2,
         method: str = "quaternion",
     ) -> float:
-        """distance from path
+        """distance from path 
 
         see: Branduardui et al., J. Chem. Phys. (2007); https://doi.org/10.1063/1.2432340
              
         Args:
-            cv_def: path to xyz file with reference structure
+            cv_def: path to xyz file with reference path
                     definition: 'path to xyz' or
-                                ['path to reference xyz', [atom indices]]
+                                ['path to xyz', [atom indices]]
             n_interpol: number of interpolated images to between to nodes of path
-            rmsd_method: 'kabsch', 'quaternion' or 'kearsley' algorithm for optimal alignment
-                          gradient of kabsch algorithm numerical unstable!
+            method: 'internal' for using RMSD of selected internal distances, 
+                    'quaternion', 'kabsch' or 'kearsley' for using optimal alignment of cartesian coordinates,
 
         Returns:
             cv: distance from path
@@ -561,31 +564,63 @@ class CV:
                 )
 
             print(
-                f"\n >>> Colvars Info: Path CV defined by {len(self.reference)} nodes."
-            )
-            print(
-                f" >>> Colvars Info: Optimal alignment of coordinates with nodes uses {method} algorithm."
+                f"\n >>> Colvars Info: Distance to Path defined by {len(self.reference)} nodes."
             )
             self.la = 0
-            for i in range(1, len(self.reference)):
-                self.la += torch.linalg.norm(self.reference[i] - self.reference[i - 1])
+            if method.lower() == "internal":
+                print(
+                    f" >>> Colvars Info: Using internal coordinates for calculation of RMSD."
+                )
+                if self.reference_internal == None:
+                    self.reference_internal = []
+                    for image in self.reference:
+                        self.reference_internal.append(
+                            get_internal_coords(
+                                image, atom_indices,
+                            )
+                        )
+                for i in range(1, len(self.reference_internal)):
+                    self.la += torch.linalg.norm(
+                        self.reference_internal[i] - self.reference_internal[i - 1]
+                    )
+
+            else:    
+                print(
+                    f" >>> Colvars Info: Using {method} algorithm for calculation of RMSD."
+                )
+                for i in range(1, len(self.reference)):
+                    self.la += torch.linalg.norm(
+                        self.reference[i] - self.reference[i - 1]
+                    )
+
             self.la /= float(len(self.reference))
             self.la = 1.0 / torch.pow(self.la, 2)
-            print(f" >>> Colvars Info: Setting lambda parameter to {self.la} 1/Bohr^2.")
+            print(
+                f" >>> Colvars Info: Setting lambda parameter to {self.la} 1/Bohr^2."
+            )
+
+        if method.lower() == "internal":
+            self.coords_internal = get_internal_coords(
+                self.coords, atom_indices,
+            )
 
         sum = 0
-        for image in self.reference:
+        for i, image in enumerate(self.reference):
 
-            if method.lower() == "kabsch":
+            if method.lower() == "internal":
+                d = torch.linalg.norm(self.reference_internal[i] - self.coords_internal)
+            elif method.lower() == "kabsch":
                 d = kabsch_rmsd(image, self.coords, indices=atom_indices)
             elif method.lower() == "kearsley":
                 d = Kearsley().fit(image, self.coords, indices=atom_indices)
-            else:  # 'quaternion':
+            elif method.lower() == 'quaternion':
                 d = quaternion_rmsd(image, self.coords, indices=atom_indices)
+            else:
+                raise ValueError(" >>> Error: invalid method for calculation of RMSD.")
 
             sum += torch.exp(-self.la * d)
 
-        self.cv = -(1 / self.la) * torch.log(sum)
+        self.cv = - torch.log(sum) / self.la
 
         # get forces
         if self.requires_grad:
