@@ -174,7 +174,6 @@ class Kearsley:
         Raises:
             ValueError: If the input points don't have the correct shape.
         """
-        print(u)
         if len(u.size(dim=0)) != 2:
             raise ValueError("Input array must have 2 dimensions")
 

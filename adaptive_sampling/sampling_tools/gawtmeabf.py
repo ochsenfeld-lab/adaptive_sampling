@@ -47,15 +47,21 @@ class GaWTMeABF(WTMeABF, GaMD, EnhancedSampling):
         output_freq: frequency in steps for writing output
     """
 
-    def __init__(self, *args, do_wtm: bool = True, **kwargs):
+    def __init__(self, *args, qm_boost: bool = False, do_wtm: bool = True, **kwargs):
         super().__init__(*args, **kwargs)
         self.do_wtm = do_wtm
+        self.qm_boost = qm_boost
 
     def step_bias(self, write_output: bool = True, write_traj: bool = True, **kwargs):
 
         md_state = self.the_md.get_sampling_data()
         epot = md_state.epot
-        self.gamd_forces = np.copy(md_state.forces)
+        if self.qm_boost:
+            epot = md_state.epot - md_state.mm_epot
+            self.gamd_forces = np.copy(md_state.qm_force)
+        else:
+            epot = md_state.epot
+            self.gamd_forces = np.copy(md_state.forces)
 
         (xi, delta_xi) = self.get_cv(**kwargs)
 

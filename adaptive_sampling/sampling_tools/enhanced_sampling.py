@@ -33,6 +33,7 @@ class EnhancedSampling(ABC):
         kinetics: bool = False,
         f_conf: float = 100,
         output_freq: int = 100,
+        multiple_walker: bool = False,
         **kwargs,
     ):
 
@@ -41,6 +42,7 @@ class EnhancedSampling(ABC):
         self.out_freq = output_freq
         self.equil_temp = equil_temp
         self.verbose = verbose
+        self.shared = multiple_walker
 
         # definition of CVs
         self.ncoords = len(cv_def)

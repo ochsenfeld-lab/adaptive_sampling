@@ -6,7 +6,7 @@ def diff(
     a: Union[np.ndarray, float], b: Union[np.ndarray, float], cv_type: str
 ) -> Union[np.ndarray, float]:
     """get difference of elements of numbers or arrays
-    in range(-inf, inf) if is_angle is False or in range(-pi, pi) if is_angle is True
+    in range(-pi, pi) if cv_type='angle' else range(-inf, inf) 
 
     Args:
         a: number or array
@@ -37,7 +37,7 @@ def sum(
     a: Union[np.ndarray, float], b: Union[np.ndarray, float], cv_type: str
 ) -> Union[np.ndarray, float]:
     """get sum of elements of numbers or arrays
-    in range(-inf, inf) if is_angle is False or in range(-pi, pi) if is_angle is True
+    in range(-pi, pi) if cv_type='angle' else range(-inf, inf) 
 
     Args:
         a: number or array
@@ -86,6 +86,37 @@ def welford_var(
     M2 += delta * delta2
     var = M2 / count if count > 2 else 0.0
     return mean, M2, var
+
+
+def combine_welford_stats(
+    count_a, 
+    mean_a, 
+    M2_a, 
+    count_b, 
+    mean_b, 
+    M2_b
+) -> Tuple[float, float, float, float]:
+        """Combines running sample stats of welford's algorithm using Chan et al.' algorithm.
+        
+        args:
+            count_a, mean_a, M2_a: stats of frist subsample
+            count_a, mean_a, M2_a: stats of second subsample
+    
+        returns:
+            mean, M2 and sample variance of combined samples
+        """
+        count = count_a + count_b
+        if count == 0:
+            return 0.0, 0.0, 0.0, 0.0
+
+        delta = mean_b - mean_a
+        mean = mean_a + delta * count_b / count
+        if count_b == 0:
+            M2 = M2_a           
+        else:
+            M2 = M2_a + M2_b + (delta * delta) * ((count_a / count_b) / count)
+        var = M2 / count if count > 2 else 0.0
+        return count, mean, M2, var
 
 
 def cond_avg(a: np.ndarray, hist: np.ndarray) -> np.ndarray:
