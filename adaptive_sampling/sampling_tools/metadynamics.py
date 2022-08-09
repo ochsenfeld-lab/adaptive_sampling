@@ -1,3 +1,4 @@
+import os, time
 import numpy as np
 from typing import Tuple
 from .enhanced_sampling import EnhancedSampling
@@ -89,6 +90,10 @@ class WTM(EnhancedSampling):
         if self.kinetics:
             self._kinetics(delta_xi)
 
+        # shared-bias metadynamics
+        if self.shared:
+            self.shared_bias(**kwargs)
+
         if self.the_md.step % self.out_freq == 0:
             # write output
 
@@ -129,9 +134,118 @@ class WTM(EnhancedSampling):
         self.pmf *= atomic_to_kJmol
         self.pmf -= self.pmf.min()
 
-    def shared_bias(self):
+    def shared_bias(
+        self,
+        sync_interval: int=5,
+        mw_file: str="../shared_bias",
+        n_trials: int=10,
+    ):
         """TODO"""
-        pass
+        md_state = self.the_md.get_sampling_data()
+        if md_state.step == 0:        
+            if self.verbose:
+                print(" >>> Info: Creating a new instance for shared-bias metadynamics.")
+                print(" >>> Info: Data of local walker stored in `restart_wtm_local.npz`.")
+            
+            # create seperate restart file with local data only
+            self._write_restart(
+                filename="restart_wtm_local",
+                hist=self.histogram,
+                pmf=self.pmf,
+                force=self.bias,
+                metapot=self.metapot,
+                centers=self.center,
+            )
+                        
+            if not os.path.isfile(mw_file+".npz"):
+                if self.verbose:
+                    print(f" >>> Info: Creating buffer file for shared-bias metadynamics: `{mw_file}.npz`.")
+                self._write_restart(
+                    filename=mw_file,
+                    hist=self.histogram,
+                    pmf=self.pmf,
+                    force=self.bias,
+                    metapot=self.metapot,
+                    centers=self.center,
+                )
+                os.chmod(mw_file + ".npz", 0o444)
+            elif self.verbose:
+                print(f" >>> Info: Syncing with existing buffer file for shared-bias metadynamics: `{mw_file}.npz`.")
+        
+
+        count = md_state.step % sync_interval
+        if count == sync_interval-1:
+            
+            hist = np.zeros_like(self.histogram)
+            for x in self.traj_last_sync:
+                if (x <= self.maxx).all() and (x >= self.minx).all():
+                    bink = self.get_index([x])
+                    hist[bink[1], bink[0]] += 1
+            self.traj_last_sync = [self.traj_last_sync[-1]]
+
+            self.bias = np.zeros_like(self.bias)
+            self.metapot = np.zeros_like(self.metapot)
+            
+            step = md_state.step
+            md_state.step = self.hill_drop_freq
+            for center in self.center_last_sync:
+                self._accumulate_wtm_force([center])
+            md_state.step = step
+            
+            trial = 0
+            while trial < n_trials:
+                trial += 1
+                if not os.access(mw_file + ".npz", os.W_OK):
+
+                    last_sync_bias = np.copy(self.bias)
+                    last_sync_metapot = np.copy(self.metapot)
+                    
+                    v = self.verbose
+                    self.verbose = False
+                    self.restart(filename="restart_wtm_local")
+                    self.verbose = v
+                    self.bias += last_sync_bias
+                    self.metapot += last_sync_metapot
+                    self.get_pmf()
+
+                    self._write_restart(
+                        filename="restart_wtm_local",
+                        hist=hist+self.histogram,
+                        pmf=self.pmf,
+                        force=self.bias,
+                        metapot=self.metapot,
+                        centers=np.append(self.center, self.center_last_sync),
+                    )
+
+                    # grant write access only to one walker during sync
+                    os.chmod(mw_file + ".npz", 0o666) 
+                    shared_data = np.load(mw_file + ".npz")  
+
+                    self.histogram = shared_data["hist"] + hist 
+                    self.bias = shared_data["force"] + self.bias
+                    self.metapot = shared_data["metapot"] + self.metapot
+                    self.center = np.append(shared_data["centers"], self.center_last_sync).tolist()
+                    self.get_pmf()
+
+                    self._write_restart(
+                        filename=mw_file,
+                        hist=self.histogram,
+                        pmf=self.pmf,
+                        force=self.bias,
+                        metapot=self.metapot,
+                        centers=self.center,                       
+                    )                                                
+                    os.chmod(mw_file + ".npz", 0o444)  # other walkers can access again
+                    if self.verbose:
+                        print(f" >>> Info: Metadynamics potential synced with `{mw_file}.npz`!")
+                    break                     
+
+                elif trial < n_trials:
+                    if self.verbose:
+                        print(f" >>> Warning: Retry to open shared buffer file after {trial} failed attempts.")
+                    time.sleep(0.1)
+                else:
+                    raise Exception(f" >>> Fatal Error: Failed to sync bias with `{mw_file}.npz`.")   
 
     def get_wtm_force(self, xi: np.ndarray) -> list:
         """compute well-tempered metadynamics bias force from superposition of gaussian hills
@@ -144,6 +258,16 @@ class WTM(EnhancedSampling):
         """
         if self.the_md.step % self.hill_drop_freq == 0:
             self.center.append(xi[0]) if self.ncoords == 1 else self.center.append(xi)
+
+            if self.shared and self.the_md.get_sampling_data().step == 0:
+                self.center_last_sync = [self.center[0]]
+            else: 
+                self.center_last_sync.append(xi[0])
+
+        if self.shared and self.the_md.get_sampling_data().step == 0:
+            self.traj_last_sync = [xi[0]]
+        else:
+            self.traj_last_sync.append(xi[0])
 
         is_in_bounds = (xi <= self.maxx).all() and (xi >= self.minx).all()
         bias_force = [0, 0]

@@ -95,10 +95,7 @@ class eABF(ABF, EnhancedSampling):
         
         force_sample = [0 for _ in range(2 * self.ncoords)]
 
-        bin_la = [-1, -1]
-        if (self.ext_coords <= self.maxx).all() and (
-            self.ext_coords >= self.minx
-        ).all():
+        if self._check_boundaries(self.ext_coords):
 
             bin_la = self.get_index(self.ext_coords)
             self.ext_hist[bin_la[1], bin_la[0]] += 1
@@ -127,7 +124,7 @@ class eABF(ABF, EnhancedSampling):
                 self.ext_forces -= ramp * self.bias[i][bin_la[1], bin_la[0]]
 
         # xi-conditioned accumulators for CZAR
-        if (xi <= self.maxx).all() and (xi >= self.minx).all():
+        if self._check_boundaries(xi):
 
             bink = self.get_index(xi)
             self.histogram[bink[1], bink[0]] += 1
@@ -138,27 +135,19 @@ class eABF(ABF, EnhancedSampling):
                 )
                 self.correction_czar[i][bink[1], bink[0]] += force_sample[self.ncoords+i]
 
-        if self.shared:            
-            if not (self.ext_coords <= self.maxx).all() and (self.ext_coords >= self.minx).all():
-                bin_la = [-1, -1]
-            if not ((xi <= self.maxx).all() and (xi >= self.minx).all()):
-                bink = [-1, -1]
-            
-            self.shared_bias(list(
-                itertools.chain(*[
-                    bin_la, 
-                    bink, 
-                    force_sample,
-                ])), 
+        # shared-bias eABF
+        if self.shared:                        
+            self.shared_bias(
+                xi,
+                force_sample, 
                 **kwargs,
             )
-
-        self._up_momenta()
 
         self.traj = np.append(self.traj, [xi], axis=0)
         self.ext_traj = np.append(self.ext_traj, [self.ext_coords], axis=0)
         self.temp.append(md_state.temp)
         self.epot.append(md_state.epot)
+        self._up_momenta()
 
         # correction for kinetics
         if self.kinetics:
@@ -221,9 +210,10 @@ class eABF(ABF, EnhancedSampling):
 
     def shared_bias(
         self, 
+        xi,
         force_sample,
-        sync_interval: int=5,
-        mw_file: str="shared_bias",
+        sync_interval: int=50,
+        mw_file: str="../shared_bias",
         n_trials: int=10,
     ):
         """syncs eABF bias with other walkers
@@ -252,7 +242,6 @@ class eABF(ABF, EnhancedSampling):
                 ext_hist=self.ext_hist,
                 czar_corr=self.correction_czar,
             )
-
             self.update_samples = np.zeros(shape=(sync_interval, len(force_sample)))
             
             if not os.path.isfile(mw_file+".npz"):
@@ -282,28 +271,29 @@ class eABF(ABF, EnhancedSampling):
             bias = np.zeros_like(self.bias)
             ext_hist = np.zeros_like(self.ext_hist)
             czar_corr = np.zeros_like(self.correction_czar)
-
+            
             for sample in self.update_samples:
-                    
-                bin_la = (int(sample[1]), int(sample[0]))
-                bin_xi = (int(sample[3]), int(sample[2]))
-                hist[bin_xi] += 1 if (np.asarray(bin_xi) >= 0).all() else 0
-                ext_hist[bin_la] += 1 if (np.asarray(bin_la) >= 0).all() else 0
-                for i in range(self.ncoords):
-                    if (np.asarray(bin_xi) >= 0).all():
-                        czar_corr[i][bin_xi] += sample[4+self.ncoords+i]
-                    if (np.asarray(bin_la) >= 0).all():
+                if self._check_boundaries(self.ext_coords):                   
+                    bin_la = self.get_index(self.ext_coords)
+                    ext_hist[bin_la[1], bin_la[0]] += 1
+                    for i in range(self.ncoords):
                         (
-                            bias[i][bin_la],
-                            m2[i][bin_la],
-                            var[i][bin_la],
+                            bias[i][bin_la[1], bin_la[0]],
+                            m2[i][bin_la[1], bin_la[0]],
+                            var[i][bin_la[1], bin_la[0]],
                         ) = welford_var(
-                            hist[bin_la],
-                            bias[i][bin_la],
-                            m2[i][bin_la],
-                            sample[4+i],
+                            ext_hist[bin_la[1], bin_la[0]],
+                            bias[i][bin_la[1], bin_la[0]],
+                            m2[i][bin_la[1], bin_la[0]],
+                            sample[i],
                         )
-
+                
+                if self._check_boundaries(xi):
+                    bin_xi = self.get_index(xi)
+                    hist[bin_xi[1], bin_xi[0]] += 1 
+                    for i in range(self.ncoords):
+                        czar_corr[i][bin_xi[1], bin_xi[0]] += sample[self.ncoords+i]
+            
             trial = 0
             while trial < n_trials:
                 trial += 1
@@ -319,7 +309,7 @@ class eABF(ABF, EnhancedSampling):
                     # grant write access only to one walker during sync
                     os.chmod(mw_file + ".npz", 0o666) 
                     shared_data = np.load(mw_file + ".npz")  
-
+                    
                     for i in range(len(hist.flatten())):
                         (
                             hist_i,
@@ -340,7 +330,7 @@ class eABF(ABF, EnhancedSampling):
                         global_var[i] = var_i
                         global_ext_hist[i] = shared_data["ext_hist"].flatten()[i] + hist.flatten()[i]
                         global_czar_corr[i] = shared_data["czar_corr"].flatten()[i] + czar_corr.flatten()[i]
-                        
+                    
                     self._write_restart(
                         filename=mw_file,
                         hist=global_hist.reshape(self.histogram.shape),
@@ -397,7 +387,7 @@ class eABF(ABF, EnhancedSampling):
                         print(f" >>> Warning: Retry to open shared buffer file after {trial} failed attempts.")
                     time.sleep(0.1)
                 else:
-                    raise Exception(f" >>> Fatal Fatal: Failed to sync bias with `{mw_file}.npz`.")
+                    raise Exception(f" >>> Fatal Error: Failed to sync bias with `{mw_file}.npz`.")
 
 
     def _propagate(self, langevin: bool = True):

@@ -92,12 +92,11 @@ class WTMeABF(eABF, WTM, EnhancedSampling):
                 dx = diff(self.ext_coords[i], self.grid[i][bink[i]], self.cv_type[i])
                 self.correction_czar[i][bink[1], bink[0]] += self.ext_k[i] * dx
 
-        self._up_momenta()
-
         self.traj = np.append(self.traj, [xi], axis=0)
         self.ext_traj = np.append(self.ext_traj, [self.ext_coords], axis=0)
         self.temp.append(md_state.temp)
         self.epot.append(md_state.epot)
+        self._up_momenta()
 
         # correction for kinetics
         if self.kinetics:

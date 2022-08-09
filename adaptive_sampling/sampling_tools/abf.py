@@ -124,7 +124,7 @@ class ABF(EnhancedSampling):
         self, 
         force_sample,
         sync_interval: int=5,
-        mw_file: str="shared_bias",
+        mw_file: str="../shared_bias",
         n_trials: int=10,
     ):
         """Syncs ABF bias with buffer file. Excecuted if multiple_walker=True
@@ -282,7 +282,7 @@ class ABF(EnhancedSampling):
                         print(f" >>> Warning: Retry to open shared buffer file after {trial} failed attempts.")
                     time.sleep(0.1)
                 else:
-                    raise Exception(f" >>> Fatal Fatal: Failed to sync bias with `{mw_file}.npz`.")                 
+                    raise Exception(f" >>> Fatal Error: Failed to sync bias with `{mw_file}.npz`.")                 
 
 
     def _divergence_xi(self, xi, cv):
