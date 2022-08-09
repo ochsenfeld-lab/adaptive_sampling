@@ -198,7 +198,7 @@ class EnhancedSampling(ABC):
         Returns:
             bin_x (list):
         """
-        bin_x = [-1, -1]
+        bin_x = [0, 0]
         for i in range(self.ncoords):
             bin_x[i] = int(np.floor(np.abs(xi[i] - self.minx[i]) / self.dx[i]))
         return bin_x

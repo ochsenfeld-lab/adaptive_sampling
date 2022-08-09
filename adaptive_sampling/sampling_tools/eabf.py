@@ -1,9 +1,9 @@
-import random
+import random, os, itertools, time
 import numpy as np
 from typing import Union
 from .enhanced_sampling import EnhancedSampling
 from .abf import ABF
-from .utils import welford_var, diff, cond_avg
+from .utils import welford_var, combine_welford_stats, diff, cond_avg
 from ..processing_tools.thermodynamic_integration import integrate
 from ..units import *
 
@@ -92,35 +92,39 @@ class eABF(ABF, EnhancedSampling):
         self._propagate()
 
         bias_force = self._extended_dynamics(xi, delta_xi)  # , self.ext_sigma)
+        
+        force_sample = [0 for _ in range(2 * self.ncoords)]
 
+        bin_la = [-1, -1]
         if (self.ext_coords <= self.maxx).all() and (
             self.ext_coords >= self.minx
         ).all():
 
-            bink = self.get_index(self.ext_coords)
-            self.ext_hist[bink[1], bink[0]] += 1
+            bin_la = self.get_index(self.ext_coords)
+            self.ext_hist[bin_la[1], bin_la[0]] += 1
 
             for i in range(self.ncoords):
 
                 # linear ramp function
                 ramp = (
                     1.0
-                    if self.ext_hist[bink[1], bink[0]] > self.nfull
-                    else self.ext_hist[bink[1], bink[0]] / self.nfull
+                    if self.ext_hist[bin_la[1], bin_la[0]] > self.nfull
+                    else self.ext_hist[bin_la[1], bin_la[0]] / self.nfull
                 )
 
                 # apply bias force on extended system
+                force_sample[i] = self.ext_k[i] * diff(self.ext_coords[i], xi[i], self.cv_type[i])
                 (
-                    self.bias[i][bink[1], bink[0]],
-                    self.m2_force[i][bink[1], bink[0]],
-                    self.var_force[i][bink[1], bink[0]],
+                    self.bias[i][bin_la[1], bin_la[0]],
+                    self.m2_force[i][bin_la[1], bin_la[0]],
+                    self.var_force[i][bin_la[1], bin_la[0]],
                 ) = welford_var(
-                    self.ext_hist[bink[1], bink[0]],
-                    self.bias[i][bink[1], bink[0]],
-                    self.m2_force[i][bink[1], bink[0]],
-                    self.ext_k[i] * diff(self.ext_coords[i], xi[i], self.cv_type[i]),
+                    self.ext_hist[bin_la[1], bin_la[0]],
+                    self.bias[i][bin_la[1], bin_la[0]],
+                    self.m2_force[i][bin_la[1], bin_la[0]],
+                    force_sample[i],
                 )
-                self.ext_forces -= ramp * self.bias[i][bink[1], bink[0]]
+                self.ext_forces -= ramp * self.bias[i][bin_la[1], bin_la[0]]
 
         # xi-conditioned accumulators for CZAR
         if (xi <= self.maxx).all() and (xi >= self.minx).all():
@@ -129,8 +133,25 @@ class eABF(ABF, EnhancedSampling):
             self.histogram[bink[1], bink[0]] += 1
 
             for i in range(self.ncoords):
-                dx = diff(self.ext_coords[i], self.grid[i][bink[i]], self.cv_type[i])
-                self.correction_czar[i][bink[1], bink[0]] += self.ext_k[i] * dx
+                force_sample[self.ncoords+i] = self.ext_k[i] * diff(
+                    self.ext_coords[i], self.grid[i][bink[i]], self.cv_type[i]
+                )
+                self.correction_czar[i][bink[1], bink[0]] += force_sample[self.ncoords+i]
+
+        if self.shared:            
+            if not (self.ext_coords <= self.maxx).all() and (self.ext_coords >= self.minx).all():
+                bin_la = [-1, -1]
+            if not ((xi <= self.maxx).all() and (xi >= self.minx).all()):
+                bink = [-1, -1]
+            
+            self.shared_bias(list(
+                itertools.chain(*[
+                    bin_la, 
+                    bink, 
+                    force_sample,
+                ])), 
+                **kwargs,
+            )
 
         self._up_momenta()
 
@@ -198,9 +219,186 @@ class eABF(ABF, EnhancedSampling):
                     " >>> Info: On-the-fly integration only available for 1D coordinates"
                 )
 
-    def shared_bias(self):
-        """TODO"""
-        pass
+    def shared_bias(
+        self, 
+        force_sample,
+        sync_interval: int=5,
+        mw_file: str="shared_bias",
+        n_trials: int=10,
+    ):
+        """syncs eABF bias with other walkers
+
+        TODO: 2D collective variables
+
+        Args:
+            force_sample: force sample of current step
+            sync_interval: number of steps between sychronisation
+            mw_file: name of buffer file for shared-bias
+            n_trials: number of attempts to access of buffer file before throwing an error
+        """
+        md_state = self.the_md.get_sampling_data()
+        if md_state.step == 0:        
+            if self.verbose:
+                print(" >>> Info: Creating a new instance for shared-bias eABF.")
+                print(" >>> Info: Data of local walker stored in `restart_eabf_local.npz`.")
+            
+            # create seperate restart file with local data only
+            self._write_restart(
+                filename="restart_eabf_local",
+                hist=self.histogram,
+                force=self.bias,
+                var=self.var_force,
+                m2=self.m2_force,
+                ext_hist=self.ext_hist,
+                czar_corr=self.correction_czar,
+            )
+
+            self.update_samples = np.zeros(shape=(sync_interval, len(force_sample)))
+            
+            if not os.path.isfile(mw_file+".npz"):
+                if self.verbose:
+                    print(f" >>> Info: Creating buffer file for shared-bias eABF: `{mw_file}.npz`.")
+                self._write_restart(
+                    filename=mw_file,
+                    hist=self.histogram,
+                    force=self.bias,
+                    var=self.var_force,
+                    m2=self.m2_force,
+                    ext_hist=self.ext_hist,
+                    czar_corr=self.correction_czar,
+                )
+                os.chmod(mw_file + ".npz", 0o444)
+            elif self.verbose:
+                print(f" >>> Info: Syncing with existing buffer file for shared-bias eABF: `{mw_file}.npz`.")
+        
+        count = md_state.step % sync_interval
+        self.update_samples[count] = force_sample
+            
+        if count == sync_interval-1:
+            
+            hist = np.zeros_like(self.histogram)
+            m2 = np.zeros_like(self.m2_force)
+            var = np.zeros_like(self.var_force)
+            bias = np.zeros_like(self.bias)
+            ext_hist = np.zeros_like(self.ext_hist)
+            czar_corr = np.zeros_like(self.correction_czar)
+
+            for sample in self.update_samples:
+                    
+                bin_la = (int(sample[1]), int(sample[0]))
+                bin_xi = (int(sample[3]), int(sample[2]))
+                hist[bin_xi] += 1 if (np.asarray(bin_xi) >= 0).all() else 0
+                ext_hist[bin_la] += 1 if (np.asarray(bin_la) >= 0).all() else 0
+                for i in range(self.ncoords):
+                    if (np.asarray(bin_xi) >= 0).all():
+                        czar_corr[i][bin_xi] += sample[4+self.ncoords+i]
+                    if (np.asarray(bin_la) >= 0).all():
+                        (
+                            bias[i][bin_la],
+                            m2[i][bin_la],
+                            var[i][bin_la],
+                        ) = welford_var(
+                            hist[bin_la],
+                            bias[i][bin_la],
+                            m2[i][bin_la],
+                            sample[4+i],
+                        )
+
+            trial = 0
+            while trial < n_trials:
+                trial += 1
+                if not os.access(mw_file + ".npz", os.W_OK):
+                    
+                    global_hist = np.zeros_like(self.histogram).flatten()
+                    global_m2 = np.zeros_like(self.m2_force).flatten()
+                    global_var = np.zeros_like(self.var_force).flatten()
+                    global_bias = np.zeros_like(self.bias).flatten()
+                    global_ext_hist = np.zeros_like(self.ext_hist).flatten()
+                    global_czar_corr = np.zeros_like(self.correction_czar).flatten()
+
+                    # grant write access only to one walker during sync
+                    os.chmod(mw_file + ".npz", 0o666) 
+                    shared_data = np.load(mw_file + ".npz")  
+
+                    for i in range(len(hist.flatten())):
+                        (
+                            hist_i,
+                            bias_i,
+                            m2_i,
+                            var_i,
+                        ) = combine_welford_stats(
+                            shared_data["hist"].flatten()[i], 
+                            shared_data["force"].flatten()[i], 
+                            shared_data["m2"].flatten()[i], 
+                            hist.flatten()[i], 
+                            bias.flatten()[i], 
+                            m2.flatten()[i], 
+                        )
+                        global_hist[i] = hist_i
+                        global_bias[i] = bias_i
+                        global_m2[i] = m2_i
+                        global_var[i] = var_i
+                        global_ext_hist[i] = shared_data["ext_hist"].flatten()[i] + hist.flatten()[i]
+                        global_czar_corr[i] = shared_data["czar_corr"].flatten()[i] + czar_corr.flatten()[i]
+                        
+                    self._write_restart(
+                        filename=mw_file,
+                        hist=global_hist.reshape(self.histogram.shape),
+                        force=global_bias.reshape(self.bias.shape),
+                        var=global_var.reshape(self.var_force.shape),
+                        m2=global_m2.reshape(self.m2_force.shape),
+                        ext_hist=global_ext_hist.reshape(self.histogram.shape),
+                        czar_corr=global_czar_corr.reshape(self.correction_czar.shape),
+                    )   
+
+                    self.restart(filename=mw_file)
+                    os.chmod(mw_file + ".npz", 0o444)  # other walkers can access again
+                    
+                    self.get_pmf()  # get new global pmf
+
+                    # write data of local walker
+                    local_data = np.load("restart_eabf_local.npz")  
+                    for i in range(len(hist.flatten())):
+                        (
+                        hist_i,
+                            bias_i,
+                            m2_i,
+                            var_i,
+                        ) = combine_welford_stats(
+                            local_data["hist"].flatten()[i], 
+                            local_data["force"].flatten()[i], 
+                            local_data["m2"].flatten()[i], 
+                            hist.flatten()[i], 
+                            bias.flatten()[i], 
+                            m2.flatten()[i],
+                        )
+                            
+                        # reusing arrays for global data
+                        global_hist[i] = hist_i
+                        global_bias[i] = bias_i
+                        global_m2[i] = m2_i
+                        global_var[i] = var_i
+                        global_ext_hist[i] = local_data["ext_hist"].flatten()[i] + hist.flatten()[i]
+                        global_czar_corr[i] = local_data["czar_corr"].flatten()[i] + czar_corr.flatten()[i]
+
+                    self._write_restart(
+                        filename="restart_eabf_local",
+                        hist=global_hist.reshape(self.histogram.shape),
+                        force=global_bias.reshape(self.bias.shape),
+                        var=global_var.reshape(self.var_force.shape),
+                        m2=global_m2.reshape(self.m2_force.shape),
+                        ext_hist=global_ext_hist.reshape(self.histogram.shape),
+                        czar_corr=global_czar_corr.reshape(self.correction_czar.shape),
+                    )     
+                    break                     
+
+                elif trial < n_trials:
+                    if self.verbose:
+                        print(f" >>> Warning: Retry to open shared buffer file after {trial} failed attempts.")
+                    time.sleep(0.1)
+                else:
+                    raise Exception(f" >>> Fatal Fatal: Failed to sync bias with `{mw_file}.npz`.")
+
 
     def _propagate(self, langevin: bool = True):
         """Propagate momenta/coords of extended variable in time with Velocity Verlet
@@ -305,7 +503,7 @@ class eABF(ABF, EnhancedSampling):
             filename: name of restart file
         """
         try:
-            data = np.load(filename + ".npz", allow_pickle=True)
+            data = np.load(filename + ".npz")
         except:
             raise OSError(f" >>> fatal error: restart file {filename}.npz not found!")
 

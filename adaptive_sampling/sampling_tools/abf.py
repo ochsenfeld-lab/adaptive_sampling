@@ -127,7 +127,16 @@ class ABF(EnhancedSampling):
         mw_file: str="shared_bias",
         n_trials: int=10,
     ):
-        """TODO"""
+        """Syncs ABF bias with buffer file. Excecuted if multiple_walker=True
+        
+        TODO: 2D collective variables
+
+        Args:
+            force_sample: force sample of current step
+            sync_interval: number of steps between sychronisation
+            mw_file: name of buffer file for shared-bias
+            n_trials: number of attempts to access of buffer file before throwing an error
+        """
         md_state = self.the_md.get_sampling_data()
         if md_state.step == 0:        
             if self.verbose:
@@ -160,121 +169,121 @@ class ABF(EnhancedSampling):
                 )
                 os.chmod(mw_file + ".npz", 0o444)
             elif self.verbose:
-                print(f" >>> Info: Using existing buffer file for shared-bias ABF: `{mw_file}.npz`.")
+                print(f" >>> Info: Syncing with existing buffer file for shared-bias ABF: `{mw_file}.npz`.")
         
-        else:
-
-            count = md_state.step % sync_interval
-            self.update_samples[count] = force_sample
+        count = md_state.step % sync_interval
+        self.update_samples[count] = force_sample
             
-            if count == sync_interval-1:
+        if count == sync_interval-1:
                 
-                hist = np.zeros_like(self.histogram)
-                m2 = np.zeros_like(self.m2_force)
-                var = np.zeros_like(self.var_force)
-                bias = np.zeros_like(self.bias)
+            hist = np.zeros_like(self.histogram)
+            m2 = np.zeros_like(self.m2_force)
+            var = np.zeros_like(self.var_force)
+            bias = np.zeros_like(self.bias)
 
-                for sample in self.update_samples:
-                    bink = (int(sample[1]), int(sample[0]))
-                    hist[bink] += 1
-                    for i in range(self.ncoords):
+            for sample in self.update_samples:
+                bink = (int(sample[1]), int(sample[0]))
+                hist[bink] += 1
+                for i in range(self.ncoords):
+                    (
+                        bias[i][bink],
+                        m2[i][bink],
+                        var[i][bink],
+                    ) = welford_var(
+                        hist[bink],
+                        bias[i][bink],
+                        m2[i][bink],
+                        sample[2+i],
+                    )
+                
+            trial = 0
+            while trial < n_trials:
+                trial += 1
+                if not os.access(mw_file + ".npz", os.W_OK):
+                        
+                    global_hist = np.zeros_like(self.histogram).flatten()
+                    global_m2 = np.zeros_like(self.m2_force).flatten()
+                    global_var = np.zeros_like(self.var_force).flatten()
+                    global_bias = np.zeros_like(self.bias).flatten()
+                    
+                    # grant write access only to one walker during sync
+                    os.chmod(mw_file + ".npz", 0o666) 
+                    shared_data = np.load(mw_file + ".npz")  
+
+                    for i in range(len(hist.flatten())):
                         (
-                            bias[i][bink],
-                            m2[i][bink],
-                            var[i][bink],
-                        ) = welford_var(
-                            hist[bink],
-                            bias[i][bink],
-                            m2[i][bink],
-                            sample[2+i],
+                            hist_i,
+                            bias_i,
+                            m2_i,
+                            var_i,
+                        ) = combine_welford_stats(
+                            shared_data["hist"].flatten()[i], 
+                            shared_data["force"].flatten()[i], 
+                            shared_data["m2"].flatten()[i], 
+                            hist.flatten()[i], 
+                            bias.flatten()[i], 
+                            m2.flatten()[i],
                         )
-                
-                trial = 0
-                while trial < n_trials:
-                    trial += 1
-                    if not os.access(mw_file + ".npz", os.W_OK):
                         
-                        global_hist = np.zeros_like(self.histogram).flatten()
-                        global_m2 = np.zeros_like(self.m2_force).flatten()
-                        global_var = np.zeros_like(self.var_force).flatten()
-                        global_bias = np.zeros_like(self.bias).flatten()
+                        global_hist[i] = hist_i
+                        global_bias[i] = bias_i
+                        global_m2[i] = m2_i
+                        global_var[i] = var_i
                         
-                        # grant write access only to one walker during sync
-                        os.chmod(mw_file + ".npz", 0o666) 
-                        shared_data = np.load(mw_file + ".npz")  
+                    self._write_restart(
+                        filename=mw_file,
+                        hist=global_hist.reshape(self.histogram.shape),
+                        pmf=self.pmf,
+                        force=global_bias.reshape(self.bias.shape),
+                        var=global_var.reshape(self.var_force.shape),
+                        m2=global_m2.reshape(self.m2_force.shape),
+                    )                        
+                    self.restart(filename=mw_file)
+                    os.chmod(mw_file + ".npz", 0o444)  # other walkers can access again
+                    
+                    self.get_pmf()  # get new global pmf
 
-                        for i in range(len(hist.flatten())):
-                            (
-                                hist_i,
-                                bias_i,
-                                m2_i,
-                                var_i,
-                            ) = combine_welford_stats(
-                                shared_data["hist"].flatten()[i], 
-                                shared_data["force"].flatten()[i], 
-                                shared_data["m2"].flatten()[i], 
-                                hist.flatten()[i], 
-                                bias.flatten()[i], 
-                                m2.flatten()[i],
-                            )
-                            global_hist[i] = hist_i
-                            global_bias[i] = bias_i
-                            global_m2[i] = m2_i
-                            global_var[i] = var_i
+                    # write data of local walker
+                    local_data = np.load("restart_abf_local.npz")  
+                    for i in range(len(hist.flatten())):
+                        (
+                            hist_i,
+                            bias_i,
+                            m2_i,
+                            var_i,
+                        ) = combine_welford_stats(
+                            local_data["hist"].flatten()[i], 
+                            local_data["force"].flatten()[i], 
+                            local_data["m2"].flatten()[i], 
+                            hist.flatten()[i], 
+                            bias.flatten()[i], 
+                            m2.flatten()[i],
+                        )
                         
-                        self._write_restart(
-                            filename=mw_file,
-                            hist=global_hist.reshape(self.histogram.shape),
-                            pmf=self.pmf,
-                            force=global_bias.reshape(self.bias.shape),
-                            var=global_var.reshape(self.var_force.shape),
-                            m2=global_m2.reshape(self.m2_force.shape),
-                        )                        
-                        self.restart(filename=mw_file)
-                        os.chmod(mw_file + ".npz", 0o444)  # other walkers can access again
-                        
-                        self.get_pmf()  # get new global pmf
+                        # overwriting global arrays with local data
+                        global_hist[i] = hist_i
+                        global_bias[i] = bias_i
+                        global_m2[i] = m2_i
+                        global_var[i] = var_i
 
-                        # write data of local walker
-                        local_data = np.load("restart_abf_local.npz")  
-                        for i in range(len(hist.flatten())):
-                            (
-                                hist_i,
-                                bias_i,
-                                m2_i,
-                                var_i,
-                            ) = combine_welford_stats(
-                                local_data["hist"].flatten()[i], 
-                                local_data["force"].flatten()[i], 
-                                local_data["m2"].flatten()[i], 
-                                hist.flatten()[i], 
-                                bias.flatten()[i], 
-                                m2.flatten()[i],
-                            )
-                            
-                            # overwriting global arrays with local data
-                            global_hist[i] = hist_i
-                            global_bias[i] = bias_i
-                            global_m2[i] = m2_i
-                            global_var[i] = var_i
+                    # TODO: the local pmf is wrong (but can be recovered from the force)
+                    self._write_restart(
+                        filename="restart_abf_local",
+                        hist=global_hist.reshape(self.histogram.shape),
+                        pmf=np.zeros_like(self.pmf), 
+                        force=global_bias.reshape(self.bias.shape),
+                        var=global_var.reshape(self.var_force.shape),
+                        m2=global_m2.reshape(self.m2_force.shape),
+                    )     
+                    break                     
 
-                        # TODO: now the local pmf is wrong (but can be recovered from the force)
-                        self._write_restart(
-                            filename="restart_abf_local",
-                            hist=global_hist.reshape(self.histogram.shape),
-                            pmf=np.zeros_like(self.pmf), 
-                            force=global_bias.reshape(self.bias.shape),
-                            var=global_var.reshape(self.var_force.shape),
-                            m2=global_m2.reshape(self.m2_force.shape),
-                        )     
-                        break                     
+                elif trial < n_trials:
+                    if self.verbose:
+                        print(f" >>> Warning: Retry to open shared buffer file after {trial} failed attempts.")
+                    time.sleep(0.1)
+                else:
+                    raise Exception(f" >>> Fatal Fatal: Failed to sync bias with `{mw_file}.npz`.")                 
 
-                    elif trial < n_trials:
-                        if self.verbose:
-                            print(f" >>> Warning: Retry to open shared buffer file after {trial} failed attempts.")
-                        time.sleep(0.1)
-                    else:
-                        raise Exception(f" >>> Fatal Fatal: Failed to sync bias with `{mw_file}.npz`.")                 
 
     def _divergence_xi(self, xi, cv):
         """Calculate divergence of collective variable"""
