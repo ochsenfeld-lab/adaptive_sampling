@@ -4,11 +4,11 @@ from adaptive_sampling.sampling_tools.metadynamics import WTM
 from adaptive_sampling.interface.interfaceMD_2D import *
 from adaptive_sampling.units import *
 
-################# Imput Section ####################
+################# Input Section ####################
 
 # MD
 seed = 42
-nsteps = 500000  # number of MD steps
+nsteps = 500000 # number of MD steps
 dt = 5.0e0  # stepsize in fs
 target_temp = 300.0  # Kelvin
 mass = 10.0  # a.u.
@@ -31,12 +31,13 @@ the_abm = WTM(
     2.0,
     the_md,
     ats,
-    hill_drop_freq=50,
+    hill_drop_freq=25,
     output_freq=10,
     force_from_grid=True,
     well_tempered_temp=3000.0,
     f_conf=1000,
     equil_temp=300.0,
+    multiple_walker=True,
 )
 # the_abm.restart()
 
@@ -64,7 +65,6 @@ print(
 )
 
 while step_count < nsteps:
-    start_loop = time.perf_counter()
     the_md.step += 1
     step_count += 1
 

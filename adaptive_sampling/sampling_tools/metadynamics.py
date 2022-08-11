@@ -1,4 +1,4 @@
-import os, time
+import os, time, itertools
 import numpy as np
 from typing import Tuple
 from .enhanced_sampling import EnhancedSampling
@@ -92,7 +92,7 @@ class WTM(EnhancedSampling):
 
         # shared-bias metadynamics
         if self.shared:
-            self.shared_bias(**kwargs)
+            self.shared_bias(xi, **kwargs)
 
         if self.the_md.step % self.out_freq == 0:
             # write output
@@ -136,8 +136,9 @@ class WTM(EnhancedSampling):
 
     def shared_bias(
         self,
-        sync_interval: int=5,
-        mw_file: str="../shared_bias",
+        xi, 
+        sync_interval: int=50,
+        mw_file: str="shared_bias",
         n_trials: int=10,
     ):
         """TODO"""
@@ -151,19 +152,26 @@ class WTM(EnhancedSampling):
             self._write_restart(
                 filename="restart_wtm_local",
                 hist=self.histogram,
-                pmf=self.pmf,
                 force=self.bias,
                 metapot=self.metapot,
                 centers=self.center,
             )
-                        
+            
+            if sync_interval % self.hill_drop_freq != 0:
+                raise ValueError(
+                    " >>> Fatal Error: Sync interval for shared-bias WTM has to divisible through the frequency of hill creation!"
+                )
+
+            self.len_center_last_sync = len(self.center)
+            self.metapot_last_sync = np.copy(self.metapot)
+            self.bias_last_sync = np.copy(self.bias)
+            self.traj_last_sync = np.zeros(shape=(sync_interval, len(xi)))
             if not os.path.isfile(mw_file+".npz"):
                 if self.verbose:
                     print(f" >>> Info: Creating buffer file for shared-bias metadynamics: `{mw_file}.npz`.")
                 self._write_restart(
                     filename=mw_file,
                     hist=self.histogram,
-                    pmf=self.pmf,
                     force=self.bias,
                     metapot=self.metapot,
                     centers=self.center,
@@ -172,72 +180,48 @@ class WTM(EnhancedSampling):
             elif self.verbose:
                 print(f" >>> Info: Syncing with existing buffer file for shared-bias metadynamics: `{mw_file}.npz`.")
         
-
         count = md_state.step % sync_interval
+        self.traj_last_sync[count] = xi
         if count == sync_interval-1:
             
-            hist = np.zeros_like(self.histogram)
+            new_center = self.center[self.len_center_last_sync:]            
+            delta_hist = np.zeros_like(self.histogram)
             for x in self.traj_last_sync:
-                if (x <= self.maxx).all() and (x >= self.minx).all():
-                    bink = self.get_index([x])
-                    hist[bink[1], bink[0]] += 1
-            self.traj_last_sync = [self.traj_last_sync[-1]]
+                if self._check_boundaries(x):
+                    bink = self.get_index(x)
+                    delta_hist[bink[1], bink[0]] += 1
 
-            self.bias = np.zeros_like(self.bias)
-            self.metapot = np.zeros_like(self.metapot)
-            
-            step = md_state.step
-            md_state.step = self.hill_drop_freq
-            for center in self.center_last_sync:
-                self._accumulate_wtm_force([center])
-            md_state.step = step
-            
+            delta_bias = self.bias - self.bias_last_sync 
+            delta_metapot = self.metapot - self.metapot_last_sync 
+                        
+            self._update_wtm(
+                "restart_wtm_local",
+                delta_hist,
+                delta_bias,
+                delta_metapot,
+                new_center,
+            )
+
             trial = 0
             while trial < n_trials:
                 trial += 1
                 if not os.access(mw_file + ".npz", os.W_OK):
-
-                    last_sync_bias = np.copy(self.bias)
-                    last_sync_metapot = np.copy(self.metapot)
                     
-                    v = self.verbose
-                    self.verbose = False
-                    self.restart(filename="restart_wtm_local")
-                    self.verbose = v
-                    self.bias += last_sync_bias
-                    self.metapot += last_sync_metapot
-                    self.get_pmf()
-
-                    self._write_restart(
-                        filename="restart_wtm_local",
-                        hist=hist+self.histogram,
-                        pmf=self.pmf,
-                        force=self.bias,
-                        metapot=self.metapot,
-                        centers=np.append(self.center, self.center_last_sync),
-                    )
-
                     # grant write access only to one walker during sync
                     os.chmod(mw_file + ".npz", 0o666) 
-                    shared_data = np.load(mw_file + ".npz")  
-
-                    self.histogram = shared_data["hist"] + hist 
-                    self.bias = shared_data["force"] + self.bias
-                    self.metapot = shared_data["metapot"] + self.metapot
-                    self.center = np.append(shared_data["centers"], self.center_last_sync).tolist()
-                    self.get_pmf()
-
-                    self._write_restart(
-                        filename=mw_file,
-                        hist=self.histogram,
-                        pmf=self.pmf,
-                        force=self.bias,
-                        metapot=self.metapot,
-                        centers=self.center,                       
-                    )                                                
+                    self._update_wtm(
+                        mw_file,
+                        delta_hist,
+                        delta_bias,
+                        delta_metapot,
+                        new_center,
+                    )
+                    self.restart(filename=mw_file)
                     os.chmod(mw_file + ".npz", 0o444)  # other walkers can access again
-                    if self.verbose:
-                        print(f" >>> Info: Metadynamics potential synced with `{mw_file}.npz`!")
+
+                    self.metapot_last_sync = np.copy(self.metapot)
+                    self.bias_last_sync = np.copy(self.bias)
+                    self.len_center_last_sync = len(self.center)
                     break                     
 
                 elif trial < n_trials:
@@ -258,17 +242,7 @@ class WTM(EnhancedSampling):
         """
         if self.the_md.step % self.hill_drop_freq == 0:
             self.center.append(xi[0]) if self.ncoords == 1 else self.center.append(xi)
-
-            if self.shared and self.the_md.get_sampling_data().step == 0:
-                self.center_last_sync = [self.center[0]]
-            else: 
-                self.center_last_sync.append(xi[0])
-
-        if self.shared and self.the_md.get_sampling_data().step == 0:
-            self.traj_last_sync = [xi[0]]
-        else:
-            self.traj_last_sync.append(xi[0])
-
+            
         is_in_bounds = (xi <= self.maxx).all() and (xi >= self.minx).all()
         bias_force = [0, 0]
         if is_in_bounds:
@@ -288,32 +262,35 @@ class WTM(EnhancedSampling):
         Returns:
             bias_force: bias force from metadynamics
         """
-        bink = self.get_index(xi)
-        if self.the_md.step % self.hill_drop_freq == 0:
-            if self.ncoords == 1:
+        if self._check_boundaries(xi):
+            bink = self.get_index(xi)
+            if self.the_md.step % self.hill_drop_freq == 0:
+                if self.ncoords == 1:
 
-                if self.well_tempered:
-                    w = self.hill_height * np.exp(
-                        -self.metapot[bink[1], bink[0]]
-                        / (kB_in_atomic * self.well_tempered_temp)
-                    )
+                    if self.well_tempered:
+                        w = self.hill_height * np.exp(
+                            -self.metapot[bink[1], bink[0]]
+                            / (kB_in_atomic * self.well_tempered_temp)
+                        )
+                    else:
+                        w = self.hill_height
+
+                    dx = diff(self.grid[0], xi[0], self.cv_type[0])
+                    epot = w * np.exp(-(dx * dx) / (2.0 * self.hill_var[0]))
+                    self.metapot[0] += epot
+                    self.bias[0][0] -= epot * dx / self.hill_var[0]
+
+                    self._smooth_boundary_grid(xi, w)
+
                 else:
-                    w = self.hill_height
-
-                dx = diff(self.grid[0], xi[0], self.cv_type[0])
-                epot = w * np.exp(-(dx * dx) / (2.0 * self.hill_var[0]))
-                self.metapot[0] += epot
-                self.bias[0][0] -= epot * dx / self.hill_var[0]
-
-                self._smooth_boundary_grid(xi, w)
-
-            else:
-                # TODO: implement for 2D
-                raise NotImplementedError(
-                    " >>> Error: metadynamics currently only supported for 1D coordinates"
-                )
-
-        return [self.bias[i][bink[1], bink[0]] for i in range(self.ncoords)]
+                    # TODO: implement for 2D
+                    raise NotImplementedError(
+                        " >>> Error: metadynamics currently only supported for 1D coordinates"
+                    )
+            return [self.bias[i][bink[1], bink[0]] for i in range(self.ncoords)]
+        
+        else:
+            return [0.0 for _ in range(self.ncoords)]
 
     def _analytic_wtm_force(self, xi: np.ndarray) -> Tuple[list, float]:
         """compute analytic WTM bias force from sum of gaussians hills
@@ -434,6 +411,28 @@ class WTM(EnhancedSampling):
 
         return local_pot, bias_force
 
+    def _update_wtm(
+        self,
+        filename,
+        hist,
+        bias,
+        metapot,
+        center
+    ):
+        with np.load(f"{filename}.npz") as data:  
+            new_hist = data["hist"] + hist
+            new_bias = data["force"] + bias
+            new_metapot = data["metapot"] + metapot
+            new_centers = np.append(data["centers"], center), 
+        
+        self._write_restart(
+            filename=filename,
+            hist=new_hist,
+            force=new_bias,
+            metapot=new_metapot,
+            centers=np.asarray(list(itertools.chain(*new_centers))),
+        )
+                    
     def write_restart(self, filename: str = "restart_wtm"):
         """write restart file
 
@@ -443,7 +442,6 @@ class WTM(EnhancedSampling):
         self._write_restart(
             filename=filename,
             hist=self.histogram,
-            pmf=self.pmf,
             force=self.bias,
             metapot=self.metapot,
             centers=self.center,
@@ -458,16 +456,15 @@ class WTM(EnhancedSampling):
         try:
             data = np.load(filename + ".npz", allow_pickle=True)
         except:
-            raise OSError(f" >>> fatal error: restart file {filename}.npz not found!")
+            raise OSError(f" >>> fatal error: restart file `{filename}.npz` not found!")
 
         self.histogram = data["hist"]
-        self.pmf = data["pmf"]
         self.bias = data["force"]
         self.metapot = data["metapot"]
         self.center = data["centers"].tolist()
 
         if self.verbose:
-            print(f" >>> Info: Adaptive sampling restartet from {filename}.npz!")
+            print(f" >>> Info: Adaptive sampling restartet from `{filename}.npz`!")
 
     def write_traj(self):
         """save trajectory for post-processing"""

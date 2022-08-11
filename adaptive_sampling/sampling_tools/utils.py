@@ -82,7 +82,6 @@ def welford_var(
     """
     if count == 0:
         return 0.0, 0.0, 0.0
-        
     delta = newValue - mean
     mean += delta / count
     delta2 = newValue - mean
@@ -99,7 +98,7 @@ def combine_welford_stats(
     mean_b, 
     M2_b
 ) -> Tuple[float, float, float, float]:
-        """Combines running sample stats of welford's algorithm using Chan et al.' algorithm.
+        """Combines running sample stats of welford's algorithm using Chan et al.'s algorithm.
         
         args:
             count_a, mean_a, M2_a: stats of frist subsample
@@ -111,7 +110,6 @@ def combine_welford_stats(
         count = count_a + count_b
         if count == 0:
             return 0.0, 0.0, 0.0, 0.0
-
         delta = mean_b - mean_a
         mean = mean_a + delta * count_b / count
         if count_b == 0:
@@ -133,3 +131,4 @@ def cond_avg(a: np.ndarray, hist: np.ndarray) -> np.ndarray:
         cond_avg: conditional average
     """
     return np.divide(a, hist, out=np.zeros_like(a), where=(hist != 0))
+    

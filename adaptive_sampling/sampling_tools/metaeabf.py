@@ -1,6 +1,7 @@
+import os, time, itertools
 import numpy as np
 from .enhanced_sampling import EnhancedSampling
-from .utils import welford_var, diff
+from .utils import welford_var, combine_welford_stats, diff
 from .eabf import eABF
 from .metadynamics import WTM
 from ..units import *
@@ -50,47 +51,58 @@ class WTMeABF(eABF, WTM, EnhancedSampling):
 
         mtd_forces = self.get_wtm_force(self.ext_coords)
         bias_force = self._extended_dynamics(xi, delta_xi)  # , self.hill_std)
+        force_sample = [0 for _ in range(2 * self.ncoords)]
 
         if (self.ext_coords <= self.maxx).all() and (
             self.ext_coords >= self.minx
         ).all():
 
-            bink = self.get_index(self.ext_coords)
-            self.ext_hist[bink[1], bink[0]] += 1
+            bin_la = self.get_index(self.ext_coords)
+            self.ext_hist[bin_la[1], bin_la[0]] += 1
 
             for i in range(self.ncoords):
 
                 # linear ramp function
                 ramp = (
                     1.0
-                    if self.ext_hist[bink[1], bink[0]] > self.nfull
-                    else self.ext_hist[bink[1], bink[0]] / self.nfull
+                    if self.ext_hist[bin_la[1], bin_la[0]] > self.nfull
+                    else self.ext_hist[bin_la[1], bin_la[0]] / self.nfull
                 )
 
                 # apply bias force on extended variable
+                force_sample[i] = self.ext_k[i] * diff(self.ext_coords[i], xi[i], self.cv_type[i])
                 (
-                    self.abf_forces[i][bink[1], bink[0]],
-                    self.m2_force[i][bink[1], bink[0]],
-                    self.var_force[i][bink[1], bink[0]],
+                    self.abf_forces[i][bin_la[1], bin_la[0]],
+                    self.m2_force[i][bin_la[1], bin_la[0]],
+                    self.var_force[i][bin_la[1], bin_la[0]],
                 ) = welford_var(
-                    self.ext_hist[bink[1], bink[0]],
-                    self.abf_forces[i][bink[1], bink[0]],
-                    self.m2_force[i][bink[1], bink[0]],
-                    self.ext_k[i] * diff(self.ext_coords[i], xi[i], self.cv_type[i]),
+                    self.ext_hist[bin_la[1], bin_la[0]],
+                    self.abf_forces[i][bin_la[1], bin_la[0]],
+                    self.m2_force[i][bin_la[1], bin_la[0]],
+                    force_sample[i],
                 )
                 self.ext_forces -= (
-                    ramp * self.abf_forces[i][bink[1], bink[0]] - mtd_forces[i]
+                    ramp * self.abf_forces[i][bin_la[1], bin_la[0]] - mtd_forces[i]
                 )
 
         # xi-conditioned accumulators for CZAR
-        if (xi <= self.maxx).all() and (xi >= self.minx).all():
-
+        if self._check_boundaries(xi):
             bink = self.get_index(xi)
             self.histogram[bink[1], bink[0]] += 1
 
             for i in range(self.ncoords):
-                dx = diff(self.ext_coords[i], self.grid[i][bink[i]], self.cv_type[i])
-                self.correction_czar[i][bink[1], bink[0]] += self.ext_k[i] * dx
+                force_sample[self.ncoords+i] = self.ext_k[i] * diff(
+                    self.ext_coords[i], self.grid[i][bink[i]], self.cv_type[i]
+                )
+                self.correction_czar[i][bink[1], bink[0]] += force_sample[self.ncoords+i]
+
+        # shared-bias eABF
+        if self.shared:                        
+            self.shared_bias(
+                xi,
+                force_sample, 
+                **kwargs,
+            )
 
         self.traj = np.append(self.traj, [xi], axis=0)
         self.ext_traj = np.append(self.ext_traj, [self.ext_coords], axis=0)
@@ -124,9 +136,217 @@ class WTMeABF(eABF, WTM, EnhancedSampling):
 
         return bias_force
 
-    def shared_bias(self):
-        """TODO"""
-        pass
+    def shared_bias(
+        self, 
+        xi,
+        force_sample,
+        sync_interval: int=50,
+        mw_file: str="../shared_bias",
+        n_trials: int=10,
+    ):
+        """syncs eABF bias with other walkers
+
+        TODO: 2D collective variables
+
+        Args:
+            xi: state of the collective variable
+            force_sample: force sample of current step
+            sync_interval: number of steps between sychronisation
+            mw_file: name of buffer file for shared-bias
+            n_trials: number of attempts to access of buffer file before throwing an error
+        """
+        md_state = self.the_md.get_sampling_data()
+        if md_state.step == 0:        
+            if self.verbose:
+                print(" >>> Info: Creating a new instance for shared-bias eABF.")
+                print(" >>> Info: Data of local walker stored in `restart_wtmeabf_local.npz`.")
+            
+            # create seperate restart file with local data only
+            self._write_restart(
+                filename="restart_wtmeabf_local",
+                hist=self.histogram,
+                force=self.bias,
+                var=self.var_force,
+                m2=self.m2_force,
+                ext_hist=self.ext_hist,
+                czar_corr=self.correction_czar,
+                abf_force=self.abf_forces,
+                center=self.center,
+                metapot=self.metapot,
+            )
+            
+            if sync_interval % self.hill_drop_freq != 0:
+                raise ValueError(
+                    " >>> Fatal Error: Sync interval for shared-bias WTM has to divisible through the frequency of hill creation!"
+                )
+
+            self.len_center_last_sync = len(self.center)
+            self.update_samples = np.zeros(shape=(sync_interval, len(force_sample)))
+            self.last_samples_xi = np.zeros(shape=(sync_interval, len(xi)))
+            self.last_samples_la = np.zeros(shape=(sync_interval, len(self.ext_coords)))
+            self.metapot_last_sync = np.copy(self.metapot)
+            self.bias_last_sync = np.copy(self.bias)
+
+            if not os.path.isfile(mw_file+".npz"):
+                if self.verbose:
+                    print(f" >>> Info: Creating buffer file for shared-bias WTM-eABF: `{mw_file}.npz`.")
+                self._write_restart(
+                    filename=mw_file,
+                    hist=self.histogram,
+                    force=self.bias,
+                    var=self.var_force,
+                    m2=self.m2_force,
+                    ext_hist=self.ext_hist,
+                    czar_corr=self.correction_czar,
+                    abf_force=self.abf_forces,
+                    center=self.center,
+                    metapot=self.metapot,
+                )
+                os.chmod(mw_file + ".npz", 0o444)
+            elif self.verbose:
+                print(f" >>> Info: Syncing with existing buffer file for shared-bias WTM-eABF: `{mw_file}.npz`.")
+        
+        # save new samples
+        count = md_state.step % sync_interval
+        self.update_samples[count] = force_sample
+        self.last_samples_xi[count] = xi
+        self.last_samples_la[count] = self.ext_coords
+
+        if count == sync_interval-1:
+            
+            # calculate progress since last sync from new samples
+            hist = np.zeros_like(self.histogram)
+            m2 = np.zeros_like(self.m2_force)
+            abf_forces = np.zeros_like(self.abf_forces)
+            ext_hist = np.zeros_like(self.ext_hist)
+            czar_corr = np.zeros_like(self.correction_czar)
+            
+            delta_bias = self.bias - self.bias_last_sync
+            delta_metapot = self.metapot - self.metapot_last_sync
+            new_center = self.center[self.len_center_last_sync:]            
+
+            for i, sample in enumerate(self.update_samples):
+                if self._check_boundaries(self.last_samples_la[i]):                   
+                    bin_la = self.get_index(self.last_samples_la[i])
+                    ext_hist[bin_la[1], bin_la[0]] += 1
+                    for j in range(self.ncoords):
+                        (
+                            abf_forces[j][bin_la[1], bin_la[0]],
+                            m2[j][bin_la[1], bin_la[0]],
+                            _,
+                        ) = welford_var(
+                            ext_hist[bin_la[1], bin_la[0]],
+                            abf_forces[j][bin_la[1], bin_la[0]],
+                            m2[j][bin_la[1], bin_la[0]],
+                            sample[j],
+                        )
+                
+                if self._check_boundaries(self.last_samples_xi[i]):
+                    bin_xi = self.get_index(self.last_samples_xi[i])
+                    hist[bin_xi[1], bin_xi[0]] += 1 
+                    for j in range(self.ncoords):
+                        czar_corr[j][bin_xi[1], bin_xi[0]] += sample[self.ncoords+j]
+            
+            # add new samples to local restart
+            self._update_wtmeabf(
+                "restart_wtmeabf_local",
+                hist, 
+                ext_hist,
+                abf_forces,
+                m2,
+                czar_corr,
+                delta_bias,
+                delta_metapot,
+                new_center,
+            )
+
+            trial = 0
+            while trial < n_trials:
+                trial += 1
+                if not os.access(mw_file + ".npz", os.W_OK):
+                    
+                    # grant write access only to one walker during sync
+                    os.chmod(mw_file + ".npz", 0o666) 
+                    self._update_wtmeabf(
+                        mw_file,
+                        hist, 
+                        ext_hist,
+                        abf_forces,
+                        m2,
+                        czar_corr,
+                        delta_bias,
+                        delta_metapot,
+                        new_center,
+                    )
+                    self.restart(filename=mw_file)
+                    os.chmod(mw_file + ".npz", 0o444)  # other walkers can access again
+
+                    self.get_pmf()  # get new global pmf
+                    self.metapot_last_sync = np.copy(self.metapot)
+                    self.bias_last_sync = np.copy(self.bias)
+                    self.len_center_last_sync = len(self.center)
+                    break                     
+
+                elif trial < n_trials:
+                    if self.verbose:
+                        print(f" >>> Warning: Retry to open shared buffer file after {trial} failed attempts.")
+                    time.sleep(0.1)
+                else:
+                    raise Exception(f" >>> Fatal Error: Failed to sync bias with `{mw_file}.npz`.")
+
+    def _update_wtmeabf(
+        self, 
+        filename: str,
+        hist: np.ndarray, 
+        ext_hist: np.ndarray,
+        abf_forces: np.ndarray,
+        m2: np.ndarray,
+        czar_corr: np.ndarray,
+        delta_bias: np.ndarray,
+        delta_metapot: np.ndarray,
+        center: np.ndarray,
+    ):
+
+        with np.load(f"{filename}.npz") as data:
+
+            new_hist = data["hist"] + hist      
+            new_czar_corr = data["czar_corr"] + czar_corr
+            new_metapot = data["metapot"] + delta_metapot
+            new_bias = data["force"] + delta_bias
+            
+            new_m2 = np.zeros_like(self.m2_force).flatten()
+            new_var = np.zeros_like(self.var_force).flatten()
+            new_abf_forces = np.zeros_like(self.abf_forces).flatten()
+            new_ext_hist = np.zeros_like(self.ext_hist).flatten()
+            new_centers = np.append(data["center"], center), 
+            
+            for i in range(len(hist.flatten())):
+                (
+                    new_ext_hist[i],
+                    new_abf_forces[i],
+                    new_m2[i],
+                    new_var[i],
+                ) = combine_welford_stats(
+                    data["ext_hist"].flatten()[i], 
+                    data["abf_force"].flatten()[i], 
+                    data["m2"].flatten()[i], 
+                    ext_hist.flatten()[i], 
+                    abf_forces.flatten()[i], 
+                    m2.flatten()[i], 
+                )
+                                    
+        self._write_restart(
+            filename=filename,
+            hist=new_hist,
+            force=new_bias,
+            var=new_var.reshape(self.var_force.shape),
+            m2=new_m2.reshape(self.m2_force.shape),
+            ext_hist=new_ext_hist.reshape(self.histogram.shape),
+            czar_corr=new_czar_corr,
+            abf_force=new_abf_forces.reshape(self.abf_forces.shape),
+            center=np.asarray(list(itertools.chain(*new_centers))),
+            metapot=new_metapot,
+        )                           
 
     def write_restart(self, filename: str = "restart_wtmeabf"):
         """write restart file

@@ -11,7 +11,7 @@ bohr2angs = 0.52917721092e0
 
 # MD
 seed = 42
-nsteps = 20000000  # number of MD steps
+nsteps = 200000  # number of MD steps
 dt = 5.0e0  # stepsize in fs
 target_temp = 300.0  # Kelvin
 mass = 10.0  # a.u.
@@ -35,14 +35,20 @@ the_md = MD(
 ext_sigma = 2.0
 ext_mass = 20.0
 the_abm = eABF(
-    ext_sigma, ext_mass, the_md, ats, output_freq=10, f_conf=100, equil_temp=300.0
+    ext_sigma, 
+    ext_mass, 
+    the_md, 
+    ats, 
+    output_freq=10, 
+    f_conf=100, 
+    equil_temp=300.0,
+    multiple_walker=True,
 )
 # the_abm.restart()
 
 the_md.calc_init()
-the_abm.step_bias()
+the_abm.step_bias(mw_file='shared_bias')
 the_md.calc_etvp()
-
 
 ################# the MD loop ####################
 print(
@@ -70,7 +76,7 @@ while step_count < nsteps:
     the_md.propagate(langevin=True)
     the_md.calc()
 
-    the_md.forces += the_abm.step_bias()
+    the_md.forces += the_abm.step_bias(mw_file='shared_bias')
 
     the_md.up_momenta(langevin=True)
     the_md.calc_etvp()

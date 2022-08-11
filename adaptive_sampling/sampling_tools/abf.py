@@ -38,7 +38,7 @@ class ABF(EnhancedSampling):
 
         bias_force = np.zeros_like(md_state.forces)
 
-        if (xi <= self.maxx).all() and (xi >= self.minx).all():
+        if self._check_boundaries(xi):
 
             bink = self.get_index(xi)
             self.histogram[bink[1], bink[0]] += 1
@@ -147,14 +147,11 @@ class ABF(EnhancedSampling):
             self._write_restart(
                 filename="restart_abf_local",
                 hist=self.histogram,
-                pmf=self.pmf,
                 force=self.bias,
-                var=self.var_force,
                 m2=self.m2_force,
             )
             
             self.update_samples = np.zeros(shape=(sync_interval, len(force_sample)))
-            self.update_samples[0] = force_sample
             
             if not os.path.isfile(mw_file+".npz"):
                 if self.verbose:
@@ -162,9 +159,7 @@ class ABF(EnhancedSampling):
                 self._write_restart(
                     filename=mw_file,
                     hist=self.histogram,
-                    pmf=self.pmf,
                     force=self.bias,
-                    var=self.var_force,
                     m2=self.m2_force,
                 )
                 os.chmod(mw_file + ".npz", 0o444)
@@ -175,10 +170,9 @@ class ABF(EnhancedSampling):
         self.update_samples[count] = force_sample
             
         if count == sync_interval-1:
-                
+            
             hist = np.zeros_like(self.histogram)
             m2 = np.zeros_like(self.m2_force)
-            var = np.zeros_like(self.var_force)
             bias = np.zeros_like(self.bias)
 
             for sample in self.update_samples:
@@ -188,93 +182,33 @@ class ABF(EnhancedSampling):
                     (
                         bias[i][bink],
                         m2[i][bink],
-                        var[i][bink],
+                        _,
                     ) = welford_var(
                         hist[bink],
                         bias[i][bink],
                         m2[i][bink],
                         sample[2+i],
-                    )
-                
+                    )              
+            # write data of local walker
+            self._update_abf(
+                "restart_abf_local", 
+                hist, bias, m2,
+            )             
+            
             trial = 0
             while trial < n_trials:
                 trial += 1
                 if not os.access(mw_file + ".npz", os.W_OK):
-                        
-                    global_hist = np.zeros_like(self.histogram).flatten()
-                    global_m2 = np.zeros_like(self.m2_force).flatten()
-                    global_var = np.zeros_like(self.var_force).flatten()
-                    global_bias = np.zeros_like(self.bias).flatten()
                     
-                    # grant write access only to one walker during sync
+                    # grant write access only to local walker during sync
                     os.chmod(mw_file + ".npz", 0o666) 
-                    shared_data = np.load(mw_file + ".npz")  
-
-                    for i in range(len(hist.flatten())):
-                        (
-                            hist_i,
-                            bias_i,
-                            m2_i,
-                            var_i,
-                        ) = combine_welford_stats(
-                            shared_data["hist"].flatten()[i], 
-                            shared_data["force"].flatten()[i], 
-                            shared_data["m2"].flatten()[i], 
-                            hist.flatten()[i], 
-                            bias.flatten()[i], 
-                            m2.flatten()[i],
-                        )
-                        
-                        global_hist[i] = hist_i
-                        global_bias[i] = bias_i
-                        global_m2[i] = m2_i
-                        global_var[i] = var_i
-                        
-                    self._write_restart(
-                        filename=mw_file,
-                        hist=global_hist.reshape(self.histogram.shape),
-                        pmf=self.pmf,
-                        force=global_bias.reshape(self.bias.shape),
-                        var=global_var.reshape(self.var_force.shape),
-                        m2=global_m2.reshape(self.m2_force.shape),
-                    )                        
+                    self._update_abf(
+                        mw_file, 
+                        hist, bias, m2,
+                    ) 
                     self.restart(filename=mw_file)
-                    os.chmod(mw_file + ".npz", 0o444)  # other walkers can access again
-                    
-                    self.get_pmf()  # get new global pmf
-
-                    # write data of local walker
-                    local_data = np.load("restart_abf_local.npz")  
-                    for i in range(len(hist.flatten())):
-                        (
-                            hist_i,
-                            bias_i,
-                            m2_i,
-                            var_i,
-                        ) = combine_welford_stats(
-                            local_data["hist"].flatten()[i], 
-                            local_data["force"].flatten()[i], 
-                            local_data["m2"].flatten()[i], 
-                            hist.flatten()[i], 
-                            bias.flatten()[i], 
-                            m2.flatten()[i],
-                        )
-                        
-                        # overwriting global arrays with local data
-                        global_hist[i] = hist_i
-                        global_bias[i] = bias_i
-                        global_m2[i] = m2_i
-                        global_var[i] = var_i
-
-                    # TODO: the local pmf is wrong (but can be recovered from the force)
-                    self._write_restart(
-                        filename="restart_abf_local",
-                        hist=global_hist.reshape(self.histogram.shape),
-                        pmf=np.zeros_like(self.pmf), 
-                        force=global_bias.reshape(self.bias.shape),
-                        var=global_var.reshape(self.var_force.shape),
-                        m2=global_m2.reshape(self.m2_force.shape),
-                    )     
+                    os.chmod(mw_file + ".npz", 0o444)                      
+                    self.get_pmf()  
                     break                     
 
                 elif trial < n_trials:
@@ -282,8 +216,7 @@ class ABF(EnhancedSampling):
                         print(f" >>> Warning: Retry to open shared buffer file after {trial} failed attempts.")
                     time.sleep(0.1)
                 else:
-                    raise Exception(f" >>> Fatal Error: Failed to sync bias with `{mw_file}.npz`.")                 
-
+                    raise Exception(f" >>> Fatal Error: Failed to sync bias with `{mw_file}.npz`.")
 
     def _divergence_xi(self, xi, cv):
         """Calculate divergence of collective variable"""
@@ -298,6 +231,42 @@ class ABF(EnhancedSampling):
 
         return div
 
+    def _update_abf(
+        self, 
+        filename: str, 
+        hist: np.ndarray, 
+        bias: np.ndarray, 
+        m2: np.ndarray,
+    ):
+
+        new_hist = np.zeros_like(self.histogram).flatten()
+        new_m2 = np.zeros_like(self.m2_force).flatten()
+        new_bias = np.zeros_like(self.bias).flatten() 
+
+        with np.load(f"{filename}.npz") as local_data:
+            for i in range(len(new_hist)):
+                # overwriting global arrays with local data
+                (
+                    new_hist[i],
+                    new_bias[i],
+                    new_m2[i],
+                    _,
+                ) = combine_welford_stats(
+                    local_data["hist"].flatten()[i], 
+                    local_data["force"].flatten()[i], 
+                    local_data["m2"].flatten()[i], 
+                    hist.flatten()[i], 
+                    bias.flatten()[i], 
+                    m2.flatten()[i],
+                )
+                        
+        self._write_restart(
+            filename=filename,
+            hist=new_hist.reshape(self.histogram.shape),
+            force=new_bias.reshape(self.bias.shape),
+            m2=new_m2.reshape(self.m2_force.shape),
+        )
+
     def write_restart(self, filename: str = "restart_abf"):
         """write restart file
 
@@ -307,9 +276,7 @@ class ABF(EnhancedSampling):
         self._write_restart(
             filename=filename,
             hist=self.histogram,
-            pmf=self.pmf,
             force=self.bias,
-            var=self.var_force,
             m2=self.m2_force,
         )
 
@@ -325,9 +292,7 @@ class ABF(EnhancedSampling):
             raise OSError(f" >>> Fatal Error: restart file `{filename}.npz` not found!")
 
         self.histogram = data["hist"]
-        self.pmf = data["pmf"]
         self.bias = data["force"]
-        self.var_force = data["var"]
         self.m2_force = data["m2"]
 
         if self.verbose:

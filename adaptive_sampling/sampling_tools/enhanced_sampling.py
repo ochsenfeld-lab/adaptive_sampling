@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-import os
+import sys, os
 import numpy as np
 from typing import Tuple
 from abc import ABC, abstractmethod
@@ -204,7 +204,7 @@ class EnhancedSampling(ABC):
         return bin_x
 
     def _check_boundaries(self, x):
-        return (x <= self.maxx).all() and (x >= self.minx).all()
+        return (x < self.maxx).all() and (x > self.minx).all()
 
     def unit_conversion_cv(self, *args):
         """convert input to atomic units
@@ -389,3 +389,4 @@ class EnhancedSampling(ABC):
     def _write_restart(self, filename, **kwargs):
         """save **kwargs in .npz file"""
         np.savez(filename, **kwargs)
+        sys.stdout.flush()
