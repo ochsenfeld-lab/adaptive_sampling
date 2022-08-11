@@ -68,7 +68,7 @@ def welford_var(
     count: float, mean: float, M2: float, newValue: float
 ) -> Tuple[float, float, float]:
     """On-the-fly estimate of sample variance by Welford's online algorithm
-
+    
     Args:
         count: current number of samples (with new one)
         mean: current mean
@@ -80,6 +80,9 @@ def welford_var(
         M2: sum of powers of differences from the mean
         var: sample variance
     """
+    if count == 0:
+        return 0.0, 0.0, 0.0
+        
     delta = newValue - mean
     mean += delta / count
     delta2 = newValue - mean

@@ -6,7 +6,7 @@ from adaptive_sampling.units import *
 ################# Imput Section ####################
 # MD
 seed = 42
-nsteps = 1000000  # number of MD steps
+nsteps = 100000  # number of MD steps
 dt = 5.0e0  # stepsize in fs
 target_temp = 300.0  # Kelvin
 mass = 10.0  # a.u.
@@ -33,16 +33,17 @@ the_abm = WTMeABF(
     4.0,
     the_md,
     ats,
-    hill_drop_freq=100,
+    hill_drop_freq=20,
     output_freq=1000,
     f_conf=1000.0,
     equil_temp=300.0,
     force_from_grid=True,
+    multiple_walker=True,
 )
 # the_abm.restart()
 
 the_md.calc_init()
-the_abm.step_bias()
+the_abm.step_bias(mw_file='shared_bias', sync_interval=40)
 the_md.calc_etvp()
 
 
@@ -71,7 +72,7 @@ while step_count < nsteps:
     the_md.propagate(langevin=True)
     the_md.calc()
 
-    the_md.forces += the_abm.step_bias()
+    the_md.forces += the_abm.step_bias(mw_file='shared_bias', sync_interval=40)
 
     the_md.up_momenta(langevin=True)
     the_md.calc_etvp()
