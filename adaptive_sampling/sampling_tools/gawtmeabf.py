@@ -90,9 +90,7 @@ class GaWTMeABF(WTMeABF, GaMD, EnhancedSampling):
                 if self.do_wtm:
                     mtd_forces = self.get_wtm_force(self.ext_coords)
 
-                if (self.ext_coords <= self.maxx).all() and (
-                    self.ext_coords >= self.minx
-                ).all():
+                if self._check_boundaries(self.ext_coords):
 
                     bink = self.get_index(self.ext_coords)
                     self.ext_hist[bink[1], bink[0]] += 1
@@ -124,7 +122,7 @@ class GaWTMeABF(WTMeABF, GaMD, EnhancedSampling):
                             self.ext_forces += mtd_forces[i]
 
         # free energy reweighting
-        if (xi <= self.maxx).all() and (xi >= self.minx).all():
+        if self._check_boundaries(xi):
 
             bink = self.get_index(xi)
             self.histogram[bink[1], bink[0]] += 1

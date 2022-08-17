@@ -35,7 +35,7 @@ class Reference(EnhancedSampling):
 
         bias_force = np.zeros_like(md_state.forces)
 
-        if (xi <= self.maxx).all() and (xi >= self.minx).all():
+        if self._check_boundaries(xi):
 
             bink = self.get_index(xi)
             self.histogram[bink[1], bink[0]] += 1

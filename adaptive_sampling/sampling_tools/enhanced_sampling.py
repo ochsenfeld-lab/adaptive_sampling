@@ -54,7 +54,7 @@ class EnhancedSampling(ABC):
         self.f_conf = np.array([f_conf for _ in range(self.ncoords)], dtype=float)
 
         self.cv_type = ["" for _ in range(self.ncoords)]
-        (xi, delta_xi) = self.get_cv()
+        (xi, delta_xi) = self.get_cv(**kwargs)
 
         # unit conversion
         self.minx, self.maxx, self.dx = self.unit_conversion_cv(
@@ -133,7 +133,7 @@ class EnhancedSampling(ABC):
                 print(f"\t Minimum{i}:\t{output_dat[0]} {output_dat[3]}")
                 print(f"\t Maximum{i}:\t{output_dat[1]} {output_dat[3]}")
                 print(f"\t Bin width{i}:\t{output_dat[2]} {output_dat[3]}")
-            print("\t--------------------------------------")
+            print("\t----------------------------------------------")
             print(f"\t Total number of bins:\t\t{self.nbins}\n")
 
     @abstractmethod
@@ -204,6 +204,7 @@ class EnhancedSampling(ABC):
         return bin_x
 
     def _check_boundaries(self, x):
+        """returns True if x is between minx and maxx"""
         return (x < self.maxx).all() and (x > self.minx).all()
 
     def unit_conversion_cv(self, *args):

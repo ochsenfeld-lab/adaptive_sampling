@@ -18,8 +18,6 @@ class WTMeABF(eABF, WTM, EnhancedSampling):
     Args:
         ext_sigma: thermal width of coupling between collective and extended variable
         ext_mass: mass of extended variable in atomic units
-        nfull: Number of force samples per bin where full bias is applied,
-               if nsamples < nfull the bias force is scaled down by nsamples/nfull
         hill_height: height of Gaussian hills in kJ/mol
         hill_std: standard deviation of Gaussian hills in units of the CV (can be Bohr, Degree, or None)
         md: Object of the MD Inteface
@@ -27,6 +25,8 @@ class WTMeABF(eABF, WTM, EnhancedSampling):
                 [["cv_type", [atom_indices], minimum, maximum, bin_width], [possible second dimension]]
         friction: friction coefficient for Lagevin dynamics of the extended-system
         seed_in: random seed for Langevin dynamics of extended-system
+        nfull: Number of force samples per bin where full bias is applied,
+               if nsamples < nfull the bias force is scaled down by nsamples/nfull
         hill_drop_freq: frequency of hill creation in steps
         well_tempered_temp: effective temperature for WTM, if None, hills are not scaled down (normal metadynamics)
         force_from_grid: forces are accumulated on grid for performance,
@@ -166,7 +166,6 @@ class WTMeABF(eABF, WTM, EnhancedSampling):
                 filename="restart_wtmeabf_local",
                 hist=self.histogram,
                 force=self.bias,
-                var=self.var_force,
                 m2=self.m2_force,
                 ext_hist=self.ext_hist,
                 czar_corr=self.correction_czar,
@@ -194,7 +193,6 @@ class WTMeABF(eABF, WTM, EnhancedSampling):
                     filename=mw_file,
                     hist=self.histogram,
                     force=self.bias,
-                    var=self.var_force,
                     m2=self.m2_force,
                     ext_hist=self.ext_hist,
                     czar_corr=self.correction_czar,
@@ -306,7 +304,6 @@ class WTMeABF(eABF, WTM, EnhancedSampling):
         delta_metapot: np.ndarray,
         center: np.ndarray,
     ):
-
         with np.load(f"{filename}.npz") as data:
 
             new_hist = data["hist"] + hist      
@@ -315,7 +312,6 @@ class WTMeABF(eABF, WTM, EnhancedSampling):
             new_bias = data["force"] + delta_bias
             
             new_m2 = np.zeros_like(self.m2_force).flatten()
-            new_var = np.zeros_like(self.var_force).flatten()
             new_abf_forces = np.zeros_like(self.abf_forces).flatten()
             new_ext_hist = np.zeros_like(self.ext_hist).flatten()
             new_centers = np.append(data["center"], center), 
@@ -325,7 +321,7 @@ class WTMeABF(eABF, WTM, EnhancedSampling):
                     new_ext_hist[i],
                     new_abf_forces[i],
                     new_m2[i],
-                    new_var[i],
+                    _,
                 ) = combine_welford_stats(
                     data["ext_hist"].flatten()[i], 
                     data["abf_force"].flatten()[i], 
@@ -339,7 +335,6 @@ class WTMeABF(eABF, WTM, EnhancedSampling):
             filename=filename,
             hist=new_hist,
             force=new_bias,
-            var=new_var.reshape(self.var_force.shape),
             m2=new_m2.reshape(self.m2_force.shape),
             ext_hist=new_ext_hist.reshape(self.histogram.shape),
             czar_corr=new_czar_corr,
@@ -358,7 +353,6 @@ class WTMeABF(eABF, WTM, EnhancedSampling):
             filename=filename,
             hist=self.histogram,
             force=self.bias,
-            var=self.var_force,
             m2=self.m2_force,
             ext_hist=self.ext_hist,
             czar_corr=self.correction_czar,
@@ -380,7 +374,6 @@ class WTMeABF(eABF, WTM, EnhancedSampling):
 
         self.histogram = data["hist"]
         self.bias = data["force"]
-        self.var_force = data["var"]
         self.m2_force = data["m2"]
         self.ext_hist = data["ext_hist"]
         self.correction_czar = data["czar_corr"]
