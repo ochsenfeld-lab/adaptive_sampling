@@ -139,7 +139,8 @@ def get_windows(
     equil_temp: float = 300.0,
 ) -> Tuple[List[np.ndarray], np.ndarray, np.ndarray]:
     """generate mixture distribution of Gaussian shaped windows from eABF trajectory
-       see: Hulm et. al., J. Chem. Phys. (2022) (in press)
+       
+       see: J. Chem. Phys. 157, 024110 (2022); https://doi.org/10.1063/5.0095554
 
     Args:
         centers: centers of windows

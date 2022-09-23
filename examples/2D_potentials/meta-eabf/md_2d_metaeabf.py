@@ -43,7 +43,13 @@ the_abm = WTMeABF(
 # the_abm.restart()
 
 the_md.calc_init()
-the_abm.step_bias(mw_file='shared_bias', sync_interval=40)
+the_abm.step_bias(
+    mw_file='shared_bias1', 
+    sync_interval=40,
+    output_file='wtmeabf1.out',
+    traj_file='CV_traj1.dat',
+    restart_file='restart_wtmeabf1',
+)
 the_md.calc_etvp()
 
 
@@ -72,7 +78,13 @@ while step_count < nsteps:
     the_md.propagate(langevin=True)
     the_md.calc()
 
-    the_md.forces += the_abm.step_bias(mw_file='shared_bias', sync_interval=40)
+    the_md.forces += the_abm.step_bias(
+        mw_file='shared_bias1', 
+        sync_interval=40,
+        output_file='wtmeabf1.out',
+        traj_file='CV_traj1.dat',
+        restart_file='restart_wtmeabf1',
+    )
 
     the_md.up_momenta(langevin=True)
     the_md.calc_etvp()

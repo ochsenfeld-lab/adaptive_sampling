@@ -6,7 +6,12 @@ if sys.version_info < (3, 8):
 
 setup(
     name="adaptive_sampling",
-    packages=["adaptive_sampling"],
+    packages=[
+        "adaptive_sampling",
+        "adaptive_sampling.colvars",
+        "adaptive_sampling.processing_tools",
+        "adaptive_sampling.sampling_tools"
+    ],
     version="1.0.0",
     license="MIT",
     description="Sampling algorithms for molecular transitions",

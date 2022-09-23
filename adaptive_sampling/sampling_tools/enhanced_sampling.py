@@ -22,6 +22,7 @@ class EnhancedSampling(ABC):
         kinetice: calculate necessary data to obtain kinetics of reaction
         f_conf: force constant for confinement of system to the range of interest in CV space
         output_freq: frequency in steps for writing outputs
+        multiple_walker: share bias with other simulations via buffer file
     """
 
     def __init__(
@@ -326,7 +327,7 @@ class EnhancedSampling(ABC):
                             fout.write("%14.6f\t" % dat[i, j])
                         fout.write("\n")
 
-    def _write_traj(self, data: dict = {}):
+    def _write_traj(self, data: dict = {}, filename: str = 'CV_traj.dat'):
         """write trajectory of extended or normal ABF at output times
 
         Args:
@@ -343,10 +344,10 @@ class EnhancedSampling(ABC):
                 self.traj[:, i] *= BOHR_to_ANGSTROM
 
         # write header
-        if not os.path.isfile("CV_traj.dat") and step == 0:
+        if not os.path.isfile(filename) and step == 0:
             # start new file in first step
 
-            with open("CV_traj.dat", "w") as traj_out:
+            with open(filename, "w") as traj_out:
                 traj_out.write("%14s\t" % "time [fs]")
                 for i in range(len(self.traj[0])):
                     traj_out.write("%14s\t" % f"Xi{i}")
@@ -360,7 +361,7 @@ class EnhancedSampling(ABC):
 
         elif step > 0:
             # append new steps of trajectory since last output
-            with open("CV_traj.dat", "a") as traj_out:
+            with open(filename, "a") as traj_out:
                 for n in range(self.out_freq):
                     traj_out.write(
                         "\n%14.6f\t"

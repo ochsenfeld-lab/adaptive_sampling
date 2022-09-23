@@ -1,3 +1,4 @@
+from fileinput import filename
 import os, time, itertools
 import numpy as np
 from .enhanced_sampling import EnhancedSampling
@@ -43,7 +44,14 @@ class WTMeABF(eABF, WTM, EnhancedSampling):
         super().__init__(*args, **kwargs)
         self.abf_forces = np.zeros_like(self.bias)
 
-    def step_bias(self, write_output: bool = True, write_traj: bool = True, **kwargs):
+    def step_bias(
+        self, 
+        write_output: bool = True, 
+        write_traj: bool = True, 
+        output_file: str = 'wtmeabf.out',
+        traj_file: str = 'CV_traj.dat', 
+        restart_file: str = 'restart_wtmeabf',
+        **kwargs):
 
         md_state = self.the_md.get_sampling_data()
         (xi, delta_xi) = self.get_cv(**kwargs)
@@ -118,7 +126,7 @@ class WTMeABF(eABF, WTM, EnhancedSampling):
             # write output
 
             if write_traj:
-                self.write_traj()
+                self.write_traj(filename=traj_file)
 
             if write_output:
                 self.get_pmf()
@@ -131,8 +139,8 @@ class WTMeABF(eABF, WTM, EnhancedSampling):
                     # output[f"var force {i}"] = self.var_force[i]
                 output[f"metapot"] = self.metapot
 
-                self.write_output(output, filename="wtmeabf.out")
-                self.write_restart()
+                self.write_output(output, filename=output_file)
+                self.write_restart(filename=restart_file)
 
         return bias_force
 
@@ -142,6 +150,7 @@ class WTMeABF(eABF, WTM, EnhancedSampling):
         force_sample,
         sync_interval: int=50,
         mw_file: str="../shared_bias",
+        local_file: str="restart_wtmeabf_local",
         n_trials: int=10,
     ):
         """syncs eABF bias with other walkers
@@ -159,11 +168,11 @@ class WTMeABF(eABF, WTM, EnhancedSampling):
         if md_state.step == 0:        
             if self.verbose:
                 print(" >>> Info: Creating a new instance for shared-bias eABF.")
-                print(" >>> Info: Data of local walker stored in `restart_wtmeabf_local.npz`.")
+                print(f" >>> Info: Data of local walker stored in `{local_file}.npz`.")
             
             # create seperate restart file with local data only
             self._write_restart(
-                filename="restart_wtmeabf_local",
+                filename=local_file,
                 hist=self.histogram,
                 force=self.bias,
                 m2=self.m2_force,
@@ -202,7 +211,7 @@ class WTMeABF(eABF, WTM, EnhancedSampling):
                 )
                 os.chmod(mw_file + ".npz", 0o444)
             elif self.verbose:
-                print(f" >>> Info: Syncing with existing buffer file for shared-bias WTM-eABF: `{mw_file}.npz`.")
+                print(f" >>> Info: Syncing with buffer file `{mw_file}.npz`.")
         
         # save new samples
         count = md_state.step % sync_interval
@@ -247,7 +256,7 @@ class WTMeABF(eABF, WTM, EnhancedSampling):
             
             # add new samples to local restart
             self._update_wtmeabf(
-                "restart_wtmeabf_local",
+                local_file,
                 hist, 
                 ext_hist,
                 abf_forces,
@@ -384,24 +393,14 @@ class WTMeABF(eABF, WTM, EnhancedSampling):
         if self.verbose:
             print(f" >>> Info: Adaptive sampling restartet from {filename}!")
 
-    def _write_ext_traj(self):
-        data = {}
-        for i in range(self.ncoords):
-            if self.cv_type[i] == "angle":
-                self.ext_traj[:, i] *= DEGREES_per_RADIAN
-            elif self.cv_type[i] == "distance":
-                self.ext_traj[:, i] *= BOHR_to_ANGSTROM
-            data[f"lambda{i}"] = self.ext_traj[:, i]
-        return data
-
-    def write_traj(self):
+    def write_traj(self, filename: str = 'CV_traj.dat'):
         """save trajectory for post-processing"""
 
         data = self._write_ext_traj()
         data["Epot [H]"] = self.epot
         data["T [K]"] = self.temp
 
-        self._write_traj(data)
+        self._write_traj(data, filename=filename)
 
         # reset trajectories to save memory
         self.traj = np.array([self.traj[-1]])
