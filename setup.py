@@ -10,9 +10,10 @@ setup(
         "adaptive_sampling",
         "adaptive_sampling.colvars",
         "adaptive_sampling.processing_tools",
-        "adaptive_sampling.sampling_tools"
+        "adaptive_sampling.sampling_tools",
+        "adaptive_sampling.interface",
     ],
-    version="2.0.1",
+    version="2.0.3",
     license="MIT",
     description="Sampling algorithms for molecular transitions",
     long_description=open("README.md").read(),
@@ -20,7 +21,7 @@ setup(
     author="Andreas Hulm",
     author_email="andreas.hulm@cup.uni-muenchen.de",
     url="https://github.com/ochsenfeld-lab/adaptive_sampling",
-    download_url="https://github.com/ochsenfeld-lab/adaptive_sampling/archive/refs/tags/v2.0.1.zip",
+    download_url="https://github.com/ochsenfeld-lab/adaptive_sampling/archive/refs/tags/v2.0.3.zip",
     keywords=[
         "computational chemistry",
         "molecular dynamics",
