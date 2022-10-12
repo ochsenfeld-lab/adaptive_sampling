@@ -110,7 +110,21 @@ la = traj_dat[:,2]  # trajectory of extended system
 # run MBAR and compute free energy profile and probability density from statistical weights
 traj_list, indices, meta_f = mbar.get_windows(grid, cv, la, ext_sigma, equil_temp=300.0)
 
-weights = mbar.run_mbar(traj_list, meta_f, conv=1.0e-4, conv_errvec=None, outfreq=100, equil_temp=300.0)
+exp_U, frames_per_traj = mbar.build_boltzmann(
+    traj_list, 
+    meta_f, 
+    equil_temp=300.0
+)
+
+weights = mbar.run_mbar(
+    exp_U,
+    frames_per_traj 
+    max_iter=10000,
+    conv=1.0e-7,
+    conv_errvec=1.0,
+    outfreq=100,
+)
+
 pmf, rho = mbar.pmf_from_weights(grid, cv[indices], weights, equil_temp=300.0)
 ```
 
