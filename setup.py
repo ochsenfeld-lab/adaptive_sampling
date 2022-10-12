@@ -12,7 +12,7 @@ setup(
         "adaptive_sampling.processing_tools",
         "adaptive_sampling.sampling_tools"
     ],
-    version="1.0.0",
+    version="2.0.0",
     license="MIT",
     description="Sampling algorithms for molecular transitions",
     long_description=open("README.md").read(),
@@ -33,7 +33,7 @@ setup(
         "scipy>=1.7.0",
     ],
     setup_requires=["pytest"],
-    tests_requires=["pytest"],
+    #test_requires=["pytest"],
     classifiers=[
         "Development Status :: 5 - Production/Stable",  # Chose either "3 - Alpha", "4 - Beta" or "5 - Production/Stable" as the current state of your package
         "Environment :: Console",
