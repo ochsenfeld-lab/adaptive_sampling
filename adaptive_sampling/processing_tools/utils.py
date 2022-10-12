@@ -201,7 +201,7 @@ def activation_freeE(
     TS: int = None,
 ) -> tuple:
     """calculate activation free energy
-       see: Dietschreit et al., J. Chem. Phys. XX, XXX (2022); https://doi.org/XXXX
+       see: Dietschreit et al., J. Chem. Phys., 157, 084113 (2022).; <https://aip.scitation.org/doi/10.1063/5.0102075>
 
     Args:
         pmf: potential of mean force (free energy surface)

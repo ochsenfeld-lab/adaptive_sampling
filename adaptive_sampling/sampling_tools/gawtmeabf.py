@@ -85,7 +85,6 @@ class GaWTMeABF(WTMeABF, GaMD, EnhancedSampling):
                 self._calc_E_k0()
 
             else:
-
                 # (WTM-)eABF bias on extended-variable only in production
                 if self.do_wtm:
                     mtd_forces = self.get_wtm_force(self.ext_coords)

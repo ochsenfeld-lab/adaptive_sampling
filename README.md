@@ -4,13 +4,13 @@ Adaptive Sampling
 This package implements various sampling algorithms for the calculation of free energy profiles of molecular transitions. 
 
 ## Available sampling methods include:
-*	Adaptive Biasing Force (ABF) method [3] 
+*	Adaptive Biasing Force (ABF) method [1] 
 	
-* 	Extended-system ABF (eABF) [4]
+* 	Extended-system ABF (eABF) [2]
 
-	* On-the-fly free energy estimate from the Corrected Z-Averaged Restraint (CZAR) [4]
+	* On-the-fly free energy estimate from the Corrected Z-Averaged Restraint (CZAR) [2]
 	
-	* Application of Multistate Bannett's Acceptance Ratio (MBAR) [2] to recover full statistical information in post-processing [1]
+	* Application of Multistate Bannett's Acceptance Ratio (MBAR) [3] to recover full statistical information in post-processing [4]
 	
 * 	Well-Tempered Metadynamics (WTM) [5] and WTM-eABF [6]
 
@@ -121,15 +121,15 @@ $ pip install pdoc3
 $ pdoc --html adaptive_sampling -o doc/
 ```
 ## References:
-This work:
-1.  Hulm et. al., J. Chem. Phys. (in press)
-
-Implemented methods:
-
-2.  Shirts et. al., J. Chem. Phys. (2008); <https://doi.org/10.1063/1.2978177>
-3.  Comer et. al., J. Phys. Chem. B (2015); <https://doi.org/10.1021/jp506633n> 
-4.  Lesage et. al., J. Phys. Chem. B (2017); <https://doi.org/10.1021/acs.jpcb.6b10055>
+1.  Comer et. al., J. Phys. Chem. B (2015); <https://doi.org/10.1021/jp506633n> 
+2.  Lesage et. al., J. Phys. Chem. B (2017); <https://doi.org/10.1021/acs.jpcb.6b10055>
+3.  Shirts et. al., J. Chem. Phys. (2008); <https://doi.org/10.1063/1.2978177>
+4.  Hulm et. al., J. Chem. Phys. (2022); <https://doi.org/10.1063/5.0095554>
 5.  Barducci et. al., Phys. rev. lett. (2008); <https://doi.org/10.1103/PhysRevLett.100.020603>
 6.  Fu et. al., J. Phys. Chem. Lett. (2018); <https://doi.org/10.1021/acs.jpclett.8b01994>
 7.  Miao et. al., J. Chem. Theory Comput. (2015); <https://doi.org/10.1021/acs.jctc.5b00436>
 8.  Chen et. al., J. Chem. Theory Comput. (2021); <https://doi.org/10.1021/acs.jctc.1c00103>
+
+## This and Related Work:
+1.  Hulm et. al., J. Chem. Phys. (2022); <https://doi.org/10.1063/5.0095554>
+2.  Dietschreit et al., J. Chem. Phys., 157, 084113 (2022).; <https://aip.scitation.org/doi/10.1063/5.0102075>

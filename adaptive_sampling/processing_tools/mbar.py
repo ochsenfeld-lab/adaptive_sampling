@@ -6,65 +6,29 @@ from ..units import *
 
 
 def run_mbar(
-    traj_list: List[np.ndarray],
-    meta_f: np.ndarray,
+    exp_U: np.ndarray,
+    frames_per_traj: np.ndarray, 
     max_iter: int = 10000,
     conv: float = 1.0e-7,
     conv_errvec: float = None,
     outfreq: int = 100,
-    equil_temp: float = 300.0,
-    dU_list: List[np.ndarray] = None,
 ) -> np.ndarray:
     """Self-consistent Multistate Bannett Acceptance Ratio (MBAR)
 
        see: Shirts et. al., J. Chem. Phys. (2008); https://doi.org/10.1063/1.2978177
 
     Args:
-        traj_list: List of biased trajectories
-        meta_f: input from metafile
+        exp_U: num_trajs*num_frames array of biased Boltzman factors
+        frames_per_traj: number of samples per trajectory
         max_iter: Maximum number of iterations
         conv: Convergence criterion, largest change in beta*Ai
         conv_errvec: Convergence criterion based on the error vector, not used if None, largest absolute value in the error vec
         outfreq: Output frequency during self-consistent iteration
-        equil_temp: Temperature of simulation
-        dU_list: optional, list of GaMD boost potentials (has to match frames of traj_list)
 
     Returns:
         W: array containing statistical weigths of each frame
     """
-    RT = R_in_SI * equil_temp / 1000.0
-    beta = 1.0 / RT
-
-    num_trajs = len(meta_f)
-
-    print("Making Boltzmann factors\n")
-    all_frames, num_frames, frames_per_traj = join_frames(traj_list)
-    if dU_list is not None:
-        all_dU, dU_num, dU_per_traj = join_frames(dU_list)
-        all_dU *= atomic_to_kJmol  # kJ/mol
-        if (dU_num != num_frames) or (frames_per_traj != dU_per_traj).all():
-            raise ValueError(" >>> Error: GaMD frames have to match eABF frames!")
-
-    exp_U = []
-    for _, line in enumerate(meta_f):
-        if dU_list:
-            exp_U.append(
-                np.exp(
-                    -beta
-                    * (all_dU + 0.5 * line[2] * np.power(all_frames - line[1], 2)),
-                    dtype=float,
-                )
-            )
-        else:
-            exp_U.append(
-                np.exp(
-                    -beta * 0.5 * line[2] * np.power(all_frames - line[1], 2),
-                    dtype=float,
-                )
-            )
-
-    exp_U = np.asarray(exp_U, dtype=float)  # this is a num_trajs x num_frames array
-
+    num_trajs = len(frames_per_traj)
     beta_Ai = np.zeros(shape=(num_trajs,), dtype=float)
     Ai_overtime = [beta_Ai]
 
@@ -130,6 +94,53 @@ def run_mbar(
 
     return weights
 
+def build_boltzmann(
+    traj_list: list, 
+    meta_f: np.ndarray, 
+    dU_list: list=None, 
+    equil_temp: float=300.0
+) -> Tuple[np.ndarray, np.ndarray]:
+    """Build Boltzmann factores for MBAR
+    
+    Args:
+        traj_list: list of trajectories
+        meta_f: definition of simulation with force constants and cv grid
+        dU_list: optional, additional potential that enters boltzmann factor (GaMD, confinement, reweighting, ...)
+    
+    Returns:
+        exp_U: num_trajs**num_frames array of Boltzmann factors
+        frames_per_traj: Number of frames per trajectory
+    """
+    RT = R_in_SI * equil_temp / 1000.0
+    beta = 1.0 / RT
+    
+    all_frames, num_frames, frames_per_traj = join_frames(traj_list)
+    if dU_list is not None:
+        all_dU, dU_num, dU_per_traj = join_frames(dU_list)
+        all_dU *= atomic_to_kJmol  # kJ/mol
+        if (dU_num != num_frames) or (frames_per_traj != dU_per_traj).all():
+            raise ValueError(" >>> Error: GaMD frames have to match eABF frames!")
+
+    exp_U = []
+    for _, line in enumerate(meta_f):
+        if dU_list:
+            exp_U.append(
+                np.exp(
+                    -beta
+                    * (all_dU + 0.5 * line[2] * np.power(all_frames - line[1], 2)),
+                    dtype=float,
+                )
+            )
+        else:
+            exp_U.append(
+                np.exp(
+                    -beta * 0.5 * line[2] * np.power(all_frames - line[1], 2),
+                    dtype=float,
+                )
+            )
+
+    exp_U = np.asarray(exp_U, dtype=float)  # this is a num_trajs x num_frames array
+    return exp_U, frames_per_traj
 
 def get_windows(
     centers: np.ndarray,

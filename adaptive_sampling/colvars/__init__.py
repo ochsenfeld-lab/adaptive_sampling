@@ -7,3 +7,12 @@ __all__ = [
     "kearsley",
     "utils",
 ]
+from .colvars import *
+from .kearsley import * 
+from .utils import *
+
+__all__ = [
+    "colvars",
+    "kearsley",
+    "utils",
+]
