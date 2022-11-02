@@ -6,10 +6,12 @@ from ..units import *
 
 class GaMD(EnhancedSampling):
     """Gaussian-accelerated Molecular Dynamics
+    
+        see:
+            aMD: Hamelberg et. al., J. Chem. Phys. 120, 11919 (2004); https://doi.org/10.1063/1.1755656
+            GaMD: Miao et. al., J. Chem. Theory Comput. (2015); https://doi.org/10.1021/acs.jctc.5b00436
 
-       see: Miao et. al., J. Chem. Theory Comput. (2015); https://doi.org/10.1021/acs.jctc.5b00436
-
-       Apply an harmonic boost potential to potential energy. Independent of Collective Variable.
+        Apply global boost potential to potential energy, that is independent of Collective Variables.
 
     Args:
         gamd_sigma0: upper limit of standard deviation of boost potential
@@ -21,13 +23,13 @@ class GaMD(EnhancedSampling):
                 [["cv_type", [atom_indices], minimum, maximum, bin_width], [possible second dimension]]
         gamd_bound: "lower": use lower bound for GaMD boost
                     "upper: use upper bound for GaMD boost
+                    "aMD": apply accelerated MD, gamd_sigma0 now defines the acceleration parameter alpha
         confine: is system should be confined to range of CV
         equil_temp: equillibrium temperature of MD
         verbose: print verbose information
         kinetice: calculate necessary data to obtain kinetics of reaction
         f_conf: force constant for confinement of system to the range of interest in CV space
         output_freq: frequency in steps for writing outputs
-
     """
 
     def __init__(
@@ -47,6 +49,9 @@ class GaMD(EnhancedSampling):
         self.gamd_equil_steps = gamd_equil_steps
         self.gamd_bound = gamd_bound.lower()
         self.confine = confine
+
+        if self.verbose and gamd_bound.lower() == "amd":
+            print(f" >>> Warning: Please use GaMD to obtain accurate free energy estimates!\n")
 
         self.pot_count = 0
         self.pot_var = 0.0
@@ -84,9 +89,15 @@ class GaMD(EnhancedSampling):
                 self._calc_E_k0()
 
             # apply boost potential
-            prefac = self.k0 / (self.pot_max - self.pot_min)
-            self.gamd_pot = 0.5 * prefac * np.power(self.E - epot, 2)
-            bias_force -= prefac * (self.E - epot) * self.gamd_forces
+            if self.gamd_bound.lower() == "amd":
+                self.gamd_pot = np.square(self.E - epot) / (self.sigma0 + (self.E - epot))
+                bias_force -= (
+                    ((epot - self.E) * (epot - 2.0 * self.sigma0 - self.E)) / np.square(epot - self.sigma0 - self.E)
+                ) * self.gamd_forces
+            else:
+                prefac = self.k0 / (self.pot_max - self.pot_min)
+                self.gamd_pot = 0.5 * prefac * np.power(self.E - epot, 2)
+                bias_force -= prefac * (self.E - epot) * self.gamd_forces
 
             if md_state.step < self.gamd_equil_steps:
                 self._update_pot_distribution(epot)
@@ -179,14 +190,14 @@ class GaMD(EnhancedSampling):
         Args:
             epot: potential energy
         """
-        if self.gamd_bound == "lower":
+        if self.gamd_bound.lower() == "lower":
             self.E = self.pot_max
             ko = (self.sigma0 / self.pot_std) * (
                 (self.pot_max - self.pot_min) / (self.pot_max - self.pot_avg)
             )
             self.k0 = np.min([1.0, ko])
 
-        elif self.gamd_bound == "upper":
+        elif self.gamd_bound.lower() == "upper":
             ko = (1.0 - self.sigma0 / self.pot_std) * (
                 (self.pot_max - self.pot_min) / (self.pot_max - self.pot_avg)
             )
@@ -196,6 +207,9 @@ class GaMD(EnhancedSampling):
                 self.k0 = 1.0
             self.E = self.pot_min + (self.pot_max - self.pot_min) / self.k0
 
+        elif self.gamd_bound.lower() == "amd":
+            self.E = self.pot_max
+ 
         else:
             raise ValueError(f" >>> Error: unknown GaMD bound {self.gamd_bound}!")
 
