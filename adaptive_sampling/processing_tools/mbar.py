@@ -106,6 +106,7 @@ def build_boltzmann(
         traj_list: list of trajectories
         meta_f: definition of simulation with force constants and cv grid
         dU_list: optional, additional potential that enters boltzmann factor (GaMD, confinement, reweighting, ...)
+        equil_temp: equilibrium temperature of the simulation
     
     Returns:
         exp_U: num_trajs**num_frames array of Boltzmann factors
@@ -186,18 +187,19 @@ def get_windows(
 
 
 def pmf_from_weights(
-    grid: np.array, cv: np.array, weights: np.array, equil_temp: float = 300.0
-) -> Tuple[np.array, np.array]:
-    """make free energy surface from statistical weigths obtained by MBAR
+    grid: np.ndarray, cv: np.ndarray, weights: np.ndarray, equil_temp: float = 300.0
+) -> Tuple[np.ndarray, np.ndarray]:
+    """Get 1D Potential of Mean Force (PMF) from statistical weigths obtained by MBAR
 
     Args:
-        grid: grid along cv
+        grid: centroids of grid along cv
         cv: trajectory of cv
         weights: boltzmann weights of frames in trajectory
         equil_temp: Temperature of simulation
 
     Returns:
-        Potential of mean force (PMF), probability density
+        pmf: Potential of mean force (PMF) in kJ/mol 
+        rho: probability density
     """
     RT = R_in_SI * equil_temp / 1000.0
 
@@ -210,9 +212,57 @@ def pmf_from_weights(
         rho[ii] = W_x.sum()
 
     rho /= rho.sum() * dx
-    pmf = -RT * np.log(rho, out=np.zeros_like(rho), where=(rho != 0))
+    pmf = -RT * np.log(rho, out=np.full_like(rho, np.NaN), where=(rho != 0))
 
     return pmf, rho
+
+
+def fes_from_weights(
+    x: np.ndarray, 
+    y: np.ndarray, 
+    xi_x: np.ndarray, 
+    xi_y: np.ndarray, 
+    weights: np.ndarray, 
+    equil_temp: float=300.0
+) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Get 2D Free Energy Surface (FES) from statistical weigths obtained by MBAR
+
+    Args:
+        x: grid centroids along cv0
+        y: grid centroids along cv1
+        xi_x: trajectory of cv0
+        xi_y: trajectory of cv1
+        weights: boltzmann weights of frames in trajectory
+        equil_temp: equilibrium temperature of simulation
+
+    Returns:
+        xx: grid of shape (len(x), len(y)) for x
+        yy: grid of shape (len(x), len(y)) for y
+        fes: free energy surface in kJ/mol
+    """
+    RT = R_in_SI * equil_temp / 1000.0
+
+    dx = x[1] - x[0]
+    dx2 = dx / 2.0
+    
+    dy = y[1] - y[0]
+    dy2 = dy / 2.0
+    
+    yy, xx = np.meshgrid(y, x)
+    
+    rho = np.zeros_like(xx, dtype=float).flatten()
+    for i, xy in enumerate(zip(xx.flatten(), yy.flatten())):
+        ind_x  = np.where(np.logical_and(
+            xi_x >= xy[0] - dx2, xi_x < xy[0] + dx2
+        ))
+        ind_xy = np.where(np.logical_and(
+            xi_y[ind_x] >= xy[1] - dy2, xi_y[ind_x] < xy[1] + dy2
+        ))
+        rho[i] = weights[ind_xy].sum()
+
+    rho /= rho.sum() * dx
+    fes = -RT * np.log(rho, out=np.full_like(rho, np.NaN), where=(rho != 0))
+    return xx, yy, fes.reshape(xx.shape)
 
 
 def deltaf_from_weights(

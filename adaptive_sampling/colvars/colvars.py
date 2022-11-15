@@ -306,6 +306,88 @@ class CV:
 
         return float(self.cv)
 
+    def environmental_distance(
+        self,
+        cv_def: list,
+    ):
+        """Distance coordinate, weighted by electrostatic potential of midpoint of distance
+ 
+        Args:
+            cv_def: list with involved atoms, [[a1, a2], [atoms for electrostatic potential]]
+
+        Returns:
+            cv: electroststic potential in a.u.
+        """
+        try:
+            charges = np.load("charges.npy")
+        except:
+            raise ValueError("CV ERROR: Could not find charges for electrostatic potential in charges.npy")
+
+        if len(cv_def[1]) != len(charges):
+            raise ValueError(
+                "CV ERROR: Number of charges for electrostatic potential has to match number of Atoms!"
+            )
+        self.update_coords()
+
+        A = self._get_com(cv_def[0][0])
+        B = self._get_com(cv_def[0][1])
+        M = (A + B) / 2.
+        AB = torch.linalg.norm(B-A, dtype=torch.float)
+
+        self.cv = 0
+        for i, atom in enumerate(cv_def[1]):
+            C = self._get_com(atom)
+            self.cv += charges[i] / torch.linalg.norm(M-C, dtype=torch.float)
+        self.cv *= AB
+
+        if self.requires_grad:
+            self.gradient = torch.autograd.grad(
+                self.cv, self.coords, allow_unused=True
+            )[0]
+            self.gradient = self.gradient.detach().numpy()
+        
+        return float(self.cv)
+    
+    def electrostatic_potential(
+        self, 
+        cv_def: list,
+    ):
+        """Electrostatic potential on spezific Atom. Environmental CV to treat reorganization of polar solvent or protein sites  
+        needs a file called `charges.npy` that contains the charges of all atoms in cv_def
+ 
+        Args:
+            cv_def: list with involved atoms, the first element defines the atom where the potential is calculated
+
+        Returns:
+            cv: electroststic potential in a.u.
+        """
+        try:
+            charges = np.load("charges.npy")
+        except:
+            raise ValueError("CV ERROR: Could not find charges for electrostatic potential in charges.npy")
+
+        if len(cv_def) != len(charges)+1:
+            raise ValueError(
+                "CV ERROR: Number of charges for electrostatic potential has to match number of Atoms!"
+            )
+        self.update_coords()
+
+        A = self._get_com(cv_def[0])
+        self.cv = 0
+        for i, atom in enumerate(cv_def[1:]):
+            if atom != cv_def[0]:
+                B = self._get_com(atom)
+                self.cv += charges[i] / torch.linalg.norm(B-A, dtype=torch.float)
+
+        if self.requires_grad:
+            self.gradient = torch.autograd.grad(
+                self.cv, self.coords, allow_unused=True
+            )[0]
+            self.gradient = self.gradient.detach().numpy()
+        
+        return float(self.cv)
+
+
     def rmsd(
         self,
         cv_def: Union[str, list],
@@ -669,6 +751,9 @@ class CV:
         elif cv.lower() == "distorted_distance":
             xi = self.distorted_distance(atoms, **kwargs)
             self.type = None
+        elif cv.lower() == "environmental_distance":
+            xi = self.environmental_distance(atoms)
+            self.type = None
         elif cv.lower() == "rmsd":
             xi = self.rmsd(atoms)
             self.type = "distance"
@@ -684,8 +769,11 @@ class CV:
         elif cv.lower() == "path_distance":
             xi = self.path_distance(atoms, **kwargs)
             self.type = None
+        elif cv.lower() == "electrostatic":
+            xi = self.electrostatic_potential(atoms)
+            self.type = None
         else:
-            print(" >>> Error in CV: Unknown coordinate")
+            print(" >>> Error in CV: Unknown Collective Variable")
             sys.exit(1)
 
         if self.requires_grad:

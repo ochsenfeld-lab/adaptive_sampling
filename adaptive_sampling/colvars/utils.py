@@ -303,3 +303,34 @@ def quaternion_rotate(X: torch.tensor, Y: torch.tensor) -> torch.tensor:
     r = eigen[1][:, eigen[0].argmax()]
     rot = _quaternion_transform(r)
     return rot
+
+
+def get_amber_charges(prmtop: str) -> list:
+    """Parse charges from AMBER parameter file 
+
+    Args:
+        prmtop (string): filename
+
+    Returns:
+        charges (list): atom charges in a.u.
+    """
+    with open(prmtop, "r") as f:
+        prm = f.readlines()
+        for i, line in enumerate(prm):
+            if line.find("CHARGE") != -1:
+                q_str = prm[i+2]
+                j = 3
+                while len(prm) > j:
+                    if prm[i+j].find("FLAG") != -1:
+                        break
+                    else:
+                        q_str += prm[i+j]
+                        j += 1
+                break
+
+    charge = []
+    for q in q_str.split(" "):
+        if q:
+            charge.append(float(q) / 18.2223)  # converted to a.u. with factor sqrt(electrostatic constant)
+
+    return charge

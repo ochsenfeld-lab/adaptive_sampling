@@ -76,7 +76,6 @@ def czar(
     f_corr = np.zeros(len(grid), dtype=float)
     for i, x in enumerate(grid_local):
         la_x = la[np.where(np.logical_and(xi >= x - dx2, xi < x + dx2))]
-
         hist[i] = len(la_x)
         if hist[i] > 0:
             la_avg = np.average(la_x)
@@ -84,4 +83,4 @@ def czar(
 
     log_hist = np.log(hist, out=np.zeros_like(hist), where=(hist != 0))
 
-    return -RT * np.gradient(log_hist, grid_local) + f_corr
+    return -RT * np.gradient(log_hist, grid_local) + f_corr 
