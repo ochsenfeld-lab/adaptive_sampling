@@ -254,16 +254,3 @@ def deltaf_from_weights(
     p_b = weights[np.where(cv > TS)].sum()
 
     return -RT * np.log(p_b / p_a)
-
-
-def _error_vec(
-    n_frames: np.ndarray, beta_Ai: np.ndarray, exp_U: np.ndarray
-) -> np.ndarray:
-    """error vector for MBAR"""
-    denominator = np.multiply(n_frames * np.exp(beta_Ai), exp_U.T)
-    denominator = 1.0 / np.sum(denominator, axis=1)
-    # sum over all frames
-    error_v = n_frames - n_frames * np.exp(beta_Ai) * (
-        np.multiply(exp_U, denominator).sum(axis=1)
-    )
-    return error_v
