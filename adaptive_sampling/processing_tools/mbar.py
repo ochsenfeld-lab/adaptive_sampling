@@ -3,7 +3,7 @@ import numpy as np
 from typing import List, Tuple
 from .utils import join_frames
 from ..units import *
-
+import torch
 
 def run_mbar(
     exp_U: np.ndarray,
@@ -12,6 +12,7 @@ def run_mbar(
     conv: float = 1.0e-7,
     conv_errvec: float = None,
     outfreq: int = 100,
+    device = 'cpu'
 ) -> np.ndarray:
     """Self-consistent Multistate Bannett Acceptance Ratio (MBAR)
 
@@ -28,9 +29,20 @@ def run_mbar(
     Returns:
         W: array containing statistical weigths of each frame
     """
+
+    frames_per_traj = torch.from_numpy(frames_per_traj)
+    frames_per_traj = frames_per_traj.to(device=device)
+    exp_U = torch.from_numpy(exp_U)
+    exp_U = exp_U.to(device=device)
+
     num_trajs = len(frames_per_traj)
-    beta_Ai = np.zeros(shape=(num_trajs,), dtype=float)
-    Ai_overtime = [beta_Ai]
+    beta_Ai = torch.zeros(size=(num_trajs,))
+    beta_Ai = beta_Ai.to(device=device)
+    #Ai_overtime = [beta_Ai]
+    
+    # First denominator with all zero Ai guess
+    denominator = torch.mul(frames_per_traj * torch.exp(beta_Ai), exp_U.T)
+    denominator = 1.0 / denominator.sum(axis=1)
 
     print("All ready!\n")
     print("Start of the self-consistent iteration.")
@@ -40,22 +52,25 @@ def run_mbar(
     while True:
         count += 1
 
-        denominator = np.multiply(frames_per_traj * np.exp(beta_Ai), exp_U.T)
-        denominator = 1.0 / np.sum(denominator, axis=1)
+        beta_Ai_new = -torch.log(torch.mul(exp_U, denominator).sum(axis=1))
+        beta_Ai_new -= torch.clone(beta_Ai_new[0])
+        #Ai_overtime.append(beta_Ai_new)
 
-        beta_Ai_new = -np.log(np.multiply(exp_U, denominator).sum(axis=1))
-        beta_Ai_new -= beta_Ai_new[0]
-        Ai_overtime.append(beta_Ai_new)
+        delta_Ai = torch.abs(beta_Ai - beta_Ai_new)
+        beta_Ai = torch.clone(beta_Ai_new)
+        
+        denominator = torch.mul(frames_per_traj * torch.exp(beta_Ai), exp_U.T)
+        denominator = 1.0 / denominator.sum(axis=1)
 
-        delta_Ai = np.abs(beta_Ai - beta_Ai_new)
-        beta_Ai = np.copy(beta_Ai_new)
-
-        max_err_vec = np.abs(_error_vec(frames_per_traj, beta_Ai, exp_U)).max()
+        error_v = frames_per_traj - frames_per_traj * torch.exp(beta_Ai) * (
+            torch.mul(exp_U, denominator).sum(axis=1)
+        )
+        max_err_vec = torch.abs(error_v).max()
 
         if count % outfreq == 0 or count == 1:
             print(
                 "Iter %4d:\tConv=%14.10f\tConv_errvec=%14.6f"
-                % (count, np.max(delta_Ai[1:]), max_err_vec)
+                % (count, delta_Ai[1:].max(), max_err_vec)
             )
             sys.stdout.flush()
 
@@ -69,7 +84,7 @@ def run_mbar(
                 "========================================================================"
             )
             print(f"Convergence not reached in {count} iterations!")
-            print("Max error vector:", max_err_vec)
+            print(f"Max error vector: {max_err_vec:14.6f}")
             print(
                 "========================================================================"
             )
@@ -81,7 +96,7 @@ def run_mbar(
                 "========================================================================"
             )
             print(f"Converged after {count} iterations!")
-            print("Max error vector:", max_err_vec)
+            print(f"Max error vector: {max_err_vec:14.6f}")
             print(
                 "========================================================================"
             )
@@ -89,8 +104,11 @@ def run_mbar(
             break
 
     # final values
-    weights = np.multiply(frames_per_traj * np.exp(beta_Ai), exp_U.T)
-    weights = 1.0 / np.sum(weights, axis=1)
+    weights = torch.mul(frames_per_traj * torch.exp(beta_Ai), exp_U.T)
+    weights = 1.0 / weights.sum(axis=1)
+    weights = weights.cpu().numpy()
+
+    torch.cuda.empty_cache()
 
     return weights
 
