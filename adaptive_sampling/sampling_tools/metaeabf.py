@@ -368,6 +368,8 @@ class WTMeABF(eABF, WTM, EnhancedSampling):
             abf_force=self.abf_forces,
             center=self.center,
             metapot=self.metapot,
+            ext_momenta=self.ext_momenta,
+            ext_coors=self.ext_coords,
         )
 
     def restart(self, filename: str = "restart_wtmeabf"):
@@ -389,6 +391,8 @@ class WTMeABF(eABF, WTM, EnhancedSampling):
         self.abf_forces = data["abf_force"]
         self.center = data["center"].tolist()
         self.metapot = data["metapot"]
+        self.ext_momenta = data["ext_momenta"]
+        self.ext_coords = data["ext_coords"]
 
         if self.verbose:
             print(f" >>> Info: Adaptive sampling restartet from {filename}!")

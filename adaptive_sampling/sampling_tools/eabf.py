@@ -470,6 +470,8 @@ class eABF(ABF, EnhancedSampling):
             m2=self.m2_force,
             ext_hist=self.ext_hist,
             czar_corr=self.correction_czar,
+            ext_momenta=self.ext_momenta,
+            ext_coors=self.ext_coords,
         )
 
     def restart(self, filename: str = "restart_abf"):
@@ -488,6 +490,8 @@ class eABF(ABF, EnhancedSampling):
         self.m2_force = data["m2"]
         self.ext_hist = data["ext_hist"]
         self.correction_czar = data["czar_corr"]
+        self.ext_momenta = data["ext_momenta"]
+        self.ext_coords = data["ext_coords"]
 
         if self.verbose:
             print(f" >>> Info: Adaptive sampling restartet from {filename}!")
