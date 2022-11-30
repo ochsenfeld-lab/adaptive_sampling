@@ -61,9 +61,7 @@ class WTMeABF(eABF, WTM, EnhancedSampling):
         bias_force = self._extended_dynamics(xi, delta_xi)  # , self.hill_std)
         force_sample = [0 for _ in range(2 * self.ncoords)]
 
-        if (self.ext_coords <= self.maxx).all() and (
-            self.ext_coords >= self.minx
-        ).all():
+        if self._check_boundaries(self.ext_coords):
 
             bin_la = self.get_index(self.ext_coords)
             self.ext_hist[bin_la[1], bin_la[0]] += 1

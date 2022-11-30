@@ -76,9 +76,7 @@ class GaWTMeABF(WTMeABF, GaMD, EnhancedSampling):
                 self._calc_E_k0()
 
             # apply gamd boost potential
-            prefac = self.k0 / (self.pot_max - self.pot_min)
-            self.gamd_pot = 0.5 * prefac * np.power(self.E - epot, 2)
-            bias_force -= prefac * (self.E - epot) * self.gamd_forces
+            bias_force -= self._apply_boost(epot)
 
             if md_state.step < self.gamd_equil_steps:
                 self._update_pot_distribution(epot)
