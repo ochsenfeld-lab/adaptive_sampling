@@ -306,6 +306,39 @@ class CV:
 
         return float(self.cv)
 
+    def distance_min(self, cv_def: list) -> float:
+        """distorted distance between two mass centers in range(0, inf) mapped to range(1,0)
+
+        Args:
+            cv_def (list):
+                list of distances beteen atoms: [[ind0, ind1], [], ...]
+
+        Returns:
+            distorted distance (float): computed distance
+        """
+        self.update_coords()
+        
+        p1 = self._get_com(cv_def[0])
+        p2 = self._get_com(cv_def[1])
+
+        # get distances
+        dists = []
+        for atoms in cv_def:
+            p1 = self._get_com(atoms[0])
+            p2 = self._get_com(atoms[1])
+            dists.append(torch.linalg.norm(p2 - p1, dtype=torch.float))
+
+        self.cv = min(dists)
+
+        # get forces
+        if self.requires_grad:
+            self.gradient = torch.autograd.grad(
+                self.cv, self.coords, allow_unused=True
+            )[0]
+            self.gradient = self.gradient.detach().numpy()
+
+        return float(self.cv)
+
     def environmental_distance(
         self,
         cv_def: list,
@@ -739,8 +772,19 @@ class CV:
         elif cv.lower() == "torsion":
             xi = self.torsion(atoms)
             self.type = "angle"
+        elif cv.lower() == "minimum_distance":
+            xi = self.distance_min(atoms)
+            self.type = "distance"
         elif cv.lower() == "lin_comb_dists":
             xi = self.linear_combination(atoms)
+            self.type = "distance"
+        elif cv.lower() == "lin_comb_dists_min":
+            xi0 = atoms[0] * self.distance(atoms[1])
+            forces0 = atoms[0] * np.copy(self.gradient)
+            xi = xi0 + atoms[2] * self.distance_min(atoms[3])
+            self.cv = float(xi)
+            forces1 = atoms[2] * np.copy(self.gradient)
+            self.gradient = forces0 + forces1
             self.type = "distance"
         elif cv.lower() == "lin_comb_angles":
             xi = self.linear_combination(atoms)
