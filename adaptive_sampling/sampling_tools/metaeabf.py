@@ -285,7 +285,7 @@ class WTMeABF(eABF, WTM, EnhancedSampling):
                         delta_metapot,
                         new_center,
                     )
-                    self.restart(filename=mw_file)
+                    self.restart(filename=mw_file, restart_ext_sys=False)
                     os.chmod(mw_file + ".npz", 0o444)  # other walkers can access again
 
                     self.get_pmf()  # get new global pmf
@@ -372,7 +372,7 @@ class WTMeABF(eABF, WTM, EnhancedSampling):
             ext_coors=self.ext_coords,
         )
 
-    def restart(self, filename: str = "restart_wtmeabf"):
+    def restart(self, filename: str = "restart_wtmeabf", restart_ext_sys=True):
         """restart from restart file
 
         Args:
@@ -391,8 +391,9 @@ class WTMeABF(eABF, WTM, EnhancedSampling):
         self.abf_forces = data["abf_force"]
         self.center = data["center"].tolist()
         self.metapot = data["metapot"]
-        self.ext_momenta = data["ext_momenta"]
-        self.ext_coords = data["ext_coords"]
+        if restart_ext_sys:
+            self.ext_momenta = data["ext_momenta"]
+            self.ext_coords = data["ext_coords"]
 
         if self.verbose:
             print(f" >>> Info: Adaptive sampling restartet from {filename}!")

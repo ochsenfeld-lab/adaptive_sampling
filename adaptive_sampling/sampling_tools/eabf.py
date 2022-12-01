@@ -323,7 +323,7 @@ class eABF(ABF, EnhancedSampling):
                         m2,
                         czar_corr,
                     )
-                    self.restart(filename=mw_file)
+                    self.restart(filename=mw_file, restart_ext_sys=False)
                     os.chmod(mw_file + ".npz", 0o444)  # other walkers can access again
                     
                     self.get_pmf()  # get new global pmf   
@@ -474,7 +474,7 @@ class eABF(ABF, EnhancedSampling):
             ext_coors=self.ext_coords,
         )
 
-    def restart(self, filename: str = "restart_abf"):
+    def restart(self, filename: str = "restart_abf", restart_ext_sys=True):
         """restart from restart file
 
         Args:
@@ -490,8 +490,9 @@ class eABF(ABF, EnhancedSampling):
         self.m2_force = data["m2"]
         self.ext_hist = data["ext_hist"]
         self.correction_czar = data["czar_corr"]
-        self.ext_momenta = data["ext_momenta"]
-        self.ext_coords = data["ext_coords"]
+        if restart_ext_sys:
+            self.ext_momenta = data["ext_momenta"]
+            self.ext_coords = data["ext_coords"]
 
         if self.verbose:
             print(f" >>> Info: Adaptive sampling restartet from {filename}!")
