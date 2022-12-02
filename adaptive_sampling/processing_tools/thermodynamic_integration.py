@@ -108,7 +108,7 @@ def force_error(
         sigma: thermal width of coupling of la to xi
         n_bins_tau: number of bins for estimation of autocorrelation function
         equil_temp: Temperature of the simulation
-        full_output: if Ture return dict with full information
+        full_output: if True return dict with full information
 
     returns:
         err_pmf: error estimate for PMF 

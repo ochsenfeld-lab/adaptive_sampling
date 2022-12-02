@@ -35,14 +35,14 @@ def _next_pow_two(n: int):
     return i
 
 
-def autocorr(x: np.array) -> np.array:
+def autocorr(x: np.ndarray) -> np.ndarray:
     """Estimate the normalized autocorrelation function of a 1-D series
 
     args:
         x: The time series of which to calculate the autocorrelation function.
 
     returns:
-        acfxn: The autocorrelation as a function of lag time.
+        acf: The autocorrelation as a function of lag time.
     """
     x = np.atleast_1d(x)
     if len(x.shape) != 1:
@@ -56,16 +56,14 @@ def autocorr(x: np.array) -> np.array:
     return acf
 
 
-def ipce(corr_x):
+def ipce(corr_x: np.ndarray):
     """ The initial positive correlation time estimator for the autocorrelation time, as proposed by Geyer et al.
 
     args
-        x: The time series of which to calculate the autocorrelation function.
+        corr_x: autocorrelation function of time series of which to calculate the autocorrelation time.
 
     returns:
         tau: Estimate of the autocorrelation time.
-        mean: Average value of x
-        sigma: variance of x
     """
     lag_max = int(len(corr_x) / 2)
     i, t = 0, 0.0
