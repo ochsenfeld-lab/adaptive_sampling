@@ -84,7 +84,7 @@ the_bias = eABF(
 for md_step in range(steps):
     # propagate langevin dynamics and calc forces 
     ... 
-    bias_force = eABF.step_bias(write_output=True, write_traj=True)
+    bias_force = the_bias.step_bias(write_output=True, write_traj=True)
     the_md.forces += bias_force
     ...
     # finish md_step
