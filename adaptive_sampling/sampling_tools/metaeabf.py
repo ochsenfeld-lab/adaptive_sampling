@@ -288,6 +288,9 @@ class WTMeABF(eABF, WTM, EnhancedSampling):
                     self.restart(filename=mw_file, restart_ext_sys=False)
                     os.chmod(mw_file + ".npz", 0o444)  # other walkers can access again
 
+                    # recalculates `self.metapot` and `self.bias` to ensure convergence of WTM potential
+                    self._update_metapot_from_centers() 
+                    
                     self.get_pmf()  # get new global pmf
                     self.metapot_last_sync = np.copy(self.metapot)
                     self.bias_last_sync = np.copy(self.bias)
@@ -323,7 +326,7 @@ class WTMeABF(eABF, WTM, EnhancedSampling):
             new_m2 = np.zeros_like(self.m2_force).flatten()
             new_abf_forces = np.zeros_like(self.abf_forces).flatten()
             new_ext_hist = np.zeros_like(self.ext_hist).flatten()
-            new_centers = np.append(data["center"], center), 
+            new_centers = np.append(data["center"], center)
             
             for i in range(len(hist.flatten())):
                 (
@@ -348,7 +351,7 @@ class WTMeABF(eABF, WTM, EnhancedSampling):
             ext_hist=new_ext_hist.reshape(self.histogram.shape),
             czar_corr=new_czar_corr,
             abf_force=new_abf_forces.reshape(self.abf_forces.shape),
-            center=np.asarray(list(itertools.chain(*new_centers))),
+            center=new_centers,
             metapot=new_metapot,
         )                           
 
