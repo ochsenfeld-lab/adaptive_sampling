@@ -1,4 +1,4 @@
-import os, time, itertools
+import os, time
 import numpy as np
 from typing import Tuple
 from .enhanced_sampling import EnhancedSampling

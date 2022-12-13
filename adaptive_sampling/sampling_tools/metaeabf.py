@@ -1,5 +1,4 @@
-from fileinput import filename
-import os, time, itertools
+import os, time
 import numpy as np
 from .enhanced_sampling import EnhancedSampling
 from .utils import welford_var, combine_welford_stats, diff
