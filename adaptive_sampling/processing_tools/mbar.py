@@ -30,9 +30,9 @@ def run_mbar(
         W: array containing statistical weigths of each frame
     """
 
-    frames_per_traj = torch.from_numpy(frames_per_traj)
+    frames_per_traj = torch.from_numpy(frames_per_traj.astype(np.float64))
     frames_per_traj = frames_per_traj.to(device=device)
-    exp_U = torch.from_numpy(exp_U)
+    exp_U = torch.from_numpy(exp_U.astype(np.float64))
     exp_U = exp_U.to(device=device)
 
     num_trajs = len(frames_per_traj)
@@ -41,8 +41,8 @@ def run_mbar(
     #Ai_overtime = [beta_Ai]
     
     # First denominator with all zero Ai guess
-    denominator = torch.mul(frames_per_traj * torch.exp(beta_Ai), exp_U.T)
-    denominator = 1.0 / denominator.sum(axis=1)
+    denominator = 1.0 / torch.matmul(frames_per_traj * torch.exp(beta_Ai), exp_U)
+    expU_dot_denom = torch.matmul(exp_U, denominator)
 
     print("All ready!\n")
     print("Start of the self-consistent iteration.")
@@ -52,19 +52,19 @@ def run_mbar(
     while True:
         count += 1
 
-        beta_Ai_new = -torch.log(torch.mul(exp_U, denominator).sum(axis=1))
+        beta_Ai_new = -torch.log(expU_dot_denom)
         beta_Ai_new -= torch.clone(beta_Ai_new[0])
         #Ai_overtime.append(beta_Ai_new)
 
         delta_Ai = torch.abs(beta_Ai - beta_Ai_new)
         beta_Ai = torch.clone(beta_Ai_new)
         
-        denominator = torch.mul(frames_per_traj * torch.exp(beta_Ai), exp_U.T)
-        denominator = 1.0 / denominator.sum(axis=1)
+        prefac = frames_per_traj * torch.exp(beta_Ai)
+        denominator = 1.0 / torch.matmul(prefac, exp_U)
+        expU_dot_denom = torch.matmul(exp_U, denominator)
 
-        error_v = frames_per_traj - frames_per_traj * torch.exp(beta_Ai) * (
-            torch.mul(exp_U, denominator).sum(axis=1)
-        )
+        error_v = (frames_per_traj - 
+                    prefac * expU_dot_denom)
         max_err_vec = torch.abs(error_v).max()
 
         if count % outfreq == 0 or count == 1:
@@ -104,8 +104,7 @@ def run_mbar(
             break
 
     # final values
-    weights = torch.mul(frames_per_traj * torch.exp(beta_Ai), exp_U.T)
-    weights = 1.0 / weights.sum(axis=1)
+    weights = 1.0 / torch.matmul(frames_per_traj * torch.exp(beta_Ai), exp_U)
     weights = weights.cpu().numpy()
 
     torch.cuda.empty_cache()
