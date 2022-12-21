@@ -188,7 +188,7 @@ class GaMD(EnhancedSampling):
 
         elif self.gamd_bound == "upper":
             ko = (1.0 - self.sigma0 / self.pot_std) * (
-                (self.pot_max - self.pot_min) / (self.pot_max - self.pot_avg)
+                (self.pot_max - self.pot_min) / (self.pot_avg - self.pot_min)
             )
             if 0.0 < ko <= 1.0:
                 self.k0 = ko
