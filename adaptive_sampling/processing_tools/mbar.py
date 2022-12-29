@@ -113,7 +113,7 @@ def run_mbar(
 def build_boltzmann(
     traj_list: list, 
     meta_f: np.ndarray, 
-    dU_list: list=None, 
+    dU_list: list=None,
     equil_temp: float=300.0
 ) -> Tuple[np.ndarray, np.ndarray]:
     """Build Boltzmann factores for MBAR
@@ -155,7 +155,7 @@ def build_boltzmann(
                 )
             )
 
-    exp_U = np.asarray(exp_U)   # this is a num_trajs x num_frames list
+    exp_U = np.asarray(exp_U, dtype=np.float64)   # this is a num_trajs x num_frames list
     return exp_U, frames_per_traj
 
 def get_windows(
