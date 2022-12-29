@@ -63,8 +63,7 @@ def run_mbar(
         denominator = 1.0 / torch.matmul(prefac, exp_U)
         expU_dot_denom = torch.matmul(exp_U, denominator)
 
-        error_v = (frames_per_traj - 
-                    prefac * expU_dot_denom)
+        error_v = (frames_per_traj - prefac * expU_dot_denom)
         max_err_vec = torch.abs(error_v).max()
 
         if count % outfreq == 0 or count == 1:
@@ -156,7 +155,7 @@ def build_boltzmann(
                 )
             )
 
-    exp_U = np.asarray(exp_U, dtype=float)  # this is a num_trajs x num_frames array
+    exp_U = np.asarray(exp_U)   # this is a num_trajs x num_frames list
     return exp_U, frames_per_traj
 
 def get_windows(

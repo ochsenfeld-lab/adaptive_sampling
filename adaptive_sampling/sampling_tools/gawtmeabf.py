@@ -52,7 +52,14 @@ class GaWTMeABF(WTMeABF, GaMD, EnhancedSampling):
         self.do_wtm = do_wtm
         self.qm_boost = qm_boost
 
-    def step_bias(self, write_output: bool = True, write_traj: bool = True, **kwargs):
+    def step_bias(
+        self, 
+        write_output: bool = True, 
+        write_traj: bool = True, 
+        output_file: str = 'gawtmeabf.out',
+        traj_file: str = 'CV_traj.dat', 
+        restart_file: str = 'restart_gawtmeabf',
+        **kwargs):
 
         md_state = self.the_md.get_sampling_data()
         epot = md_state.epot
@@ -76,9 +83,7 @@ class GaWTMeABF(WTMeABF, GaMD, EnhancedSampling):
                 self._calc_E_k0()
 
             # apply gamd boost potential
-            prefac = self.k0 / (self.pot_max - self.pot_min)
-            self.gamd_pot = 0.5 * prefac * np.power(self.E - epot, 2)
-            bias_force -= prefac * (self.E - epot) * self.gamd_forces
+            bias_force -= self._apply_boost(epot)
 
             if md_state.step < self.gamd_equil_steps:
                 self._update_pot_distribution(epot)
@@ -161,7 +166,7 @@ class GaWTMeABF(WTMeABF, GaMD, EnhancedSampling):
         if md_state.step % self.out_freq == 0:
 
             if write_traj:
-                self.write_traj()
+                self.write_traj(filename=traj_file)
 
             if write_output:
                 self.get_pmf()
@@ -172,8 +177,8 @@ class GaWTMeABF(WTMeABF, GaMD, EnhancedSampling):
                 output[f"metapot"] = self.metapot
                 output[f"GaMD corr"] = self.gamd_corr
 
-                self.write_output(output, filename="gaeabf.out")
-                self.write_restart()
+                self.write_output(output, filename=output_file)
+                self.write_restart(filename=restart_file)
 
         return bias_force
 
@@ -292,7 +297,7 @@ class GaWTMeABF(WTMeABF, GaMD, EnhancedSampling):
         if self.verbose:
             print(f" >>> Info: Adaptive sampling restartet from {filename}!")
 
-    def write_traj(self):
+    def write_traj(self, filename='CV_traj.dat'):
         """save trajectory for post-processing"""
 
         data = self._write_ext_traj()
@@ -300,7 +305,7 @@ class GaWTMeABF(WTMeABF, GaMD, EnhancedSampling):
         data["Epot [H]"] = self.epot
         data["T [K]"] = self.temp
 
-        self._write_traj(data)
+        self._write_traj(data, filename=filename)
 
         # reset trajectories to save memory
         self.traj = np.array([self.traj[-1]])
