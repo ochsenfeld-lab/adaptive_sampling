@@ -461,6 +461,22 @@ class CV:
 
         return float(self.cv)
 
+    def path_cv(self, cv_dev: list):
+        if not hasattr(self, 'path_cv'):
+            from .path_cv import PathCV
+            self.path_cv = PathCV(guess_path=cv_dev[0])
+        
+        self.update_coords()
+        
+        self.cv = self.path_cv.calculate(self.coords)
+        if self.requires_grad:
+            self.gradient = torch.autograd.grad(
+                self.cv, self.coords, allow_unused=True
+            )[0]
+            self.gradient = self.gradient.detach().numpy()
+
+        return float(self.cv)
+
     def get_cv(self, cv: str, atoms: list, **kwargs) -> Tuple[float, np.ndarray]:
         """get state of collective variable from cv definition of sampling_tools
 
@@ -516,6 +532,9 @@ class CV:
         elif cv.lower() == "rmsd":
             xi = self.rmsd(atoms)
             self.type = "distance"
+        elif cv.lower() == "pathcv":
+            xi = self.path_cv(atoms)
+            self.type = None
         else:
             print(" >>> Error in CV: Unknown Collective Variable")
             sys.exit(1)

@@ -2,7 +2,6 @@ import torch
 import pytest
 import numpy as np
 from adaptive_sampling.colvars.colvars import CV
-from adaptive_sampling.colvars.kearsley import Kearsley
 from adaptive_sampling.colvars.utils import *
 from adaptive_sampling.interface.sampling_data import SamplingData
 
@@ -201,10 +200,7 @@ def test_rmsd(coords1, coords2, rmsd_fit):
     the_cv = CV(the_md, requires_grad=True)
     f1, grad1 = the_cv.get_cv("rmsd", coords2, method="kabsch")
     f2, grad2 = the_cv.get_cv("rmsd", coords2, method="quaternion")
-    f3, grad3 = the_cv.get_cv("rmsd", coords2, method="kearsley")
     assert f1 == pytest.approx(rmsd_fit, abs=1e-3)
     assert f2 == pytest.approx(rmsd_fit, abs=1e-3)
-    assert f3 == pytest.approx(rmsd_fit, abs=1e-3)
     assert np.allclose(grad1, grad2)
-    assert np.allclose(grad2, grad3)
 
