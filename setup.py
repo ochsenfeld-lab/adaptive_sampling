@@ -10,9 +10,10 @@ setup(
         "adaptive_sampling",
         "adaptive_sampling.colvars",
         "adaptive_sampling.processing_tools",
-        "adaptive_sampling.sampling_tools"
+        "adaptive_sampling.sampling_tools",
+        "adaptive_sampling.interface",
     ],
-    version="1.0.0",
+    version="2.0.3",
     license="MIT",
     description="Sampling algorithms for molecular transitions",
     long_description=open("README.md").read(),
@@ -20,7 +21,7 @@ setup(
     author="Andreas Hulm",
     author_email="andreas.hulm@cup.uni-muenchen.de",
     url="https://github.com/ochsenfeld-lab/adaptive_sampling",
-    download_url="https://github.com/ochsenfeld-lab/adaptive_sampling/archive/refs/tags/v1.0.0.zip",
+    download_url="https://github.com/ochsenfeld-lab/adaptive_sampling/archive/refs/tags/v2.0.3.zip",
     keywords=[
         "computational chemistry",
         "molecular dynamics",
@@ -33,9 +34,9 @@ setup(
         "scipy>=1.7.0",
     ],
     setup_requires=["pytest"],
-    tests_requires=["pytest"],
+    #test_requires=["pytest"],
     classifiers=[
-        "Development Status :: 5 - Production/Stable",  # Chose either "3 - Alpha", "4 - Beta" or "5 - Production/Stable" as the current state of your package
+        "Development Status :: 4 - Beta",  # Chose either "3 - Alpha", "4 - Beta" or "5 - Production/Stable" as the current state of your package
         "Environment :: Console",
         "License :: OSI Approved :: MIT License",
         "Programming Language :: Python :: 3.8",

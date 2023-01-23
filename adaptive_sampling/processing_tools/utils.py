@@ -27,6 +27,58 @@ def boltzmann(u_pot: Union[float, np.ndarray], beta: float) -> Union[float, np.n
     return np.exp(-beta * u_pot, dtype=float)
 
 
+def _next_pow_two(n: int):
+    """Returns the next power of two greater than or equal to `n`"""
+    i = 1
+    while i < n:
+        i = i << 1
+    return i
+
+
+def autocorr(x: np.ndarray) -> np.ndarray:
+    """Estimate the normalized autocorrelation function of a 1-D series
+
+    args:
+        x: The time series of which to calculate the autocorrelation function.
+
+    returns:
+        acf: The autocorrelation as a function of lag time.
+    """
+    x = np.atleast_1d(x)
+    if len(x.shape) != 1:
+        raise ValueError("invalid dimensions for 1D autocorrelation function")
+    n = _next_pow_two(len(x))
+
+    # Compute the FFT and then (from that) the auto-correlation function
+    f = np.fft.fft(x - np.mean(x), n=2 * n)
+    acf = np.fft.ifft(f * np.conjugate(f))[:len(x)].real
+    acf /= acf[0]
+    return acf
+
+
+def ipce(corr_x: np.ndarray):
+    """ The initial positive correlation time estimator for the autocorrelation time, as proposed by Geyer et al.
+
+    args
+        corr_x: autocorrelation function of time series of which to calculate the autocorrelation time.
+
+    returns:
+        tau: Estimate of the autocorrelation time.
+    """
+    lag_max = int(len(corr_x) / 2)
+    i, t = 0, 0.0
+    while i < 0.5 * lag_max:
+        gamma = corr_x[2 * i] + corr_x[2 * i + 1]
+        if gamma < 0.0:
+            #  print("stop at ", 2*i)
+            break
+        else:
+            t += gamma
+        i += 1
+    tau = 2 * t - 1
+    return tau
+
+
 def join_frames(traj_list: List[np.array]) -> Tuple[np.ndarray, float, np.ndarray]:
     """get one array with all frames from list of trajectories
 

@@ -9,7 +9,7 @@ from .reference import *
 from .utils import *
 
 __all__ = [
-    "eabf",
+    "abf",
     "eabf",
     "enhanced_sampling",
     "gamd",

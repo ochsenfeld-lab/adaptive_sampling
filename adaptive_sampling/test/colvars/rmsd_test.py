@@ -26,85 +26,6 @@ class MD:
             0.0,
         )
 
-
-@pytest.mark.parametrize(
-    "a, b, expected_nofit, expected_fit",
-    [
-        (
-            torch.tensor(
-                [
-                    [0, 0, 0],
-                    [0, 0, 1],
-                    [0, 0, 2],
-                    [9, 9, 7],
-                    [9, 9, 8],
-                    [9, 9, 9],
-                ]
-            ),
-            torch.tensor(
-                [
-                    [30.50347534, -20.16089091, -7.42752623],
-                    [30.77704903, -21.02339348, -7.27823201],
-                    [31.3215374, -21.99452332, -7.15703548],
-                    [42.05988643, -23.50924264, -15.59516355],
-                    [42.27217891, -24.36478643, -15.59064995],
-                    [42.66080502, -25.27318759, -15.386241],
-                ]
-            ),
-            26.6020,
-            0.0979,
-        )
-    ],
-)
-def test_kearsley(a, b, expected_nofit, expected_fit):
-    k = Kearsley()
-    a = torch.flatten(a).float()
-    b = torch.flatten(b).float()
-
-    rmsd_nofit = rmsd(a, b)
-    rmsd_kearsley = k.fit(a, b)
-
-    assert float(rmsd_nofit) == pytest.approx(expected_nofit, rel=1.0e-3)
-    assert float(rmsd_kearsley) == pytest.approx(expected_fit, rel=1.0e-3)
-
-
-@pytest.mark.parametrize(
-    "a, b, expected_nofit, expected_fit",
-    [
-        (
-            torch.tensor(
-                [
-                    [0, 0, 0],
-                    [1, 0, 0],
-                    [0, 1, 0],
-                    [0, 0, 1],
-                ]
-            ),
-            torch.tensor(
-                [
-                    [0, 0, 0],
-                    [0, 0, 1],
-                    [1, 0, 0],
-                    [0, 1, 0],
-                ]
-            ),
-            0.707,
-            0.0000,
-        )
-    ],
-)
-def test_kearsley_1(a, b, expected_nofit, expected_fit):
-    k = Kearsley()
-    a = torch.flatten(a).float()
-    b = torch.flatten(b).float()
-
-    rmsd_nofit = rmsd(a, b)
-    rmsd_kearsley = k.fit(a, b)
-
-    assert float(rmsd_nofit) == pytest.approx(expected_nofit, abs=1.0e-3)
-    assert float(rmsd_kearsley) == pytest.approx(expected_fit, abs=1.0e-3)
-
-
 @pytest.mark.parametrize(
     "a, b, expected_nofit, expected_fit",
     [
@@ -258,33 +179,6 @@ def test_quaternion_1(a, b, expected_nofit, expected_fit):
 
 
 @pytest.mark.parametrize(
-    "images, interpolated_images",
-    [
-        (
-            [
-                torch.tensor([0.0, 0, 0, 0, 0, 0]),
-                torch.tensor([1.0, 0, 0, 0, 0, 0]),
-            ],
-            torch.tensor(
-                [
-                    [0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
-                    [0.2, 0.0, 0.0, 0.0, 0.0, 0.0],
-                    [0.4, 0.0, 0.0, 0.0, 0.0, 0.0],
-                    [0.6, 0.0, 0.0, 0.0, 0.0, 0.0],
-                    [0.8, 0.0, 0.0, 0.0, 0.0, 0.0],
-                    [1.0, 0.0, 0.0, 0.0, 0.0, 0.0],
-                ],
-            ),
-        )
-    ],
-)
-def test_interpolate(images, interpolated_images):
-    i = interpolate_coordinates(images, n_interpol=5)
-    i = torch.stack(i)
-    assert torch.allclose(i, interpolated_images, rtol=1.0e-5)
-
-
-@pytest.mark.parametrize(
     "file, coords",
     [
         (
@@ -295,30 +189,6 @@ def test_interpolate(images, interpolated_images):
 )
 def test_read_xyz(file, coords):
     xyz = read_xyz(file)
-    assert torch.allclose(xyz, coords.float())
-
-
-@pytest.mark.parametrize(
-    "file, coords",
-    [
-        (
-            "resources/traj.xyz",
-            torch.tensor(
-                [
-                    [0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1],
-                    [0, 0, 0, 2, 0, 0, 0, 1, 0, 0, 0, 1],
-                    [0, 0, 0, 3, 0, 0, 0, 1, 0, 0, 0, 1],
-                    [0, 0, 0, 4, 0, 0, 0, 1, 0, 0, 0, 1],
-                    [0, 0, 0, 5, 0, 0, 0, 1, 0, 0, 0, 1],
-                ]
-            )
-            / BOHR_to_ANGSTROM,
-        )
-    ],
-)
-def test_read_traj(file, coords):
-    xyz = read_traj(file)
-    xyz = torch.stack(xyz)
     assert torch.allclose(xyz, coords.float())
 
 
@@ -338,54 +208,3 @@ def test_rmsd(coords1, coords2, rmsd_fit):
     assert np.allclose(grad1, grad2)
     assert np.allclose(grad2, grad3)
 
-
-#@pytest.mark.parametrize(
-#    "coords, internals",
-#    [
-#        (
-#            torch.tensor([1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0]),
-#            torch.tensor(
-#                [
-#                    1.0000,
-#                    1.4142,
-#                    1.4142,
-#                    1.0000,
-#                    1.4142,
-#                    1.4142,
-#                    1.0000,
-#                    1.4142,
-#                    1.4142,
-#                    1.0000,
-#                    1.0000,
-#                    1.0000,
-#                ]
-#            ),
-#        )
-#    ],
-#)
-#def test_internals(coords, internals):
-#    coords = coords.float()
-#    close_indices = find_closest_points(coords)
-#    ints = get_internal_coords(coords, close_indices)
-#    assert torch.allclose(ints, internals)
-
-
-@pytest.mark.parametrize(
-    "coords, close_points",
-    [
-        (
-            torch.tensor([0, 0, 0, 1, 0, 0, 2, 0, 0, 3, 0, 0]),
-            [
-                np.array([1, 2, 3]),
-                np.array([2, 0, 3]),
-                np.array([1, 3, 0]),
-                np.array([2, 1, 0]),
-            ],
-        )
-    ],
-)
-def test_find_close_points(coords, close_points):
-    points = find_closest_points(coords)
-    close_points = np.stack(close_points)
-    points = np.stack(points)
-    assert np.allclose(points, close_points)

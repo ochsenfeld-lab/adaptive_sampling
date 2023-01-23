@@ -89,15 +89,7 @@ class GaMD(EnhancedSampling):
                 self._calc_E_k0()
 
             # apply boost potential
-            if self.gamd_bound.lower() == "amd":
-                self.gamd_pot = np.square(self.E - epot) / (self.sigma0 + (self.E - epot))
-                bias_force -= (
-                    ((epot - self.E) * (epot - 2.0 * self.sigma0 - self.E)) / np.square(epot - self.sigma0 - self.E)
-                ) * self.gamd_forces
-            else:
-                prefac = self.k0 / (self.pot_max - self.pot_min)
-                self.gamd_pot = 0.5 * prefac * np.power(self.E - epot, 2)
-                bias_force -= prefac * (self.E - epot) * self.gamd_forces
+            bias_force -= self._apply_boost(epot)
 
             if md_state.step < self.gamd_equil_steps:
                 self._update_pot_distribution(epot)
@@ -199,7 +191,7 @@ class GaMD(EnhancedSampling):
 
         elif self.gamd_bound.lower() == "upper":
             ko = (1.0 - self.sigma0 / self.pot_std) * (
-                (self.pot_max - self.pot_min) / (self.pot_max - self.pot_avg)
+                (self.pot_max - self.pot_min) / (self.pot_avg - self.pot_min)
             )
             if 0.0 < ko <= 1.0:
                 self.k0 = ko
@@ -213,6 +205,19 @@ class GaMD(EnhancedSampling):
         else:
             raise ValueError(f" >>> Error: unknown GaMD bound {self.gamd_bound}!")
 
+    def _apply_boost(self, epot):
+        """Apply boost potential to forces"""
+        if self.gamd_bound.lower() == "amd":
+            self.gamd_pot = np.square(self.E - epot) / (self.sigma0 + (self.E - epot))
+            boost_force = (
+                ((epot - self.E) * (epot - 2.0 * self.sigma0 - self.E)) / np.square(epot - self.sigma0 - self.E)
+            ) * self.gamd_forces
+        else:
+            prefac = self.k0 / (self.pot_max - self.pot_min)
+            self.gamd_pot = 0.5 * prefac * np.power(self.E - epot, 2)
+            boost_force = prefac * (self.E - epot) * self.gamd_forces
+        return boost_force
+    
     def write_restart(self, filename: str = "restart_gamd"):
         """write restart file
         TODO: fix me

@@ -84,7 +84,7 @@ the_bias = eABF(
 for md_step in range(steps):
     # propagate langevin dynamics and calc forces 
     ... 
-    bias_force = eABF.step_bias(write_output=True, write_traj=True)
+    bias_force = the_bias.step_bias(write_output=True, write_traj=True)
     the_md.forces += bias_force
     ...
     # finish md_step
@@ -123,6 +123,7 @@ weights = mbar.run_mbar(
     conv=1.0e-7,
     conv_errvec=1.0,
     outfreq=100,
+    device='cpu',
 )
 
 pmf, rho = mbar.pmf_from_weights(grid, cv[indices], weights, equil_temp=300.0)

@@ -1,5 +1,4 @@
-from fileinput import filename
-import os, time, itertools
+import os, time
 import numpy as np
 from .enhanced_sampling import EnhancedSampling
 from .utils import welford_var, combine_welford_stats, diff
@@ -285,9 +284,12 @@ class WTMeABF(eABF, WTM, EnhancedSampling):
                         delta_metapot,
                         new_center,
                     )
-                    self.restart(filename=mw_file)
+                    self.restart(filename=mw_file, restart_ext_sys=False)
                     os.chmod(mw_file + ".npz", 0o444)  # other walkers can access again
 
+                    # recalculates `self.metapot` and `self.bias` to ensure convergence of WTM potential
+                    self._update_metapot_from_centers() 
+                    
                     self.get_pmf()  # get new global pmf
                     self.metapot_last_sync = np.copy(self.metapot)
                     self.bias_last_sync = np.copy(self.bias)
@@ -323,7 +325,7 @@ class WTMeABF(eABF, WTM, EnhancedSampling):
             new_m2 = np.zeros_like(self.m2_force).flatten()
             new_abf_forces = np.zeros_like(self.abf_forces).flatten()
             new_ext_hist = np.zeros_like(self.ext_hist).flatten()
-            new_centers = np.append(data["center"], center), 
+            new_centers = np.append(data["center"], center)
             
             for i in range(len(hist.flatten())):
                 (
@@ -348,7 +350,7 @@ class WTMeABF(eABF, WTM, EnhancedSampling):
             ext_hist=new_ext_hist.reshape(self.histogram.shape),
             czar_corr=new_czar_corr,
             abf_force=new_abf_forces.reshape(self.abf_forces.shape),
-            center=np.asarray(list(itertools.chain(*new_centers))),
+            center=new_centers,
             metapot=new_metapot,
         )                           
 
@@ -368,9 +370,11 @@ class WTMeABF(eABF, WTM, EnhancedSampling):
             abf_force=self.abf_forces,
             center=self.center,
             metapot=self.metapot,
+            ext_momenta=self.ext_momenta,
+            ext_coors=self.ext_coords,
         )
 
-    def restart(self, filename: str = "restart_wtmeabf"):
+    def restart(self, filename: str = "restart_wtmeabf", restart_ext_sys=True):
         """restart from restart file
 
         Args:
@@ -389,6 +393,9 @@ class WTMeABF(eABF, WTM, EnhancedSampling):
         self.abf_forces = data["abf_force"]
         self.center = data["center"].tolist()
         self.metapot = data["metapot"]
+        if restart_ext_sys:
+            self.ext_momenta = data["ext_momenta"]
+            self.ext_coords = data["ext_coords"]
 
         if self.verbose:
             print(f" >>> Info: Adaptive sampling restartet from {filename}!")
