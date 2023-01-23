@@ -1,4 +1,4 @@
-import os, time, itertools
+import os, time
 import numpy as np
 from typing import Tuple
 from .enhanced_sampling import EnhancedSampling
@@ -219,6 +219,9 @@ class WTM(EnhancedSampling):
                     self.restart(filename=mw_file)
                     os.chmod(mw_file + ".npz", 0o444)  # other walkers can access again
 
+                    # recalculates `self.metapot` and `self.bias` to ensure convergence of WTM potential
+                    self._update_metapot_from_centers() 
+
                     self.metapot_last_sync = np.copy(self.metapot)
                     self.bias_last_sync = np.copy(self.bias)
                     self.len_center_last_sync = len(self.center)
@@ -423,14 +426,14 @@ class WTM(EnhancedSampling):
             new_hist = data["hist"] + hist
             new_bias = data["force"] + bias
             new_metapot = data["metapot"] + metapot
-            new_centers = np.append(data["centers"], center), 
+            new_centers = np.append(data["centers"], center)
         
         self._write_restart(
             filename=filename,
             hist=new_hist,
             force=new_bias,
             metapot=new_metapot,
-            centers=np.asarray(list(itertools.chain(*new_centers))),
+            centers=new_centers,
         )
                     
     def write_restart(self, filename: str = "restart_wtm"):
@@ -465,6 +468,38 @@ class WTM(EnhancedSampling):
 
         if self.verbose:
             print(f" >>> Info: Adaptive sampling restartet from `{filename}.npz`!")
+
+
+    def _update_metapot_from_centers(self):
+        """recalculate metadynamics potential and bias force from stored centers"""
+        if self.ncoords > 1:
+            # TODO: implement for 2D
+            raise NotImplementedError(
+                " >>> Error: metadynamics currently only supported for 1D coordinates"
+            )            
+
+        self.metapot = np.zeros_like(self.metapot)
+        self.bias    = np.zeros_like(self.bias)
+
+        for _, xi in enumerate(self.center):
+            xi = [xi]
+            if self._check_boundaries(xi):
+                bink = self.get_index(xi)
+                if self.well_tempered:
+                    w = self.hill_height * np.exp(
+                        -self.metapot[bink[1], bink[0]]
+                        / (kB_in_atomic * self.well_tempered_temp)
+                    )
+                else:
+                    w = self.hill_height
+
+                dx = diff(self.grid[0], xi[0], self.cv_type[0])
+                epot = w * np.exp(-(dx * dx) / (2.0 * self.hill_var[0]))
+                self.metapot[0] += epot
+                self.bias[0][0] -= epot * dx / self.hill_var[0]
+
+                self._smooth_boundary_grid(xi, w)
+        
 
     def write_traj(self):
         """save trajectory for post-processing"""

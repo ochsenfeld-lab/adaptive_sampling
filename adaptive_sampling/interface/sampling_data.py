@@ -22,21 +22,6 @@ class SamplingData:
     dt: float  # MD step size in fs
 
 
-@dataclass
-class SamplingData_QMMM:
-    """The necessary sampling data to perform the enhanced sampling."""
-    mass: np.ndarray  # Masses in atomic units, shape (natoms,)
-    coords: np.ndarray  # Cartesian coordinates in Bohr, shape (3 * natoms,)
-    forces: np.ndarray  # Forces in Hartree/Bohr, shape (3 * natoms,)
-    epot: float  # Potential energy in Hartree
-    temp: float  # Temperature in Kelvin
-    natoms: int  # Number of atoms
-    step: int  # MD step number
-    dt: float  # MD step size in fs
-    mm_epot: float  # energy of mm_system
-    qm_force: np.ndarray  # forces of qm system
-
-
 class MDInterface(Protocol):
     def get_sampling_data(self) -> SamplingData:
         """Define this function for your MD class to provide the

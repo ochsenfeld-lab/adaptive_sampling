@@ -240,6 +240,8 @@ class GaWTMeABF(WTMeABF, GaMD, EnhancedSampling):
             var=self.var_force,
             m2=self.m2_force,
             ext_hist=self.ext_hist,
+            ext_momenta=self.ext_momenta,
+            ext_coors=self.ext_coords,
             czar_corr=self.correction_czar,
             abf_force=self.abf_forces,
             center=self.center,
@@ -257,7 +259,7 @@ class GaWTMeABF(WTMeABF, GaMD, EnhancedSampling):
             k0=self.k0,
         )
 
-    def restart(self, filename: str = "restart_gaabf"):
+    def restart(self, filename: str="restart_gaabf", restart_ext_sys: bool=True):
         """restart from restart file
 
         Args:
@@ -288,9 +290,13 @@ class GaWTMeABF(WTMeABF, GaMD, EnhancedSampling):
         self.pot_min = data["pot_min"]
         self.pot_max = data["pot_max"]
         self.k0 = data["k0"]
-
+        if restart_ext_sys:
+            self.ext_momenta = data["ext_momenta"]
+            self.ext_coords = data["ext_coords"]
+        
         if self.verbose:
             print(f" >>> Info: Adaptive sampling restartet from {filename}!")
+
 
     def write_traj(self, filename: str = 'CV_traj.dat'):
         """save trajectory for post-processing"""
