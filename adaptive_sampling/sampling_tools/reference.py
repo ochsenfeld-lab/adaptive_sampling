@@ -24,7 +24,7 @@ class Reference(EnhancedSampling):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-    def step_bias(self, write_output: bool = True, write_traj: bool = True, **kwargs):
+    def step_bias(self, write_output: bool = True, write_traj: bool = True, traj_file="ref_traj.dat", **kwargs):
 
         md_state = self.the_md.get_sampling_data()
         (xi, delta_xi) = self.get_cv(**kwargs)
@@ -57,7 +57,7 @@ class Reference(EnhancedSampling):
             # write output
 
             if write_traj:
-                self.write_traj()
+                self.write_traj(filename=traj_file)
 
             if write_output:
                 self.get_pmf()
@@ -155,13 +155,13 @@ class Reference(EnhancedSampling):
         if self.verbose:
             print(f" >>> Info: Sampling restartet from {filename}!")
 
-    def write_traj(self):
+    def write_traj(self, filename: str="CV_traj.dat"):
         """save trajectory for post-processing"""
         data = {
             "Epot [H]": self.epot,
             "T [K]": self.temp,
         }
-        self._write_traj(data)
+        self._write_traj(data, filename=filename)
 
         # reset trajectories to save memory
         self.traj = np.array([self.traj[-1]])

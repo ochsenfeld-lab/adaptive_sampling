@@ -461,14 +461,43 @@ class CV:
 
         return float(self.cv)
 
-    def path_cv(self, cv_dev: list):
-        if not hasattr(self, 'path_cv'):
+    def path(self, cv_dev: list, method: str="path"):
+        """Adaptive path collective variable
+
+        Args:
+            cv_def: dictionary of parameters for PathCV
+        """
+        if not hasattr(self, 'pathcv'):
             from .path_cv import PathCV
-            self.path_cv = PathCV(guess_path=cv_dev[0])
+            self.pathcv = PathCV(**cv_dev[0])
         
         self.update_coords()
+
+        if method == 'gpath':
+            self.cv = self.pathcv.calculate_gpath(self.coords)
+        else:
+            self.cv, _ = self.pathcv.calculate_path(self.coords)
+
+        if self.requires_grad:
+            self.gradient = torch.autograd.grad(
+                self.cv, self.coords, allow_unused=True
+            )[0]
+            self.gradient = self.gradient.detach().numpy()
+
+        return float(self.cv)
+
+    def tube(self, cv_dev: list, method: str="path"):
+        if not hasattr(self, 'pathcv'):
+            from .path_cv import PathCV
+            self.pathcv = PathCV(**cv_dev[0])
         
-        self.cv = self.path_cv.calculate(self.coords)
+        self.update_coords()
+
+        if method == 'gpath':
+            self.cv = self.pathcv.tube_potential(self.coords)
+        else:
+            _, self.cv = self.pathcv.calculate_path(self.coords)
+
         if self.requires_grad:
             self.gradient = torch.autograd.grad(
                 self.cv, self.coords, allow_unused=True
@@ -532,8 +561,17 @@ class CV:
         elif cv.lower() == "rmsd":
             xi = self.rmsd(atoms)
             self.type = "distance"
-        elif cv.lower() == "pathcv":
-            xi = self.path_cv(atoms)
+        elif cv.lower() == "gpath":
+            xi = self.path(atoms, method="gpath")
+            self.type = None
+        elif cv.lower() == "path":
+            xi = self.path(atoms, method="path")
+            self.type = None
+        elif cv.lower() == "gpath_tube":
+            xi = self.tube(atoms, method="gpath")
+            self.type = None
+        elif cv.lower() == "path_tube":
+            xi = self.tube(atoms, method="path")
             self.type = None
         else:
             print(" >>> Error in CV: Unknown Collective Variable")

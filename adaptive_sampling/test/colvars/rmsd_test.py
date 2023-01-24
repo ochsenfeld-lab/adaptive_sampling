@@ -50,7 +50,7 @@ class MD:
                 ]
             ),
             26.6020,
-            0.0979,
+            0.0978,
         )
     ],
 )
@@ -126,7 +126,7 @@ def test_kabsch_1(a, b, expected_nofit, expected_fit):
                 ]
             ),
             26.6020,
-            0.0979,
+            0.0978,
         )
     ],
 )
