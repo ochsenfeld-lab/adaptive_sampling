@@ -1,3 +1,4 @@
+import math, time
 import torch
 import itertools
 
@@ -60,6 +61,7 @@ class PathCV:
         z = torch.flatten(z[self.active])
 
         rmsds = self._get_rmsds_to_path(z)
+
         z = 0.0
         n = 0.0
         la = 1. / torch.square(torch.linalg.norm(self.path[1] - self.path[0]))
@@ -73,7 +75,7 @@ class PathCV:
 
         if self.adaptive:
             _, coords_nearest = self._get_closest_nodes(z, rmsds)
-            self.update_path(z, coords_nearest) 
+            self.update_path(z, coords_nearest)
 
         return s, z
 
@@ -179,21 +181,26 @@ class PathCV:
         see: Ortiz et al., J. Chem. Phys. (2018): https://doi.org/10.1063/1.5027392
         """
         s = self._project_coords_on_path(z, q)
-        norm_s = torch.linalg.norm(s)
-        dist_z = torch.linalg.norm(s-z)
         w = torch.zeros(self.nnodes)
+
+        xi = math.exp(-math.log(2.) / float(self.half_life))
+
         for j, _ in enumerate(self.path[1:-1], start=1):
             dist_ij = torch.linalg.norm(self.path[j] - self.path[j+1])
-            w[j] = max([0, 1 - torch.linalg.norm(self.path[j] - s) / dist_ij])
-            self.weighted_dists[j] += w[j] * dist_z * s / norm_s  # TODO: is s needed?
-        self.sum_weights += w 
+            w = max([0, 1 - torch.linalg.norm(self.path[j] - s) / dist_ij])
+            self.sum_weights[j] += xi * w
+            self.weighted_dists[j] -= w * (s-z) / torch.linalg.norm(s - z)   # TODO: is s needed?
         self.n_updates += 1
-
+        
         # update path all self.update_interval steps
         if self.n_updates == self.update_interval:
-            for j, p in enumerate(self.path[1:-1], start=1):
-                if self.sum_weights[j] != 0:
-                    p += self.weighted_dists[j] / self.sum_weights[j]   
+            new_path = self.path.copy()
+            for j in range(self.nnodes-2):
+                if self.sum_weights[j+1]:
+                    new_path[j+1] += (self.weighted_dists[j+1] / self.sum_weights[j+1])
+                    new_path[j+1] = new_path[j+1].detach()
+            
+            self.path = new_path.copy()
             self._reparametrize_path()
             self.n_updates = 0 
             self.sum_weights = torch.zeros_like(self.sum_weights)
