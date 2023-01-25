@@ -475,6 +475,8 @@ class CV:
 
         if method == 'gpath':
             self.cv = self.pathcv.calculate_gpath(self.coords)
+        elif method == 'apath':
+            self.cv = self.pathcv.calculate_apath(self.coords)
         else:
             self.cv, _ = self.pathcv.calculate_path(self.coords)
 
@@ -483,7 +485,6 @@ class CV:
                 self.cv, self.coords, allow_unused=True
             )[0]
             self.gradient = self.gradient.detach().numpy()
-
         return float(self.cv)
 
     def tube(self, cv_dev: list, method: str="path"):
@@ -494,15 +495,16 @@ class CV:
         self.update_coords()
 
         if method == 'gpath':
-            self.cv = self.pathcv.tube_potential(self.coords)
+            self.cv, self.gradient = self.pathcv.tube_potential(self.coords)
         else:
             _, self.cv = self.pathcv.calculate_path(self.coords)
 
         if self.requires_grad:
-            self.gradient = torch.autograd.grad(
-                self.cv, self.coords, allow_unused=True
-            )[0]
             self.gradient = self.gradient.detach().numpy()
+            #self.gradient = torch.autograd.grad(
+            #    self.cv, self.coords, allow_unused=True
+            #)[0]
+            #self.gradient = self.gradient.detach().numpy()
 
         return float(self.cv)
 
@@ -566,6 +568,9 @@ class CV:
             self.type = None
         elif cv.lower() == "path":
             xi = self.path(atoms, method="path")
+            self.type = None
+        elif cv.lower() == "apath":
+            xi = self.path(atoms, method="apath")
             self.type = None
         elif cv.lower() == "gpath_tube":
             xi = self.tube(atoms, method="gpath")

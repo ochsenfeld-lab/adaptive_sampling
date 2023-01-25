@@ -28,7 +28,7 @@ def test_init(input, path, bounds):
     path = [path[i] / BOHR_to_ANGSTROM for i in range(len(path))]
     bounds = [bounds[i] / BOHR_to_ANGSTROM for i in range(len(bounds))]
     
-    cv = PathCV(guess_path=input)
+    cv = PathCV(guess_path=input, metric="RMSD")
 
     assert cv.nnodes == len(path)
     assert cv.natoms == int(len(path[0])/3)
@@ -42,25 +42,49 @@ def test_init(input, path, bounds):
     "input, coords1, coords2, coords3", [
         (
             "resources/path.xyz", 
-            torch.tensor([-1.0, 0.0, 0.0, 0.0, 0.0, 0.0]),
+            torch.tensor([1.0, 0.0, 0.0, 0.0, 0.0, 0.0]),
             torch.tensor([3.0, 0.0, 0.0, 0.0, 0.0, 0.0]),
-            torch.tensor([6.5, 0.0, 0.0, 0.0, 0.0, 0.0]),
+            torch.tensor([5.0, 0.0, 0.0, 0.0, 0.0, 0.0]),
         )
     ]
 )
-def test_calculate(input, coords1, coords2, coords3):
+def test_calculate_gpath(input, coords1, coords2, coords3):
     coords1 = coords1 / BOHR_to_ANGSTROM
     coords2 = coords2 / BOHR_to_ANGSTROM 
     coords3 = coords3 / BOHR_to_ANGSTROM
 
-    cv = PathCV(guess_path=input)
+    cv = PathCV(guess_path=input, metric="RMSD")
 
-    cv1 = cv.calculate(coords1)
-    cv2 = cv.calculate(coords2) 
-    cv3 = cv.calculate(coords3)
+    cv1 = cv.calculate_gpath(coords1)
+    cv2 = cv.calculate_gpath(coords2) 
+    cv3 = cv.calculate_gpath(coords3)
     assert isclose(float(cv1), float(0.0), abs_tol=1e-1)
-    assert isclose(float(cv2), float(0.3), abs_tol=1e-1)
-    assert isclose(float(cv3), float(1.25), abs_tol=1e-1)
+    assert isclose(float(cv2), float(0.7), abs_tol=1e-1)
+    assert isclose(float(cv3), float(1.0), abs_tol=1e-1)
+
+@pytest.mark.parametrize(
+    "input, coords1, coords2, coords3", [
+        (
+            "resources/path.xyz", 
+            torch.tensor([1.0, 0.0, 0.0, 0.0, 0.0, 0.0]),
+            torch.tensor([3.0, 0.0, 0.0, 0.0, 0.0, 0.0]),
+            torch.tensor([6.0, 0.0, 0.0, 0.0, 0.0, 0.0]),
+        )
+    ]
+)
+def test_calculate_path(input, coords1, coords2, coords3):
+    coords1 = coords1 / BOHR_to_ANGSTROM
+    coords2 = coords2 / BOHR_to_ANGSTROM 
+    coords3 = coords3 / BOHR_to_ANGSTROM
+
+    cv = PathCV(guess_path=input, metric="RMSD", adaptive=False)
+
+    cv1,_ = cv.calculate_path(coords1)
+    cv2,_ = cv.calculate_path(coords2) 
+    cv3,_ = cv.calculate_path(coords3)
+    assert isclose(float(cv1), float(0.1), abs_tol=1e-1)
+    assert isclose(float(cv2), float(0.5), abs_tol=1e-1)
+    assert isclose(float(cv3), float(0.9), abs_tol=1e-1)
 
 @pytest.mark.parametrize(
     "input, coords1, coords2", [

@@ -471,7 +471,7 @@ class eABF(ABF, EnhancedSampling):
             ext_hist=self.ext_hist,
             czar_corr=self.correction_czar,
             ext_momenta=self.ext_momenta,
-            ext_coors=self.ext_coords,
+            ext_coords=self.ext_coords,
         )
 
     def restart(self, filename: str = "restart_abf", restart_ext_sys=True):
