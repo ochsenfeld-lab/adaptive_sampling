@@ -186,8 +186,7 @@ class PathCV:
             for j in range(self.nnodes-1):
                 if self.sum_weights[j+1]:
                     new_path[j+1] += (self.weighted_dists[j+1] / self.sum_weights[j+1])
-                    new_path[j+1] = new_path[j+1].detach()  # otherwise torch gets vary slow! 
-            
+                    new_path[j+1] = new_path[j+1].detach()
             self.path = new_path.copy()
             self._reparametrize_path()
             self.n_updates = 0 
@@ -220,8 +219,14 @@ class PathCV:
         rmsds = []
         for i in range(self.nnodes):
             rmsds.append(self._rmsd(z, self.path[i]))
-            self.path[i] = self.path[i].detach() 
+            self.path[i] = self.path[i].detach()
         return rmsds
+
+    @staticmethod
+    def _detach_coords(coords: torch.tensor):
+        coords = coords.detach().clone()
+        coords.requires_grad = True
+        return coords
 
     def _get_closest_nodes(self, z: torch.tensor, rmsds: list) -> tuple:
         """get two closest nodes of path
@@ -249,12 +254,13 @@ class PathCV:
         closest_coords = [path_new[closest_idx[0]], path_new[neighbour_idx]]
         
         if self.verbose:
+            # if path gets highly irregualar this can fail, so print warning
             if abs(closest_idx[0] - closest_idx[1]) != 1:
                 print(f" >>> WARNING: Two closest nodes of PathCV ({closest_idx[0]-1, closest_idx[1]-1}) are not neighbours!") 
 
         return [closest_idx[0]-1, closest_idx[1]-1], closest_coords
 
-    def _reparametrize_path(self, tol = 0.01, max_step: int=1000):
+    def _reparametrize_path(self, tol = 0.01, max_step: int=1):
         """ensure equidistant nodes by iteratively placing middle node equidistantly between neighbour nodes,
         while keeping end nodes fixed
 
@@ -268,19 +274,31 @@ class PathCV:
             
             l_ij = []
             for i, coords in enumerate(self.path[1:], start=1):
-                # TODO: should this only use the distance or any RMSD metric?
                 l_ij.append(torch.linalg.norm(coords - self.path[i-1]))
-                #l_ij.append(self._rmsd(coords, self.path[i-1]))  
+
+                # TODO: normalization of path along any metric
+                #self.path[i] = self._detach_coords(self.path[i])
+                #if i > 0:
+                #   l_ij.append(self._rmsd(self.path[i], self.path[i-1]))  
 
             L = sum(l_ij) / (self.nnodes-1)
 
             path_new = [self.path[0]]
             for i, coords in enumerate(self.path[1:-1]):
                 s_i = float(i+1) * L
-                vec = coords - self.path[i]
-                vec /= torch.linalg.norm(vec)
-                path_new.append(self.path[i] + (s_i - sum(l_ij[:i])) * vec) 
+                update = s_i - sum(l_ij[:i])
+
+                grad = coords - self.path[i]
+                grad /= torch.linalg.norm(grad)
+                #grad = torch.autograd.grad(update, coords, allow_unused=True)[0]
+
+                path_new.append(self.path[i] + update * grad)
             path_new.append(self.path[-1])
+            
+            # regulize path
+            for i, coords in enumerate(path_new[1:-1], start=1):
+                d = self._project_coords_on_path(path_new[i], [path_new[i-1], path_new[i+1]])
+                path_new[i] -= path_new[i]-d 
             
             l_ij = torch.tensor(l_ij)
             crit = torch.max(torch.abs(l_ij[1:]-l_ij[:1]))
@@ -334,8 +352,8 @@ class PathCV:
             rmsd = torch.linalg.norm(coords - reference)
 
         elif self.metric.lower() == "internal": 
-            zmatrix_coords = self._cartesians_to_internals(coords)
-            zmatrix_reference = self._cartesians_to_internals(reference) 
+            zmatrix_coords = self._cartesians_to_internals(coords, requires_grad=False)
+            zmatrix_reference = self._cartesians_to_internals(reference, requires_grad=False) 
             diff = zmatrix_coords - zmatrix_reference
             rmsd = torch.sqrt(torch.sum(diff * diff) / len(diff))
 
@@ -423,45 +441,70 @@ class PathCV:
         self.path = path_new.copy() 
         self.nnodes = len(self.path)
 
-    def _cartesians_to_internals(self, coords):
-        z = torch.reshape(coords, (len(self.active), 3))
+    def _cartesians_to_internals(
+        self, 
+        coords: torch.tensor, 
+        requires_grad: bool=False
+    ) -> torch.tensor:
+        """Converts reduced cartesian coordinates to Z-Matrix
 
-        if not hasattr(self, "idx_internal"):
-            zmatrix = torch.zeros_like(z)
-            
-            for i, atom1 in enumerate(z[1:], start=1):
-                
-                # dist
-                zmatrix[i, 0] = torch.linalg.norm(z[i-1] - atom1)
-
-                # angle
-                if i > 1:
-                    q12 = z[i-2] - z[i-1]
-                    q23 = z[i-1] - z[i]
-
-                    q12_n = torch.linalg.norm(q12)
-                    q23_n = torch.linalg.norm(q23)
-
-                    q12_u = q12 / q12_n
-                    q23_u = q23 / q23_n
-
-                    zmatrix[i, 1] = torch.arccos(torch.dot(-q12_u, q23_u))  
-                
-                # torsion
-                if i > 2:
-                    q12 = z[i-2] - z[i-3]
-                    q23 = z[i-1] - z[i-2]
-                    q34 = z[i-0] - z[i-1]
-
-                    q23_u = q23 / torch.linalg.norm(q23)
-
-                    n1 = -q12 - torch.dot(-q12, q23_u) * q23_u
-                    n2 = q34 - torch.dot(q34, q23_u) * q23_u
-
-                    zmatrix[i, 2] = torch.atan2(
-                        torch.dot(torch.cross(q23_u, n1), n2), torch.dot(n1, n2)
-                    )  
+        Args:  
+            coords: reduced cartesian coordinates
+            requires_grad: if gradient should be returned
         
+        Returns:
+            zmatrix: Z-Matrix with angles given in radians
+            gradient: gradient of coordinate transformation if requires_grad=True
+        """
+        
+        z = torch.reshape(coords, (len(self.active), 3))
+        
+        if requires_grad:
+            gradient = torch.zeros_like(z)
+
+        zmatrix = torch.zeros_like(z)
+            
+        for i, atom1 in enumerate(z[1:], start=1):
+                
+            # dist
+            zmatrix[i, 0] = torch.linalg.norm(z[i-1] - atom1)
+
+            # angle
+            if i > 1:
+                q12 = z[i-2] - z[i-1]
+                q23 = z[i-1] - z[i]
+
+                q12_n = torch.linalg.norm(q12)
+                q23_n = torch.linalg.norm(q23)
+
+                q12_u = q12 / q12_n
+                q23_u = q23 / q23_n
+
+                zmatrix[i, 1] = torch.arccos(torch.dot(-q12_u, q23_u))  
+                
+            # torsion
+            if i > 2:
+                q12 = z[i-2] - z[i-3]
+                q23 = z[i-1] - z[i-2]
+                q34 = z[i-0] - z[i-1]
+
+                q23_u = q23 / torch.linalg.norm(q23)
+
+                n1 = -q12 - torch.dot(-q12, q23_u) * q23_u
+                n2 = q34 - torch.dot(q34, q23_u) * q23_u
+
+                zmatrix[i, 2] = torch.atan2(
+                    torch.dot(torch.cross(q23_u, n1), n2), torch.dot(n1, n2)
+                )  
+
+            if requires_grad:
+                grad0 = torch.autograd.grad(zmatrix[i, 0], z, allow_unused=True)[0]
+                grad1 = torch.autograd.grad(zmatrix[i, 1], z, allow_unused=True)[0]
+                grad2 = torch.autograd.grad(zmatrix[i, 2], z, allow_unused=True)[0]
+                gradient += grad0 + grad1 + grad2
+
+        if requires_grad:
+            return zmatrix, gradient
         return zmatrix
 
     def _reduce_path(self):

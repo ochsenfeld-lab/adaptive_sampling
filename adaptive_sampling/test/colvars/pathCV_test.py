@@ -28,8 +28,8 @@ def test_init(input, path, bounds):
     path = [path[i] / BOHR_to_ANGSTROM for i in range(len(path))]
     bounds = [bounds[i] / BOHR_to_ANGSTROM for i in range(len(bounds))]
     
-    cv = PathCV(guess_path=input, metric="distance")
-
+    cv = PathCV(guess_path=input, metric="abs_distance")
+    
     assert cv.nnodes == len(path)
     assert cv.natoms == int(len(path[0])/3)
     assert torch.allclose(cv.path[0], path[0])
