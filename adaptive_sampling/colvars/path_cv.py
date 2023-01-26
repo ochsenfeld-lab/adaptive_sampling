@@ -2,28 +2,37 @@ import math, time
 import torch
 import itertools
 
-from ..units import BOHR_to_ANGSTROM
+from ..units import BOHR_to_ANGSTROM, DEGREES_per_RADIAN
 from .utils import kabsch_rmsd, quaternion_rmsd
 
 class PathCV:
     """Adaptive Path Collective Variables
+
+    Args:
+        guess_path: xyz file with initial path
+        active: list of indices of atoms included in PathCV
+        n_interpolate: Number of nodes that are added between original nodes by linear interpolation
+        metric: Metric for calculation of distance of points (`RMSD`, `kabsch`, `quaternion`, `abs_distance`, `internal`)
+        adaptive: if path is adaptive
+        update_interval: number of steps between update of adaptive path
+        half_life: number of steps til original path weights only half due to updates
+        verbose: if verbose information should be printed
     """
     def __init__(
         self, 
         guess_path: str=None, 
         active: list=None, 
         n_interpolate: int=0,
-        metric: str="rmsd",
-        adaptive: bool=True,
+        metric: str="kabsch",
+        adaptive: bool=False,
         update_interval: int=100,
         half_life: float=100, 
-        verbose: bool=True,
+        verbose: bool=False,
     ):  
         if guess_path == None:
             raise ValueError(" >>> ERROR: You have to provide a guess path to the PathCV")
         self.guess_path = guess_path
         self.metric = metric
-        self.n_interpolate = n_interpolate
         self.adaptive = adaptive
         self.update_interval = update_interval
         self.half_life = half_life
@@ -33,12 +42,10 @@ class PathCV:
         self.path, self.nnodes, self.natoms = self._read_path(self.guess_path, metric=self.metric)
         self.active = active if active is not None else [i for i in range(self.natoms)]
         self._reduce_path()
+        if n_interpolate > 0:
+            self.interpolate(n_interpolate)
         self._reparametrize_path()
-        self.interpolate()
         self.boundary_nodes = self._get_boundary()
-
-        #for i in range(self.nnodes-1):
-        #    print(self._rmsd(self.path[i], self.path[i+1]))
 
         # accumulators for path update
         if self.adaptive:
@@ -49,10 +56,9 @@ class PathCV:
         if self.verbose:
             print(f" >>> INFO: Initialization of PathCV with {self.nnodes} nodes finished.")
 
-    def calculate_path(self, coords: torch.tensor):
-        """calculate path CV according to
-
-        see: Branduardi, et al., J. Chem. Phys. (2007): https://doi.org/10.1063/1.2432340
+    def calculate_path(self, coords: torch.tensor, distance: bool=False):
+        """calculate PathCV according to
+        Branduardi, et al., J. Chem. Phys. (2007): https://doi.org/10.1063/1.2432340
         """
         if self.metric.lower() == '2d':
             z = torch.reshape(coords, (self.natoms, 2)).float()
@@ -62,27 +68,35 @@ class PathCV:
 
         rmsds = self._get_rmsds_to_path(z)
 
-        z = 0.0
-        n = 0.0
-        la = 1. / torch.square(torch.linalg.norm(self.path[1] - self.path[0]))
+        # TODO: should the absolute distance or any metric enter lambda?
+        la = 1. / torch.square(self._rmsd(self.path[1], self.path[0]))
+        #la = 1. / torch.square(torch.linalg.norm(self.path[1] - self.path[0]))
+        
+        term1 = 0.0
+        term2 = 0.0
         for i, rmsd in enumerate(rmsds):
             exp = torch.exp(-la * torch.square(rmsd))
-            z += float(i) * exp
-            n += exp
+            term1 += float(i) * exp
+            term2 += exp
 
-        s = (1. / (self.nnodes-1)) * (z / n)
-        z = -1. / la * torch.log(n)
+        if not distance:
+            # position on path in range [0,1]
+            self.path_cv = (1. / (self.nnodes-1)) * (term1 / term2)
+        else: 
+            # distance from path
+            self.path_cv = -1. / la * torch.log(term2)
 
         if self.adaptive:
             _, coords_nearest = self._get_closest_nodes(z, rmsds)
             self.update_path(z, coords_nearest)
 
-        return s, z
+        return self.path_cv
 
     def calculate_gpath(self, coords: torch.tensor):
-        """calculate path CV according to
-
-        see: Leines et al., Phys. Ref. Lett. (2012): https://journals.aps.org/prl/pdf/10.1103/PhysRevLett.109.020601
+        """Calculate geometric PathCV according to
+        Leines et al., Phys. Ref. Lett. (2012): https://doi.org/10.1103/PhysRevLett.109.020601
+        
+        TODO: Fix this, it doesn't work!
         """
         if self.metric.lower() == '2d':
             z = torch.reshape(coords, (self.natoms, 2)).float()
@@ -124,32 +138,6 @@ class PathCV:
         
         return self.path_cv
 
-    def calculate_apath(self, coords):
-        """Andi's PathCV 
-        Projects coords on path and calculates absolute distance til projection, normalized to [0,1]
-        """
-        if self.metric.lower() == '2d':
-            z = torch.reshape(coords, (self.natoms, 2)).float()
-        else:
-            z = torch.reshape(coords, (self.natoms, 3)).float()
-        z = torch.flatten(z[self.active])
-
-        rmsds = self._get_rmsds_to_path(z)
-        index_nearest, coords_nearest = self._get_closest_nodes(z, rmsds)
-        
-        s = self._project_coords_on_path(z, coords_nearest) 
-        dist_nodes = torch.linalg.norm(self.path[1] - self.path[0])
-        
-        path_length = dist_nodes * index_nearest[0]
-        if index_nearest[0] < index_nearest[1]:
-            path_length += torch.linalg.norm(s - coords_nearest[0])
-        else:
-            path_length -= torch.linalg.norm(s - coords_nearest[1])
-
-        # normalize path to [0,1]
-        self.path_cv = path_length / ((self.nnodes-1) * dist_nodes)
-        return self.path_cv
-
     def tube_potential(self, coords: torch.tensor) -> torch.tensor:
         """Constrain dynamics perpendicular to path with tube like potential
 
@@ -169,7 +157,7 @@ class PathCV:
         s = self._project_coords_on_path(z, q)
         vec = z - s
         norm_vec = torch.linalg.norm(vec) 
-        return norm_vec, vec / norm_vec
+        return norm_vec
 
     def update_path(self, z: torch.tensor, q: list):
         """update path nodes to ensure convergence to MFEP
@@ -195,10 +183,10 @@ class PathCV:
         # update path all self.update_interval steps
         if self.n_updates == self.update_interval:
             new_path = self.path.copy()
-            for j in range(self.nnodes-2):
+            for j in range(self.nnodes-1):
                 if self.sum_weights[j+1]:
                     new_path[j+1] += (self.weighted_dists[j+1] / self.sum_weights[j+1])
-                    new_path[j+1] = new_path[j+1].detach()
+                    new_path[j+1] = new_path[j+1].detach()  # otherwise torch gets vary slow! 
             
             self.path = new_path.copy()
             self._reparametrize_path()
@@ -232,6 +220,7 @@ class PathCV:
         rmsds = []
         for i in range(self.nnodes):
             rmsds.append(self._rmsd(z, self.path[i]))
+            self.path[i] = self.path[i].detach() 
         return rmsds
 
     def _get_closest_nodes(self, z: torch.tensor, rmsds: list) -> tuple:
@@ -248,11 +237,16 @@ class PathCV:
         rmsds.insert(0, self._rmsd(z, self.boundary_nodes[0]))
         rmsds.append(self._rmsd(z, self.boundary_nodes[1]))
         closest_idx = sorted(range(len(rmsds)), key=rmsds.__getitem__)
-
+        
+        # find closest neighbour of closest node
+        for neighbour_idx in closest_idx[1:]:
+            if abs(neighbour_idx - closest_idx[0]) == 1:
+                break
+        
         path_new = self.path.copy()
         path_new.insert(0, self.boundary_nodes[0])
         path_new.append(self.boundary_nodes[1])
-        closest_coords = [path_new[closest_idx[0]], path_new[closest_idx[1]]]
+        closest_coords = [path_new[closest_idx[0]], path_new[neighbour_idx]]
         
         if self.verbose:
             if abs(closest_idx[0] - closest_idx[1]) != 1:
@@ -260,7 +254,7 @@ class PathCV:
 
         return [closest_idx[0]-1, closest_idx[1]-1], closest_coords
 
-    def _reparametrize_path(self, tol = 0.01, max_step: int=100):
+    def _reparametrize_path(self, tol = 0.01, max_step: int=1000):
         """ensure equidistant nodes by iteratively placing middle node equidistantly between neighbour nodes,
         while keeping end nodes fixed
 
@@ -274,8 +268,10 @@ class PathCV:
             
             l_ij = []
             for i, coords in enumerate(self.path[1:], start=1):
+                # TODO: should this only use the distance or any RMSD metric?
                 l_ij.append(torch.linalg.norm(coords - self.path[i-1]))
-        
+                #l_ij.append(self._rmsd(coords, self.path[i-1]))  
+
             L = sum(l_ij) / (self.nnodes-1)
 
             path_new = [self.path[0]]
@@ -289,10 +285,14 @@ class PathCV:
             l_ij = torch.tensor(l_ij)
             crit = torch.max(torch.abs(l_ij[1:]-l_ij[:1]))
             if crit < tol:
-                if self.verbose:
-                    print(f" >>> INFO: Reparametrization of Path converged in {step} steps. Max(delta d_ij)={crit}.")
                 break
             self.path = path_new.copy()
+
+        if self.verbose:
+            if crit < tol:
+                print(f" >>> INFO: Reparametrization of Path converged in {step} steps. Max(delta d_ij)={crit:.3f}.")
+            else:
+                print(f" >>> WARNING: Reparametrization of Path not converged in {max_step} steps. Max(delta d_ij)={crit:.3f}.")
 
         self.boundary_nodes = self._get_boundary()
 
@@ -324,25 +324,30 @@ class PathCV:
             diff = coords - reference
             rmsd = torch.sqrt(torch.sum(diff * diff) / len(diff))
         
-        elif self.metric.lower() == 'quaternion':
+        elif self.metric.lower() == "quaternion":
             rmsd = quaternion_rmsd(coords, reference)
         
         elif self.metric.lower() == "kabsch":
             rmsd = kabsch_rmsd(coords, reference)
         
-        elif self.metric.lower() == "distance":
+        elif self.metric.lower() == "abs_distance":
             rmsd = torch.linalg.norm(coords - reference)
 
-        elif self.metric.lower() == 'internal':
-            # TODO: implement more robust RMSD by using selected internal coordinates
-            raise NotImplementedError("Available RMSD metrics are: `RMSD`, `kabsch`, `quaternion`")
-        
+        elif self.metric.lower() == "internal": 
+            zmatrix_coords = self._cartesians_to_internals(coords)
+            zmatrix_reference = self._cartesians_to_internals(reference) 
+            diff = zmatrix_coords - zmatrix_reference
+            rmsd = torch.sqrt(torch.sum(diff * diff) / len(diff))
+
         elif self.metric.lower() == "2d":
             diff = coords - reference
             rmsd = torch.sqrt(torch.sum(diff * diff) / 2)
         
         else:
-            raise NotImplementedError("Available RMSD metrics are: `RMSD`, `kabsch`, `quaternion`")
+            raise NotImplementedError(
+                "Available RMSD metrics are: `RMSD`, `kabsch`, `quaternion`, `abs_distance`, `internal`"
+            )
+
         return rmsd
 
     @staticmethod
@@ -393,7 +398,12 @@ class PathCV:
     
         return traj, len(traj), n_atoms
 
-    def interpolate(self):
+    def interpolate(self, n_interpolate):
+        """Add nodes by linear interpolation
+        
+        Args:
+            n_interpolate: Number of interpolated nodes between two original nodes
+        """
         path_new = []
         for i in range(self.nnodes - 1):
             a = self.path[i]
@@ -401,10 +411,10 @@ class PathCV:
             r = b - a
             d = torch.linalg.norm(r)
             unit_vec = r / d
-            step = d / self.n_interpolate
+            step = d / (n_interpolate+1)
 
             path_new.append(a)
-            for j in range(1, self.n_interpolate):
+            for j in range(1, n_interpolate+1):
                 # linear interpolation
                 p = a + unit_vec * j * step
                 path_new.append(p)
@@ -412,6 +422,47 @@ class PathCV:
         path_new.append(b)
         self.path = path_new.copy() 
         self.nnodes = len(self.path)
+
+    def _cartesians_to_internals(self, coords):
+        z = torch.reshape(coords, (len(self.active), 3))
+
+        if not hasattr(self, "idx_internal"):
+            zmatrix = torch.zeros_like(z)
+            
+            for i, atom1 in enumerate(z[1:], start=1):
+                
+                # dist
+                zmatrix[i, 0] = torch.linalg.norm(z[i-1] - atom1)
+
+                # angle
+                if i > 1:
+                    q12 = z[i-2] - z[i-1]
+                    q23 = z[i-1] - z[i]
+
+                    q12_n = torch.linalg.norm(q12)
+                    q23_n = torch.linalg.norm(q23)
+
+                    q12_u = q12 / q12_n
+                    q23_u = q23 / q23_n
+
+                    zmatrix[i, 1] = torch.arccos(torch.dot(-q12_u, q23_u))  
+                
+                # torsion
+                if i > 2:
+                    q12 = z[i-2] - z[i-3]
+                    q23 = z[i-1] - z[i-2]
+                    q34 = z[i-0] - z[i-1]
+
+                    q23_u = q23 / torch.linalg.norm(q23)
+
+                    n1 = -q12 - torch.dot(-q12, q23_u) * q23_u
+                    n2 = q34 - torch.dot(q34, q23_u) * q23_u
+
+                    zmatrix[i, 2] = torch.atan2(
+                        torch.dot(torch.cross(q23_u, n1), n2), torch.dot(n1, n2)
+                    )  
+        
+        return zmatrix
 
     def _reduce_path(self):
         """reduce coordinates in path to only active atoms
