@@ -41,6 +41,7 @@ def kabsch_rmsd(
     coords1: torch.tensor,
     coords2: torch.tensor,
     indices: bool = None,
+    return_coords: bool=False,
 ) -> torch.tensor:
     """minimize rmsd between cartesian coordinates by kabsch algorithm
 
@@ -48,9 +49,9 @@ def kabsch_rmsd(
         coords1: (3*n_atoms,) tensor of cartesian coordinates
         coords2: (3*n_atoms,) tensor of cartesian coordinates
         indices: indices of atoms that are included
-
+        return_coords: if only transformed coords should be returned
     Returns:
-        coords1: (3*n_atoms,) coordinates fitted to coords2
+        rmsd: root-mean-squared deviation after fit
     """
     n = len(coords1)
     coords1 = torch.reshape(coords1, (int(n / 3), 3)).float()
@@ -66,6 +67,9 @@ def kabsch_rmsd(
 
     # optimal rotation of coords1 to fit coords2
     coords1_new = kabsch_rot(coords1_new, coords2_new)
+
+    if return_coords:
+        return coords1_new, coords2_new
     return rmsd(coords1_new, coords2_new)
 
 

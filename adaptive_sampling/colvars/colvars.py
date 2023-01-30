@@ -25,6 +25,9 @@ class CV:
         self.the_mol = the_mol
         self.requires_grad = requires_grad
 
+        if self.requires_grad:
+            torch.autograd.set_detect_anomaly(True)
+
         md_state = self.the_mol.get_sampling_data()
 
         self.mass = torch.from_numpy(md_state.mass).float()

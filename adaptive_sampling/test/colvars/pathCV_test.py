@@ -140,3 +140,27 @@ def test_internal_rmsd(input, coords, reference):
 
     rmsd = cv._rmsd(coords, reference)
     assert isclose(0.5, rmsd, abs_tol=1.e-1)
+
+@pytest.mark.parametrize(
+    "input, path", [
+        (
+            "resources/path.xyz", 
+            [
+                torch.tensor([1.0, 0.0, 0.0, 0.0, 0.0, 0.0]), 
+                torch.tensor([3.0, 0.0, 0.0, 0.0, 0.0, 0.0]),
+                torch.tensor([5.0, 0.0, 0.0, 0.0, 0.0, 0.0]),
+            ], 
+        )
+    ]
+)
+def test_path_opt(input, path):
+    # TODO: This test works, but the routine id wrong!!!!!!
+    path = [path[i] / BOHR_to_ANGSTROM for i in range(len(path))]
+    cv = PathCV(input, metric="RMSD", verbose=True)
+    cv.path, _, _ = cv._read_path(input, metric="RMSD")
+    cv._optimize_path()
+    print([path[i] * BOHR_to_ANGSTROM for i in range(len(path))])
+    print([cv.path[i] * BOHR_to_ANGSTROM for i in range(len(path))])
+    assert torch.allclose(cv.path[0], path[0], atol=1.e-1)
+    assert torch.allclose(cv.path[1], path[1], atol=1.e-1)
+    assert torch.allclose(cv.path[2], path[2], atol=1.e-1)
