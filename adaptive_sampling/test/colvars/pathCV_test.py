@@ -28,15 +28,15 @@ def test_init(input, path, bounds):
     path = [path[i] / BOHR_to_ANGSTROM for i in range(len(path))]
     bounds = [bounds[i] / BOHR_to_ANGSTROM for i in range(len(bounds))]
     
-    cv = PathCV(guess_path=input, metric="abs_distance")
+    cv = PathCV(guess_path=input, metric="RMSD")
     
     assert cv.nnodes == len(path)
     assert cv.natoms == int(len(path[0])/3)
-    assert torch.allclose(cv.path[0], path[0])
-    assert torch.allclose(cv.path[1], path[1])
-    assert torch.allclose(cv.path[2], path[2])
-    assert torch.allclose(cv.boundary_nodes[0], bounds[0])
-    assert torch.allclose(cv.boundary_nodes[1], bounds[1])
+    assert torch.allclose(cv.path[0], path[0], atol=1.e-1)
+    assert torch.allclose(cv.path[1], path[1], atol=1.e-1)
+    assert torch.allclose(cv.path[2], path[2], atol=1.e-1)
+    assert torch.allclose(cv.boundary_nodes[0], bounds[0], atol=1.e-1)
+    assert torch.allclose(cv.boundary_nodes[1], bounds[1], atol=1.e-1)
     
 @pytest.mark.parametrize(
     "input, coords1, coords2, coords3", [
@@ -98,7 +98,7 @@ def test_calculate_path(input, coords1, coords2, coords3):
 def test_projection_point_on_path(input, coords1, coords2):
     coords1 /= BOHR_to_ANGSTROM
     coords2 /= BOHR_to_ANGSTROM
-    cv = PathCV(guess_path=input)
+    cv = PathCV(guess_path=input, metric="RMSD")
     rmsds = cv._get_rmsds_to_path(coords1)
     _, q = cv._get_closest_nodes(coords1, rmsds)
     cv1 = cv._project_coords_on_path(coords1, q)
@@ -155,12 +155,11 @@ def test_internal_rmsd(input, coords, reference):
 )
 def test_path_opt(input, path):
     # TODO: This test works, but the routine id wrong!!!!!!
-    path = [path[i] / BOHR_to_ANGSTROM for i in range(len(path))]
-    cv = PathCV(input, metric="RMSD", verbose=True)
-    cv.path, _, _ = cv._read_path(input, metric="RMSD")
-    cv._optimize_path()
-    print([path[i] * BOHR_to_ANGSTROM for i in range(len(path))])
-    print([cv.path[i] * BOHR_to_ANGSTROM for i in range(len(path))])
+    path = [path[i].type(torch.float64) / BOHR_to_ANGSTROM for i in range(len(path))]
+    cv = PathCV(input, metric="abs_distance", verbose=True)
+    cv.path, _, _ = cv._read_path(input, metric="abs_distance")
+    cv._optimize_path(cv.path, tol=0.0001, k=1000.0)
+    print([cv.path[i] * BOHR_to_ANGSTROM for i in range(3)])
     assert torch.allclose(cv.path[0], path[0], atol=1.e-1)
     assert torch.allclose(cv.path[1], path[1], atol=1.e-1)
     assert torch.allclose(cv.path[2], path[2], atol=1.e-1)

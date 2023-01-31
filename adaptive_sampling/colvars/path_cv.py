@@ -24,6 +24,7 @@ class PathCV:
         active: list=None, 
         n_interpolate: int=0,
         smooth: bool=True,
+        smooth_damping: float=0.5,
         metric: str="kabsch",
         adaptive: bool=False,
         update_interval: int=100,
@@ -36,10 +37,16 @@ class PathCV:
         self.metric = metric
         self.adaptive = adaptive
         self.smooth = smooth
+        self.smooth_damping = smooth_damping
         self.update_interval = update_interval
         self.half_life = half_life
         self.verbose = verbose
-
+        
+        if self.metric.lower() == "2d":
+            self.ndim = 2
+        else:
+            self.ndim = 3
+        
         # initialized path nodes
         self.path, self.nnodes, self.natoms = self._read_path(self.guess_path, metric=self.metric)
         self.active = active if active is not None else [i for i in range(self.natoms)]
@@ -47,7 +54,7 @@ class PathCV:
         if n_interpolate > 0:
             self.interpolate(n_interpolate)
         self._reparametrize_path(smooth=self.smooth)
-        #self._optimize_path()
+        #self._optimize_path(self.path)
         self.boundary_nodes = self._get_boundary()
 
         # accumulators for path update
@@ -63,17 +70,12 @@ class PathCV:
         """calculate PathCV according to
         Branduardi, et al., J. Chem. Phys. (2007): https://doi.org/10.1063/1.2432340
         """
-        if self.metric.lower() == '2d':
-            z = torch.reshape(coords, (self.natoms, 2)).float()
-        else:
-            z = torch.reshape(coords, (self.natoms, 3)).float()
+        z = torch.reshape(coords, (self.natoms, self.ndim)).float()
         z = torch.flatten(z[self.active])
 
         rmsds = self._get_rmsds_to_path(z)
-
-        # TODO: should the absolute distance or any metric enter lambda?
-        la = 1. / torch.square(self._rmsd(self.path[1], self.path[0]))
-        #la = 1. / torch.square(torch.linalg.norm(self.path[1] - self.path[0]))
+        
+        la = (1. / torch.square(self._rmsd(self.path[1], self.path[0]))).type(torch.float64)
         
         term1 = 0.0
         term2 = 0.0
@@ -82,9 +84,9 @@ class PathCV:
             term1 += float(i) * exp
             term2 += exp
 
-        # avoids numerical inconsistency
-        if abs(term2) < 1.e-8:
-            term2 += 1.e-8
+        # avoids numerical inconsistency by never reaching absolute zero
+        if abs(term2) < 1.e-15:
+            term2 += 1.e-15
 
         if not distance:
             # position on path in range [0,1]
@@ -105,10 +107,7 @@ class PathCV:
         
         TODO: Fix this, it doesn't work!
         """
-        if self.metric.lower() == '2d':
-            z = torch.reshape(coords, (self.natoms, 2)).float()
-        else:
-            z = torch.reshape(coords, (self.natoms, 3)).float()
+        z = torch.reshape(coords, (self.natoms, self.ndim)).float()
         z = torch.flatten(z[self.active])
         
         rmsds = self._get_rmsds_to_path(z)
@@ -154,10 +153,7 @@ class PathCV:
         Returns:
             d: distance to projection of coords on path
         """
-        if self.metric.lower() == '2d':
-            z = torch.reshape(coords, (self.natoms, 2)).float()            
-        else:
-            z = torch.reshape(coords, (self.natoms, 3)).float()
+        z = torch.reshape(coords, (self.natoms, self.ndim)).float()            
         z = torch.flatten(z[self.active])
         rmsds = self._get_rmsds_to_path(z)
         _, q = self._get_closest_nodes(z, rmsds)
@@ -181,10 +177,12 @@ class PathCV:
         xi = math.exp(-math.log(2.) / float(self.half_life))
 
         for j, _ in enumerate(self.path[1:-1], start=1):
-            dist_ij = torch.linalg.norm(self.path[j] - self.path[j+1])
-            w = max([0, 1 - torch.linalg.norm(self.path[j] - s) / dist_ij])
+            #dist_ij = torch.linalg.norm(self.path[j] - self.path[j+1])
+            #w = max([0, 1 - torch.linalg.norm(self.path[j] - s) / dist_ij])
+            dist_ij = self._rmsd(self.path[j], self.path[j+1])
+            w = max([0, 1 - self._rmsd(self.path[j], s) / dist_ij])
             self.sum_weights[j] += xi * w
-            self.weighted_dists[j] -= w * (s-z) / torch.linalg.norm(s - z)   # TODO: is s needed?
+            self.weighted_dists[j] += w * (z-s) #/ torch.linalg.norm(z - s)   # TODO: is s needed?
         self.n_updates += 1
         
         # update path all self.update_interval steps
@@ -194,11 +192,14 @@ class PathCV:
                 if self.sum_weights[j+1]:
                     new_path[j+1] += (self.weighted_dists[j+1] / self.sum_weights[j+1])
                     new_path[j+1] = new_path[j+1].detach()
+
+            #self._optimize_path(new_path)
             self.path = new_path.copy()
             self._reparametrize_path(smooth=self.smooth)
+
             self.n_updates = 0 
             self.sum_weights = torch.zeros_like(self.sum_weights)
-            self.weighted_dists = [torch.zeros_like(self.path[0]) for _ in range(self.nnodes)]
+            self.weighted_dists = [torch.clone(self.path[i]) for i in range(self.nnodes)]
 
     def _project_coords_on_path(self, z: torch.tensor, q: list) -> torch.tensor:
         """
@@ -228,12 +229,6 @@ class PathCV:
             rmsds.append(self._rmsd(z, self.path[i]))
             self.path[i] = self.path[i].detach()
         return rmsds
-
-    @staticmethod
-    def _detach_coords(coords: torch.tensor):
-        coords = coords.detach().clone()
-        coords.requires_grad = True
-        return coords
 
     def _get_closest_nodes(self, z: torch.tensor, rmsds: list) -> tuple:
         """get two closest nodes of path
@@ -277,15 +272,21 @@ class PathCV:
         while keeping end nodes fixed.
         Smoothing of path can be ensured by projecting position of middle node on line spanned by neighbour nodes
 
+        see: Maragliano et al., J. Chem. Phys. (2006): https://doi.org/10.1063/1.2212942
+
         Args:
             tol: tolerance of path distance
             max_step: maximum number of iterations
             smooth: if path should be smoothed to remove kinks
-        """
+            s: damping factor for smoothing in range(0,1)
+        """        
         step = 0
         while step < max_step:
             step += 1
-
+            
+            if smooth:
+                self.path = self._smooth_string(self.path, s=self.smooth_damping)
+            
             l_ij = []
             for i, coords in enumerate(self.path[1:], start=1):
                 l_ij.append(torch.linalg.norm(coords - self.path[i-1]))
@@ -309,11 +310,6 @@ class PathCV:
                 path_new.append(self.path[i] + update * grad)
             path_new.append(self.path[-1])
             
-            if smooth:
-                for i, coords in enumerate(path_new[1:-1], start=1):
-                    d = self._project_coords_on_path(path_new[i], [path_new[i-1], path_new[i+1]])
-                    path_new[i] -= path_new[i]-d 
-
             self.path = path_new.copy()
 
             l_ij = torch.tensor(l_ij)
@@ -329,9 +325,28 @@ class PathCV:
 
         self.boundary_nodes = self._get_boundary()
 
+    @staticmethod
+    def _smooth_string(path: list, s: float=0.5):
+        """Smooth string of nodes 
+
+        Args:
+            path: path of nodes to be smoothed
+            s: damping factor in range(0,1)
+        
+        Returns:
+            path_new: smoothed path
+        """
+        path_new = [path[0]]
+        for i, coords in enumerate(path[1:-1], start=1):
+            path_new.append((1-s) * coords)
+            path_new[-1] += s / 2. * (path[i-1] + path[i+1])
+        path_new.append(path[-1])
+        return path_new
+
     def _optimize_path(
         self, 
-        k: float=1.0, 
+        reference_path, 
+        k: float=1000.0, 
         tol: float=0.0001,
         maxiter: int=1000,
         smooth: bool=False,
@@ -341,22 +356,22 @@ class PathCV:
 
         options = {
             'maxiter': maxiter,
-            'disp': self.verbose,
+            'disp': False, #self.verbose,
         }
 
         path_new = self.path.copy()
-        if smooth:
-            for i, _ in enumerate(path_new[1:-1], start=1):
-                d = self._project_coords_on_path(path_new[i], [path_new[i-1], path_new[i+1]])
-                path_new[i] -= path_new[i]-d 
+        #if smooth:
+        #    for i, _ in enumerate(path_new[1:-1], start=1):
+        #        d = self._project_coords_on_path(path_new[i], [path_new[i-1], path_new[i+1]])
+        #        path_new[i] -= path_new[i]-d 
 
-        #bounds = [path_new[0].numpy(), path_new[-1].numpy()]
-        path_new = torch.cat(path_new)
-        
+        path_new = torch.cat(path_new).detach().numpy()
+        reference_path = torch.cat(reference_path).detach().numpy()
+
         result = minimize(
             self._path_energy,
             x0=path_new,
-            args=(self, k, [n.numpy() for n in self.boundary_nodes]),
+            args=(reference_path, self, k),
             method=method,
             jac=self._path_gradient,
             tol=tol,
@@ -364,46 +379,83 @@ class PathCV:
         )
 
         if self.verbose:
-            print(f" >>> INFO: Path optimization terminated with: `{result.message}`")
+            print(f" >>> INFO: PathCV `{result.message}`")
         
-        self.path = result.x.reshape(self.nnodes, self.natoms*3)
-        self.path = [torch.from_numpy(node).float() for node in self.path]
-        #self.path.insert(0, torch.from_numpy(bounds[0]))
-        #self.path.append(torch.from_numpy(bounds[1]))
+        self.path = result.x.reshape(self.nnodes, self.natoms*self.ndim)
+        self.path = [torch.from_numpy(node).type(torch.float64) for node in self.path]
         self.boundary_nodes = self._get_boundary()
 
     @staticmethod
-    def _path_energy(path, PathCV, k, bounds):
-        """Callback to evaluate energy and gradient for path minimization"""
-        import numpy as np
+    def _path_energy(path, reference, PathCV, k):
+        """Callback to evaluate energy and gradient of path for `scipy.optimize.minimize()`
+        """
+        #if PathCV.verbose:
+        #    torch.autograd.set_detect_anomaly(True)
+                
+        energy_tangent = 0.0
+        energy_perpend = 0.0
+        
+        reference = torch.from_numpy(reference.reshape(PathCV.nnodes, PathCV.natoms*PathCV.ndim))
+        path = torch.from_numpy(path.reshape(PathCV.nnodes, PathCV.natoms*PathCV.ndim))
+        path.requires_grad = True
 
-        energy = 0.0
-        path = path.reshape(PathCV.nnodes, PathCV.natoms*3)
-        gradient = []
+        # compute tangent tau to path
+        tau1 = path[2:] - path[1:-1]
+        tau1 = torch.div(tau1.T, torch.norm(tau1, dim=1)).T
+        
+        tau2 = path[1:-1] - path[:-2]
+        tau2 = torch.div(tau2.T, torch.norm(tau2, dim=1)).T
 
-        for i in range(len(path)):
-            if i > 0:
-                t1 = path[i] - path[i-1]
-            else:
-                t1 = path[i] - bounds[0]
-            t1_norm = np.linalg.norm(t1)
+        tau = torch.zeros_like(path)
+        tau[1:-1] = tau1 + tau2
+        tau_norm = torch.norm(tau, dim=1)
+        tau = torch.div(tau.T, tau_norm).T
+        tau = torch.nan_to_num(tau, nan=0.0, posinf=0.0, neginf=0.0)
+
+        # compute NEB and prependicular force
+        for j in range(len(path)-1):
+            delta_Rj = PathCV._rmsd(path[j], path[j+1])            
+            energy_tangent += k / 2. * delta_Rj * delta_Rj 
+
+            s = PathCV._project_coords_on_path(reference[j], [path[j], path[j+1]])
+            delta_ref = torch.linalg.norm(s - reference[j]) 
+            energy_perpend += k / 2. * delta_ref * delta_ref 
+
+        # compute non-local terms for smoothing
+        for j in range(len(path)-2):
+            for k in range(j+2, len(path)):
+                delta_jk  = PathCV._rmsd(path[j], path[k])
+                delta_j1k = PathCV._rmsd(path[j+1], path[k])
+                energy_tangent += k / 4. * (torch.square(delta_jk - delta_j1k))
+                
+            for k in range(j+1, len(path)-1):                
+                delta_jk = PathCV._rmsd(path[j], path[k])
+                delta_jk1 = PathCV._rmsd(path[j], path[k+1])
+                energy_tangent += k / 4. * (torch.square(delta_jk - delta_jk1))
             
-            if i < PathCV.nnodes - 1:
-                t2 = path[i+1] - path[i]
-            else:
-                t2 = bounds[1] - path[i]
-            t2_norm = np.linalg.norm(t2)
-               
-            energy += k / 2. * np.square(t2_norm - t1_norm)
-            tau = t2 / t2_norm - t1 / t1_norm
-            gradient.append(k * (t2_norm - t1_norm) * tau)
-        PathCV.path_gradient = np.concatenate(gradient)
-        return float(energy)
+        force_tangent = torch.autograd.grad(energy_tangent, path, allow_unused=True)[0]
+        force_perpend = torch.autograd.grad(energy_perpend, path, allow_unused=True)[0]
+
+        PathCV.path_gradient = (
+            tau.T * torch.bmm(
+                force_tangent.view(PathCV.nnodes, 1, PathCV.natoms*PathCV.ndim), 
+                tau.view(PathCV.nnodes, PathCV.natoms*PathCV.ndim, 1)
+            ).flatten()
+        ).T
+        PathCV.path_gradient += force_perpend - (
+            tau.T * torch.bmm(
+                force_perpend.view(PathCV.nnodes, 1, PathCV.natoms*PathCV.ndim), 
+                tau.view(PathCV.nnodes, PathCV.natoms*PathCV.ndim, 1)
+            ).flatten()
+        ).T
+        #print(PathCV.path_gradient)
+
+        return float(energy_tangent) + float(energy_perpend)
 
     @staticmethod
-    def _path_gradient(path, PathCV, k, bounds):
+    def _path_gradient(path, reference, PathCV, k):
         """callback to return gradient to `scipy.optimize.minimize()`"""
-        return PathCV.path_gradient
+        return PathCV.path_gradient.flatten().detach().numpy()
 
     def _get_boundary(self):
         """compute one final lower and upper node by linear interpolation of path
@@ -470,7 +522,7 @@ class PathCV:
                 "Available RMSD metrics are: `RMSD`, `kabsch`, `quaternion`, `abs_distance`, `internal`"
             )
 
-        return rmsd
+        return rmsd.type(torch.float64)
 
     @staticmethod
     def _read_path(filename: str, metric: str=None) -> tuple:
@@ -561,7 +613,7 @@ class PathCV:
             gradient: gradient of coordinate transformation if requires_grad=True
         """
         
-        z = torch.reshape(coords, (len(self.active), 3))
+        z = torch.reshape(coords, (len(self.active), self.ndim))
         
         if requires_grad:
             gradient = torch.zeros_like(z)
