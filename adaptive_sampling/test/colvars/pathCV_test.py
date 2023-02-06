@@ -4,6 +4,7 @@ import torch
 from math import isclose
 
 from adaptive_sampling.colvars.path_cv import PathCV
+from adaptive_sampling.colvars.utils import cartesians_to_internals
 from adaptive_sampling.units import BOHR_to_ANGSTROM
 
 sys.path.append("resources/")
@@ -105,22 +106,20 @@ def test_projection_point_on_path(input, coords1, coords2):
     assert torch.allclose(cv1, coords2)
 
 @pytest.mark.parametrize(
-    "input, coords, zmatrix", [
+    "coords, zmatrix", [
         (
-            "resources/path.xyz", 
-            torch.tensor([1.0, 0.0, 0.0, 1.0, 1.0, 0.0, 2.0, 1.0, 0.0]),
+            torch.tensor([0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 1.0, 1.0, 0.0, 1.0, 1.0, 1.0]),
             torch.tensor([
-                [0.0, 0.0, 0.0], 
-                [1.0, 0.0, 0.0], 
-                [1.0, 1.5708, 0.0]
+                [0.0, 0.0000, 0.0000], 
+                [1.0, 0.0000, 0.0000], 
+                [1.0, 1.5708, 0.0000],
+                [1.0, 1.5708, 1.5708],
             ])
         )
     ]
 )
-def test_internals(input, coords, zmatrix):
-    cv = PathCV(guess_path=input, metric="internal")
-    cv.active = [0,1,2]
-    zm = cv._cartesians_to_internals(coords)
+def test_internals(coords, zmatrix):
+    zm = cartesians_to_internals(coords)
     assert torch.allclose(zm, zmatrix)
 
 @pytest.mark.parametrize(
@@ -135,31 +134,19 @@ def test_internals(input, coords, zmatrix):
 def test_internal_rmsd(input, coords, reference):
     cv = PathCV(guess_path=input, metric="internal")
     cv.active = [0,1,2]
-    zm = cv._cartesians_to_internals(reference)
-    print(zm)
-
     rmsd = cv._rmsd(coords, reference)
     assert isclose(0.5, rmsd, abs_tol=1.e-1)
 
 @pytest.mark.parametrize(
-    "input, path", [
+    "input, coords, reference", [
         (
             "resources/path.xyz", 
-            [
-                torch.tensor([1.0, 0.0, 0.0, 0.0, 0.0, 0.0]), 
-                torch.tensor([3.0, 0.0, 0.0, 0.0, 0.0, 0.0]),
-                torch.tensor([5.0, 0.0, 0.0, 0.0, 0.0, 0.0]),
-            ], 
+            torch.tensor([1.0, 0.0, 0.0, 1.0, 1.0, 0.0, 1.0, 1.0, 1.0]),
+            torch.tensor([1.0, 0.0, 0.0, 2.0, 1.0, 0.0, 1.0, 2.0, 1.0]),
         )
     ]
 )
-def test_path_opt(input, path):
-    # TODO: This test works, but the routine id wrong!!!!!!
-    path = [path[i].type(torch.float64) / BOHR_to_ANGSTROM for i in range(len(path))]
-    cv = PathCV(input, metric="abs_distance", verbose=True)
-    cv.path, _, _ = cv._read_path(input, metric="abs_distance")
-    cv._optimize_path(cv.path, tol=0.0001, k=1000.0)
-    print([cv.path[i] * BOHR_to_ANGSTROM for i in range(3)])
-    assert torch.allclose(cv.path[0], path[0], atol=1.e-1)
-    assert torch.allclose(cv.path[1], path[1], atol=1.e-1)
-    assert torch.allclose(cv.path[2], path[2], atol=1.e-1)
+def test_selected_rmsd(input, coords, reference):
+    cv = PathCV(guess_path=input, metric="selected_internal", cv_list=[[0,1],[1,2]])
+    rmsd = cv._rmsd(coords, reference)
+    assert isclose(0.6, rmsd, abs_tol=1.e-1)

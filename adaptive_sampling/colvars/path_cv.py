@@ -2,8 +2,8 @@ import math, time
 import torch
 import itertools
 
-from ..units import BOHR_to_ANGSTROM, DEGREES_per_RADIAN
-from .utils import kabsch_rmsd, quaternion_rmsd
+from ..units import BOHR_to_ANGSTROM
+from .utils import kabsch_rmsd, quaternion_rmsd, cartesians_to_internals
 
 class PathCV:
     """Adaptive Path Collective Variables
@@ -26,6 +26,7 @@ class PathCV:
         smooth: bool=True,
         smooth_damping: float=0.5,
         metric: str="kabsch",
+        cv_list: list=None,
         adaptive: bool=False,
         update_interval: int=100,
         half_life: float=100, 
@@ -35,6 +36,7 @@ class PathCV:
             raise ValueError(" >>> ERROR: You have to provide a guess path to the PathCV")
         self.guess_path = guess_path
         self.metric = metric
+        self.cv_list = cv_list
         self.adaptive = adaptive
         self.smooth = smooth
         self.smooth_damping = smooth_damping
@@ -291,11 +293,6 @@ class PathCV:
             for i, coords in enumerate(self.path[1:], start=1):
                 l_ij.append(torch.linalg.norm(coords - self.path[i-1]))
 
-                # TODO: normalization of path along any metric
-                #self.path[i] = self._detach_coords(self.path[i])
-                #if i > 0:
-                #   l_ij.append(self._rmsd(self.path[i], self.path[i-1]))  
-
             L = sum(l_ij) / (self.nnodes-1)
 
             path_new = [self.path[0]]
@@ -305,7 +302,6 @@ class PathCV:
 
                 grad = coords - self.path[i]
                 grad /= torch.linalg.norm(grad)
-                #grad = torch.autograd.grad(update, coords, allow_unused=True)[0]
 
                 path_new.append(self.path[i] + update * grad)
             path_new.append(self.path[-1])
@@ -342,120 +338,6 @@ class PathCV:
             path_new[-1] += s / 2. * (path[i-1] + path[i+1])
         path_new.append(path[-1])
         return path_new
-
-    def _optimize_path(
-        self, 
-        reference_path, 
-        k: float=1000.0, 
-        tol: float=0.0001,
-        maxiter: int=1000,
-        smooth: bool=False,
-        method: str="BFGS"
-    ):
-        from scipy.optimize import minimize
-
-        options = {
-            'maxiter': maxiter,
-            'disp': False, #self.verbose,
-        }
-
-        path_new = self.path.copy()
-        #if smooth:
-        #    for i, _ in enumerate(path_new[1:-1], start=1):
-        #        d = self._project_coords_on_path(path_new[i], [path_new[i-1], path_new[i+1]])
-        #        path_new[i] -= path_new[i]-d 
-
-        path_new = torch.cat(path_new).detach().numpy()
-        reference_path = torch.cat(reference_path).detach().numpy()
-
-        result = minimize(
-            self._path_energy,
-            x0=path_new,
-            args=(reference_path, self, k),
-            method=method,
-            jac=self._path_gradient,
-            tol=tol,
-            options=options,
-        )
-
-        if self.verbose:
-            print(f" >>> INFO: PathCV `{result.message}`")
-        
-        self.path = result.x.reshape(self.nnodes, self.natoms*self.ndim)
-        self.path = [torch.from_numpy(node).type(torch.float64) for node in self.path]
-        self.boundary_nodes = self._get_boundary()
-
-    @staticmethod
-    def _path_energy(path, reference, PathCV, k):
-        """Callback to evaluate energy and gradient of path for `scipy.optimize.minimize()`
-        """
-        #if PathCV.verbose:
-        #    torch.autograd.set_detect_anomaly(True)
-                
-        energy_tangent = 0.0
-        energy_perpend = 0.0
-        
-        reference = torch.from_numpy(reference.reshape(PathCV.nnodes, PathCV.natoms*PathCV.ndim))
-        path = torch.from_numpy(path.reshape(PathCV.nnodes, PathCV.natoms*PathCV.ndim))
-        path.requires_grad = True
-
-        # compute tangent tau to path
-        tau1 = path[2:] - path[1:-1]
-        tau1 = torch.div(tau1.T, torch.norm(tau1, dim=1)).T
-        
-        tau2 = path[1:-1] - path[:-2]
-        tau2 = torch.div(tau2.T, torch.norm(tau2, dim=1)).T
-
-        tau = torch.zeros_like(path)
-        tau[1:-1] = tau1 + tau2
-        tau_norm = torch.norm(tau, dim=1)
-        tau = torch.div(tau.T, tau_norm).T
-        tau = torch.nan_to_num(tau, nan=0.0, posinf=0.0, neginf=0.0)
-
-        # compute NEB and prependicular force
-        for j in range(len(path)-1):
-            delta_Rj = PathCV._rmsd(path[j], path[j+1])            
-            energy_tangent += k / 2. * delta_Rj * delta_Rj 
-
-            s = PathCV._project_coords_on_path(reference[j], [path[j], path[j+1]])
-            delta_ref = torch.linalg.norm(s - reference[j]) 
-            energy_perpend += k / 2. * delta_ref * delta_ref 
-
-        # compute non-local terms for smoothing
-        for j in range(len(path)-2):
-            for k in range(j+2, len(path)):
-                delta_jk  = PathCV._rmsd(path[j], path[k])
-                delta_j1k = PathCV._rmsd(path[j+1], path[k])
-                energy_tangent += k / 4. * (torch.square(delta_jk - delta_j1k))
-                
-            for k in range(j+1, len(path)-1):                
-                delta_jk = PathCV._rmsd(path[j], path[k])
-                delta_jk1 = PathCV._rmsd(path[j], path[k+1])
-                energy_tangent += k / 4. * (torch.square(delta_jk - delta_jk1))
-            
-        force_tangent = torch.autograd.grad(energy_tangent, path, allow_unused=True)[0]
-        force_perpend = torch.autograd.grad(energy_perpend, path, allow_unused=True)[0]
-
-        PathCV.path_gradient = (
-            tau.T * torch.bmm(
-                force_tangent.view(PathCV.nnodes, 1, PathCV.natoms*PathCV.ndim), 
-                tau.view(PathCV.nnodes, PathCV.natoms*PathCV.ndim, 1)
-            ).flatten()
-        ).T
-        PathCV.path_gradient += force_perpend - (
-            tau.T * torch.bmm(
-                force_perpend.view(PathCV.nnodes, 1, PathCV.natoms*PathCV.ndim), 
-                tau.view(PathCV.nnodes, PathCV.natoms*PathCV.ndim, 1)
-            ).flatten()
-        ).T
-        #print(PathCV.path_gradient)
-
-        return float(energy_tangent) + float(energy_perpend)
-
-    @staticmethod
-    def _path_gradient(path, reference, PathCV, k):
-        """callback to return gradient to `scipy.optimize.minimize()`"""
-        return PathCV.path_gradient.flatten().detach().numpy()
 
     def _get_boundary(self):
         """compute one final lower and upper node by linear interpolation of path
@@ -508,9 +390,22 @@ class PathCV:
             rmsd = torch.linalg.norm(coords - reference)
 
         elif self.metric.lower() == "internal": 
-            zmatrix_coords = self._cartesians_to_internals(coords, requires_grad=False)
-            zmatrix_reference = self._cartesians_to_internals(reference, requires_grad=False) 
+            zmatrix_coords = cartesians_to_internals(coords, ndim=self.ndim)
+            zmatrix_reference = cartesians_to_internals(reference, ndim=self.ndim) 
             diff = zmatrix_coords - zmatrix_reference
+            rmsd = torch.sqrt(torch.sum(diff * diff) / len(diff))
+
+        elif self.metric.lower() == "selected_internal":
+
+            if self.cv_list == None:
+                raise ValueError(" >>> WARNING: missing `cv_list` for definition of `selected_internals` in PathCV")
+
+            cvs_coords = torch.zeros(len(self.cv_list))
+            cvs_reference = torch.zeros(len(self.cv_list))
+            for i, cv in enumerate(self.cv_list):
+                cvs_coords[i] = self._get_cv(cv, coords)
+                cvs_reference[i] = self._get_cv(cv, reference)
+            diff = cvs_coords - cvs_reference
             rmsd = torch.sqrt(torch.sum(diff * diff) / len(diff))
 
         elif self.metric.lower() == "2d":
@@ -523,6 +418,50 @@ class PathCV:
             )
 
         return rmsd.type(torch.float64)
+
+    def _get_cv(self, cv, coords):
+        
+        z = torch.reshape(
+            coords, 
+            (int(len(coords)/self.ndim), self.ndim)
+        )
+
+        # dist
+        if len(cv) == 2:
+            # dist
+            xi = torch.linalg.norm(z[cv[0]] - z[cv[1]])
+
+        # angle
+        elif len(cv) == 3:
+            q12 = z[cv[0]] - z[cv[1]]
+            q23 = z[cv[1]] - z[cv[2]]
+
+            q12_n = torch.linalg.norm(q12)
+            q23_n = torch.linalg.norm(q23)
+                
+            q12_u = q12 / q12_n
+            q23_u = q23 / q23_n
+
+            xi = torch.arccos(torch.dot(-q12_u, q23_u))  
+                
+        # torsion
+        elif len(cv) == 4:
+            q12 = z[cv[1]] - z[cv[0]]
+            q23 = z[cv[2]] - z[cv[1]]
+            q34 = z[cv[3]] - z[cv[2]]
+
+            q23_u = q23 / torch.linalg.norm(q23)
+
+            n1 = -q12 - torch.dot(-q12, q23_u) * q23_u
+            n2 = q34 - torch.dot(q34, q23_u) * q23_u
+
+            xi = torch.atan2(
+                torch.dot(torch.cross(q23_u, n1), n2), torch.dot(n1, n2)
+            ) 
+        else:
+            raise ValueError(" >>> ERROR: wrong definition of internal coordinate in `cv_list`!")
+        
+        return xi
 
     @staticmethod
     def _read_path(filename: str, metric: str=None) -> tuple:
@@ -596,72 +535,6 @@ class PathCV:
         path_new.append(b)
         self.path = path_new.copy() 
         self.nnodes = len(self.path)
-
-    def _cartesians_to_internals(
-        self, 
-        coords: torch.tensor, 
-        requires_grad: bool=False
-    ) -> torch.tensor:
-        """Converts reduced cartesian coordinates to Z-Matrix
-
-        Args:  
-            coords: reduced cartesian coordinates
-            requires_grad: if gradient should be returned
-        
-        Returns:
-            zmatrix: Z-Matrix with angles given in radians
-            gradient: gradient of coordinate transformation if requires_grad=True
-        """
-        
-        z = torch.reshape(coords, (len(self.active), self.ndim))
-        
-        if requires_grad:
-            gradient = torch.zeros_like(z)
-
-        zmatrix = torch.zeros_like(z)
-            
-        for i, atom1 in enumerate(z[1:], start=1):
-                
-            # dist
-            zmatrix[i, 0] = torch.linalg.norm(z[i-1] - atom1)
-
-            # angle
-            if i > 1:
-                q12 = z[i-2] - z[i-1]
-                q23 = z[i-1] - z[i]
-
-                q12_n = torch.linalg.norm(q12)
-                q23_n = torch.linalg.norm(q23)
-
-                q12_u = q12 / q12_n
-                q23_u = q23 / q23_n
-
-                zmatrix[i, 1] = torch.arccos(torch.dot(-q12_u, q23_u))  
-                
-            # torsion
-            if i > 2:
-                q12 = z[i-2] - z[i-3]
-                q23 = z[i-1] - z[i-2]
-                q34 = z[i-0] - z[i-1]
-
-                q23_u = q23 / torch.linalg.norm(q23)
-
-                n1 = -q12 - torch.dot(-q12, q23_u) * q23_u
-                n2 = q34 - torch.dot(q34, q23_u) * q23_u
-
-                zmatrix[i, 2] = torch.atan2(
-                    torch.dot(torch.cross(q23_u, n1), n2), torch.dot(n1, n2)
-                )  
-
-            if requires_grad:
-                grad0 = torch.autograd.grad(zmatrix[i, 0], z, allow_unused=True)[0]
-                grad1 = torch.autograd.grad(zmatrix[i, 1], z, allow_unused=True)[0]
-                grad2 = torch.autograd.grad(zmatrix[i, 2], z, allow_unused=True)[0]
-                gradient += grad0 + grad1 + grad2
-
-        if requires_grad:
-            return zmatrix, gradient
-        return zmatrix
 
     def _reduce_path(self):
         """reduce coordinates in path to only active atoms

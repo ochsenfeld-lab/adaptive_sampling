@@ -214,7 +214,6 @@ def quaternion_rotate(X: torch.tensor, Y: torch.tensor) -> torch.tensor:
     rot = _quaternion_transform(r)
     return rot
 
-
 def get_amber_charges(prmtop: str) -> list:
     """Parse charges from AMBER parameter file 
 
@@ -244,3 +243,54 @@ def get_amber_charges(prmtop: str) -> list:
             charge.append(float(q) / 18.2223)  # converted to a.u. with factor sqrt(electrostatic constant)
 
     return charge
+
+def cartesians_to_internals(
+    coords: torch.tensor, 
+    ndim: int=3,
+) -> torch.tensor:
+    """Converts reduced cartesian coordinates to Z-Matrix
+
+    Args:  
+        coords: reduced cartesian coordinates
+        
+    Returns:
+        zmatrix: Z-Matrix with angles given in radians
+    """
+        
+    z = torch.reshape(coords, (int(len(coords)/3), ndim))
+    zmatrix = torch.zeros_like(z)
+            
+    for i, atom1 in enumerate(z[1:], start=1):
+                
+        # dist
+        zmatrix[i, 0] = torch.linalg.norm(z[i-1] - atom1)
+
+        # angle
+        if i > 1:
+            q12 = z[i-2] - z[i-1]
+            q23 = z[i-1] - z[i]
+
+            q12_n = torch.linalg.norm(q12)
+            q23_n = torch.linalg.norm(q23)
+                
+            q12_u = q12 / q12_n
+            q23_u = q23 / q23_n
+
+            zmatrix[i, 1] = torch.arccos(torch.dot(-q12_u, q23_u))  
+                
+        # torsion
+        if i > 2:
+            q12 = z[i-2] - z[i-3]
+            q23 = z[i-1] - z[i-2]
+            q34 = z[i-0] - z[i-1]
+
+            q23_u = q23 / torch.linalg.norm(q23)
+
+            n1 = -q12 - torch.dot(-q12, q23_u) * q23_u
+            n2 = q34 - torch.dot(q34, q23_u) * q23_u
+
+            zmatrix[i, 2] = torch.atan2(
+                torch.dot(torch.cross(q23_u, n1), n2), torch.dot(n1, n2)
+            )  
+    
+    return zmatrix
