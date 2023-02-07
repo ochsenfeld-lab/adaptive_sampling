@@ -58,7 +58,7 @@ def test_kabsch(a, b, expected_nofit, expected_fit):
     a = torch.flatten(a).float()
     b = torch.flatten(b).float()
 
-    rmsd_nofit = rmsd(a, b)
+    rmsd_nofit = get_rmsd(a, b)
     rmsd_kabsch = kabsch_rmsd(a, b)
 
     assert float(rmsd_nofit) == pytest.approx(expected_nofit, rel=1.0e-3)
@@ -94,7 +94,7 @@ def test_kabsch_1(a, b, expected_nofit, expected_fit):
     a = torch.flatten(a).float()
     b = torch.flatten(b).float()
 
-    rmsd_nofit = rmsd(a, b)
+    rmsd_nofit = get_rmsd(a, b)
     rmsd_kabsch = kabsch_rmsd(a, b)
 
     assert float(rmsd_nofit) == pytest.approx(expected_nofit, abs=1.0e-3)
@@ -134,7 +134,7 @@ def test_quaternion(a, b, expected_nofit, expected_fit):
     a = torch.flatten(a).float()
     b = torch.flatten(b).float()
 
-    rmsd_nofit = rmsd(a, b)
+    rmsd_nofit = get_rmsd(a, b)
     rmsd_quaternion = quaternion_rmsd(a, b)
 
     assert float(rmsd_nofit) == pytest.approx(expected_nofit, rel=1.0e-3)
@@ -170,7 +170,7 @@ def test_quaternion_1(a, b, expected_nofit, expected_fit):
     a = torch.flatten(a).float()
     b = torch.flatten(b).float()
 
-    rmsd_nofit = rmsd(a, b)
+    rmsd_nofit = get_rmsd(a, b)
     rmsd_quaternion = quaternion_rmsd(a, b)
 
     assert float(rmsd_nofit) == pytest.approx(expected_nofit, abs=1.0e-3)

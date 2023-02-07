@@ -1,12 +1,12 @@
 import os
 import itertools
 import torch
-from scipy.spatial import KDTree
-
 from adaptive_sampling.units import BOHR_to_ANGSTROM
 
 
-def read_xyz(xyz_name: str) -> torch.tensor:
+def read_xyz(
+    xyz_name: str
+) -> torch.tensor:
     """Read cartesian coordinates from file (*.xyz)
 
     Args:
@@ -30,11 +30,67 @@ def read_xyz(xyz_name: str) -> torch.tensor:
     mol = torch.FloatTensor(list(mol)) / BOHR_to_ANGSTROM
     return mol
 
+def read_path(
+    filename: str, 
+    ndim: int,
+) -> tuple:
+    """Read cartesian coordinates of trajectory from file (*.xyz)
+        
+    Args:
+        xyz_name (str): file-name of xyz-file
+        
+    Returns:
+        traj: list of torch arrays containing xyz coordinates of nodes
+        nnodes: number of nodes in path
+        natoms: number of atoms of system
+    """
+    if filename[-3:] == "dcd":
+        # TODO: Read guess path from dcd trajectory file
+        pass
+    else:
+        with open(filename, "r") as xyzf:
+            traj = []
+            mol = []
+            n = 0
+            for i, line in enumerate(xyzf):
+                words = line.strip().split()
+                if i == 0:
+                    n_atoms = int(words[0])
+                elif n == n_atoms:
+                    n = 0
+                    mol = itertools.chain(*mol)
+                    mol = torch.FloatTensor(list(mol))
+                    traj.append(mol)
+                    mol = []
+                elif len(words) >= 4:
+                    n += 1
+                    if ndim == 2:
+                        mol.append([float(words[1]), float(words[2])])
+                    else:
+                        mol.append([
+                            float(words[1]) / BOHR_to_ANGSTROM, 
+                            float(words[2]) / BOHR_to_ANGSTROM, 
+                            float(words[3]) / BOHR_to_ANGSTROM,
+                        ])
 
-def rmsd(V, W):
+        if mol:
+            mol = itertools.chain(*mol)
+            mol = torch.FloatTensor(list(mol))
+            traj.append(mol)
+    
+    return traj, len(traj), n_atoms
+
+
+def get_rmsd(V: torch.tensor, W: torch.tensor):
     """root-mean-square deviation"""
     diff = V - W
     return torch.sqrt(torch.sum(diff * diff) / len(V))
+
+
+def get_msd(V: torch.tensor, W: torch.tensor):
+    """root-mean-square deviation"""
+    diff = V - W
+    return torch.sum(diff * diff) / len(V)
 
 
 def kabsch_rmsd(
@@ -70,10 +126,12 @@ def kabsch_rmsd(
 
     if return_coords:
         return coords1_new, coords2_new
-    return rmsd(coords1_new, coords2_new)
+    return get_rmsd(coords1_new, coords2_new)
 
 
-def centroid(X: torch.tensor) -> torch.tensor:
+def centroid(
+    X: torch.tensor,
+) -> torch.tensor:
     """Centroid is the mean position of all the points in all of the coordinate
     directions, from a vectorset X.
 
@@ -87,7 +145,10 @@ def centroid(X: torch.tensor) -> torch.tensor:
     return C
 
 
-def kabsch_rot(coords1: torch.tensor, coords2: torch.tensor) -> torch.tensor:
+def kabsch_rot(
+    coords1: torch.tensor, 
+    coords2: torch.tensor,
+) -> torch.tensor:
     """Rotate coords1 on coords2
 
     Args:
@@ -155,11 +216,13 @@ def quaternion_rmsd(
     coords1_new = torch.matmul(coords1_new, rot)
 
     if return_coords:
-        return rmsd(coords1_new, coords2_new), coords1_new
-    return rmsd(coords1_new, coords2_new)
+        return get_rmsd(coords1_new, coords2_new), coords1_new
+    return get_rmsd(coords1_new, coords2_new)
 
 
-def _quaternion_transform(r: torch.tensor) -> torch.tensor:
+def _quaternion_transform(
+    r: torch.tensor,
+) -> torch.tensor:
     """Get optimal rotation"""
     Wt_r = _makeW(*r).T
     Q_r = _makeQ(*r)
@@ -193,7 +256,10 @@ def _makeQ(r1, r2, r3, r4=0):
     return Q
 
 
-def quaternion_rotate(X: torch.tensor, Y: torch.tensor) -> torch.tensor:
+def quaternion_rotate(
+    X: torch.tensor, 
+    Y: torch.tensor,
+) -> torch.tensor:
     """
     Calculate the rotation
 
@@ -244,6 +310,51 @@ def get_amber_charges(prmtop: str) -> list:
 
     return charge
 
+def get_internal_coordinate(
+    cv: list, 
+    coords: torch.tensor, 
+    ndim: int=3,
+) -> torch.tensor:
+    """Get internal coordinate (distance, angle or torsion)
+    """
+    z = coords.view(int(torch.numel(coords)/ndim), ndim)
+
+    # dist
+    if len(cv) == 2:
+        xi = torch.linalg.norm(z[cv[0]] - z[cv[1]])
+
+    # angle
+    elif len(cv) == 3:
+        q12 = z[cv[0]] - z[cv[1]]
+        q23 = z[cv[1]] - z[cv[2]]
+
+        q12_n = torch.linalg.norm(q12)
+        q23_n = torch.linalg.norm(q23)
+                
+        q12_u = q12 / q12_n
+        q23_u = q23 / q23_n
+
+        xi = torch.arccos(torch.dot(-q12_u, q23_u))  
+                
+    # torsion
+    elif len(cv) == 4:
+        q12 = z[cv[1]] - z[cv[0]]
+        q23 = z[cv[2]] - z[cv[1]]
+        q34 = z[cv[3]] - z[cv[2]]
+
+        q23_u = q23 / torch.linalg.norm(q23)
+
+        n1 = -q12 - torch.dot(-q12, q23_u) * q23_u
+        n2 = q34 - torch.dot(q34, q23_u) * q23_u
+
+        xi = torch.atan2(
+            torch.dot(torch.cross(q23_u, n1), n2), torch.dot(n1, n2)
+        ) 
+    else:
+        raise ValueError(" >>> ERROR: wrong definition of internal coordinate in `cv_list`!")
+        
+    return xi
+
 def cartesians_to_internals(
     coords: torch.tensor, 
     ndim: int=3,
@@ -257,40 +368,49 @@ def cartesians_to_internals(
         zmatrix: Z-Matrix with angles given in radians
     """
         
-    z = torch.reshape(coords, (int(len(coords)/3), ndim))
+    z = coords.view(int(torch.numel(coords)/ndim), ndim)
     zmatrix = torch.zeros_like(z)
             
-    for i, atom1 in enumerate(z[1:], start=1):
-                
-        # dist
-        zmatrix[i, 0] = torch.linalg.norm(z[i-1] - atom1)
+    for i, _ in enumerate(z[1:], start=1):
+        # distance
+        zmatrix[i, 0] = get_internal_coordinate(
+            [i-1, i], coords, ndim=ndim
+        )  
 
         # angle
         if i > 1:
-            q12 = z[i-2] - z[i-1]
-            q23 = z[i-1] - atom1
-
-            q12_n = torch.linalg.norm(q12)
-            q23_n = torch.linalg.norm(q23)
-                
-            q12_u = q12 / q12_n
-            q23_u = q23 / q23_n
-
-            zmatrix[i, 1] = torch.arccos(torch.dot(-q12_u, q23_u))  
+            zmatrix[i, 1] = get_internal_coordinate(
+                [i-2, i-1, i], coords, ndim=ndim
+            ) 
                 
         # torsion
         if i > 2:
-            q12 = z[i-2] - z[i-3]
-            q23 = z[i-1] - z[i-2]
-            q34 = atom1  - z[i-1]
-
-            q23_u = q23 / torch.linalg.norm(q23)
-
-            n1 = -q12 - torch.dot(-q12, q23_u) * q23_u
-            n2 = q34 - torch.dot(q34, q23_u) * q23_u
-
-            zmatrix[i, 2] = torch.atan2(
-                torch.dot(torch.cross(q23_u, n1), n2), torch.dot(n1, n2)
-            )  
+            zmatrix[i, 2] = get_internal_coordinate(
+                [i-3, i-2, i-1, i], coords, ndim=ndim
+            )
     
     return zmatrix
+
+def convert_coordinate_system(
+    coords: torch.tensor,
+    active: list=None,
+    coord_system: str="Cartesian", 
+    ndim: int=3,
+):
+    if coord_system.lower() == "cartesian":
+        z = coords.view(int(torch.numel(coords)/ndim), ndim)
+        if active != None:
+            z = z[active]
+        return z
+
+    elif coord_system.lower() == "zmatrix":
+        z = coords.view(int(torch.numel(coords)/ndim), ndim)
+        if active != None:
+            z = z[active]
+        return cartesians_to_internals(z, ndim=ndim)
+
+    elif coord_system.lower() == "cv_space":
+        cvs = torch.zeros(len(active))
+        for i, cv in enumerate(active):
+            cvs[i] = get_internal_coordinate(cv, coords, ndim=ndim)
+        return cvs

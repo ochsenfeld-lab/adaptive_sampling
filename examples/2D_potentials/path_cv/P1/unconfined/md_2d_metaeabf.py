@@ -13,17 +13,18 @@ mass = 10.0  # a.u.
 potential = "1"
 
 # eABF
-dev = [
-    {
-        "guess_path": "guess_path2.xyz",
-        "metric": "2d",
-        "verbose": True,
-        "n_interpolate": 1,
-        "adaptive": True,
-        "update_interval": 1000,
-        "half_life": 5000,
-        }
-]
+dev = {
+    "guess_path": "guess_path2.xyz",
+    "metric": "RMSD",
+    "coordinates": "Cartesian",
+    "ndim": 2,
+    "verbose": True,
+    "n_interpolate": 1,
+    "adaptive": True,
+    "update_interval": 1000,
+    "half_life": 5000,
+}
+
 tube = False
 
 ats = [["path", dev, 0.0, 1.0, 0.05]]

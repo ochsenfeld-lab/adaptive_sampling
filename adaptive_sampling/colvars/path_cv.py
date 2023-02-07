@@ -3,7 +3,7 @@ import torch
 import itertools
 
 from ..units import BOHR_to_ANGSTROM
-from .utils import kabsch_rmsd, quaternion_rmsd, cartesians_to_internals
+from .utils import *
 
 class PathCV:
     """Adaptive Path Collective Variables
@@ -27,6 +27,7 @@ class PathCV:
         smooth_damping: float=0.1,
         coordinates: str="Cartesian",
         metric: str="kabsch",
+        ndim: int=3,
         cv_list: list=None,
         adaptive: bool=False,
         update_interval: int=100,
@@ -38,26 +39,29 @@ class PathCV:
         self.guess_path = guess_path
         self.smooth = smooth
         self.smooth_damping = smooth_damping
+        self.coordinates = coordinates
         self.metric = metric
         self.cv_list = cv_list
         self.adaptive = adaptive
         self.update_interval = update_interval
         self.half_life = half_life
         self.verbose = verbose
-        
-        self.ndim = 2 if self.metric.lower() == "2d" else 3
+        self.ndim = ndim
         
         # initialized path nodes
-        self.path, self.nnodes, self.natoms = self._read_path(self.guess_path, metric=self.metric)
+        self.path, self.nnodes, _ = read_path(
+            self.guess_path, 
+            ndim=self.ndim,
+        )
         
-        self.active = active if active is not None else [i for i in range(self.natoms)]
+        self.active = active 
         self._reduce_path()
         
         if n_interpolate > 0:
             self.interpolate(n_interpolate)
         
         self._reparametrize_path(smooth=self.smooth)
-        self.boundary_nodes = self._get_boundary()
+        self.boundary_nodes = self._get_boundary(self.path)
 
         # accumulators for path update
         if self.adaptive:
@@ -72,12 +76,16 @@ class PathCV:
         """calculate PathCV according to
         Branduardi, et al., J. Chem. Phys. (2007): https://doi.org/10.1063/1.2432340
         """
-        z = torch.reshape(coords, (self.natoms, self.ndim)).float()
-        z = torch.flatten(z[self.active])
-
-        rmsds = self._get_rmsds_to_path(z)
+        z = convert_coordinate_system(
+            coords, self.active, coord_system=self.coordinates, ndim=self.ndim
+        )
+        rmsds = self._get_distance_to_path(z)
         
-        la = (1. / torch.square(self._rmsd(self.path[1], self.path[0]))).type(torch.float64)
+        la = (
+            1. / torch.square(
+                self.get_distance(self.path[1], self.path[0], metric=self.metric)
+            )
+        ).type(torch.float64)
         
         term1 = 0.0
         term2 = 0.0
@@ -110,12 +118,13 @@ class PathCV:
         
         TODO: Fix this, it doesn't work!
         """
-        z = torch.reshape(coords, (self.natoms, self.ndim)).float()
-        z = torch.flatten(z[self.active])
+        z = convert_coordinate_system(
+            coords, self.active, coord_system=self.coordinates, ndim=self.ndim
+        )
+        rmsds = self._get_distance_to_path(z)
         
-        rmsds = self._get_rmsds_to_path(z)
         index_nearest, coords_nearest = self._get_closest_nodes(z, rmsds)
-
+        
         # calculate projection of coords on path
         v1 = coords_nearest[0] - z       
         
@@ -129,6 +138,10 @@ class PathCV:
         else:
             v3 = self.boundary_nodes[1] - coords_nearest[0]
         
+        v1 = v1.view(torch.numel(v1))
+        v2 = v2.view(torch.numel(v2))
+        v3 = v3.view(torch.numel(v3))
+
         v1_sqnorm = torch.square(torch.linalg.norm(v1))
         v2_sqnorm = torch.square(torch.linalg.norm(v2))
         v3_sqnorm = torch.square(torch.linalg.norm(v3)) 
@@ -156,9 +169,10 @@ class PathCV:
         Returns:
             d: distance to projection of coords on path
         """
-        z = torch.reshape(coords, (self.natoms, self.ndim)).float()            
-        z = torch.flatten(z[self.active])
-        rmsds = self._get_rmsds_to_path(z)
+        z = convert_coordinate_system(
+            coords, self.active, coord_system=self.coordinates, ndim=self.ndim
+        )
+        rmsds = self._get_distance_to_path(z)
         _, q = self._get_closest_nodes(z, rmsds)
         s = self._project_coords_on_path(z, q)
         vec = z - s
@@ -180,8 +194,8 @@ class PathCV:
         xi = math.exp(-math.log(2.) / float(self.half_life))
 
         for j, _ in enumerate(self.path[1:-1], start=1):
-            dist_ij = self._rmsd(self.path[j], self.path[j+1])
-            w = max([0, 1 - self._rmsd(self.path[j], s) / dist_ij])
+            dist_ij = self.get_distance(self.path[j], self.path[j+1], metric=self.metric)
+            w = max([0, 1 - self.get_distance(self.path[j], s, metric=self.metric) / dist_ij])
             self.sum_weights[j] += xi * w
             self.weighted_dists[j] += w * (z-s) 
         self.n_updates += 1
@@ -200,67 +214,6 @@ class PathCV:
             self.n_updates = 0 
             self.sum_weights = torch.zeros_like(self.sum_weights)
             self.weighted_dists = [torch.clone(self.path[i]) for i in range(self.nnodes)]
-
-    def _project_coords_on_path(self, z: torch.tensor, q: list) -> torch.tensor:
-        """
-
-        Args:
-            z: reduced coords 
-            q: coords of two neighbour nodes of z
-
-        Returns:
-            s: projection of coords on path 
-        """    
-        ap = z - q[0]
-        ab = q[1] - q[0]
-        return q[0] + torch.matmul(ap,ab) / torch.matmul(ab,ab) * ab
-
-    def _get_rmsds_to_path(self, z: torch.tensor) -> list:
-        """Calculates RMSD according to chosen distance metric
-
-        Args:
-            z: reduced coords 
-
-        Return:
-            rmsds: list of RMSDs of z to every node of path
-        """
-        rmsds = []
-        for i in range(self.nnodes):
-            rmsds.append(self._rmsd(z, self.path[i]))
-            self.path[i] = self.path[i].detach()
-        return rmsds
-
-    def _get_closest_nodes(self, z: torch.tensor, rmsds: list) -> tuple:
-        """get two closest nodes of path
-
-        Args:
-            z: reduced coordinates
-            rmsds: list of rmsds of z to path nodes
-
-        Returns:
-            closest_index: list with indices of two closest nodes to z  
-            closest_coords: list with coordinates of two closest nodes to z
-        """
-        rmsds.insert(0, self._rmsd(z, self.boundary_nodes[0]))
-        rmsds.append(self._rmsd(z, self.boundary_nodes[1]))
-        closest_idx = sorted(range(len(rmsds)), key=rmsds.__getitem__)
-        
-        # find closest neighbour of closest node
-        for neighbour_idx in closest_idx[1:]:
-            if abs(neighbour_idx - closest_idx[0]) == 1:
-                break
-        
-        path_new = self.path.copy()
-        path_new.insert(0, self.boundary_nodes[0])
-        path_new.append(self.boundary_nodes[1])
-        closest_coords = [path_new[closest_idx[0]], path_new[neighbour_idx]]
-        
-        if self.verbose:
-            # if path gets highly irregualar this can fail, so print warning
-            if abs(closest_idx[0] - closest_idx[1]) != 1:
-                print(f" >>> WARNING: Two closest nodes of PathCV ({closest_idx[0]-1, closest_idx[1]-1}) are not neighbours!") 
-
-        return [closest_idx[0]-1, closest_idx[1]-1], closest_coords
 
     def _reparametrize_path(
         self, 
@@ -317,7 +270,7 @@ class PathCV:
             else:
                 print(f" >>> WARNING: Reparametrization of Path not converged in {max_step} steps. Max(delta d_ij)={crit:.3f}.")
 
-        self.boundary_nodes = self._get_boundary()
+        self.boundary_nodes = self._get_boundary(self.path)
 
     @staticmethod
     def _smooth_string(path: list, s: float=0.5):
@@ -337,177 +290,130 @@ class PathCV:
         path_new.append(path[-1])
         return path_new
 
-    def _get_boundary(self):
+    @staticmethod
+    def _get_boundary(path):
         """compute one final lower and upper node by linear interpolation of path
         """
-        delta_lower = self.path[1] - self.path[0]
-        lower_bound = self.path[0] - delta_lower
-        delta_upper = self.path[-2] - self.path[-1]
-        upper_bound = self.path[-1] - delta_upper
+        delta_lower = path[1] - path[0]
+        lower_bound = path[0] - delta_lower
+        delta_upper = path[-2] - path[-1]
+        upper_bound = path[-1] - delta_upper
         return [lower_bound, upper_bound]
 
-    def _rmsd(
-        self, 
-        coords: torch.tensor, 
-        reference:torch.tensor, 
-    ) -> torch.tensor:
-        """Get RMSD between individual nodes and the current coordinates
-        Available metrics to calculate RMSD are: "RMSD", "kabsch", "quaternion"(, "internal")
+    def _get_distance_to_path(self, z: torch.tensor) -> list:
+        """Calculates RMSD according to chosen distance metric
 
         Args:
-            coords: XYZ coordinates 
-            reference: XYZ coordinates of reference
+            z: reduced coords 
+
+        Return:
+            rmsds: list of RMSDs of z to every node of path
+        """
+        rmsds = []
+        for i in range(self.nnodes):
+            rmsds.append(self.get_distance(z, self.path[i], metric=self.metric))
+            self.path[i] = self.path[i].detach()
+        return rmsds
+
+    @staticmethod
+    def get_distance(
+        coords: torch.tensor, 
+        reference: torch.tensor,
+        metric: str="RMSD"    
+    ) -> torch.tensor:
+        """Get distance between individual coordinates and reference calculated by `metric`
+        Available metrics are: 
+            `RMSD`: Root mean square deviation
+            `MSD`: Mean square deviation
+            `kabsch`: Root mean square deviation of optimally rotated and translated coords
+            `KMSD`: Mean square deviation of optimally rotated and translated coords
+            `distance`: Absolute distance
+
+        Args:
+            coords: coordinates 
+            reference: coordinates of reference
 
         Returns:
-            rmsd: root-mean-square difference between coords and reference
+            d: distance between coords and reference in `self.metric`
         """
-        if self.metric.lower() == "rmsd":
-            diff = coords - reference
-            rmsd = torch.sqrt(torch.sum(diff * diff) / len(diff))
+        if metric.lower() == "rmsd":
+            d = get_rmsd(coords, reference)
         
-        elif self.metric.lower() == "msd":
-            diff = coords - reference
-            rmsd = torch.sum(diff * diff) / len(diff)
+        elif metric.lower() == "msd":
+            d = get_msd(coords, reference)
 
-        elif self.metric.lower() == "kmsd":
+        elif metric.lower() == "kmsd":
             coords_fitted, reference_fitted = kabsch_rmsd(
                 coords, 
                 reference, 
                 return_coords=True
             )
-            diff = coords_fitted - reference_fitted
-            rmsd = torch.sum(diff * diff) / len(diff)
-            
-        elif self.metric.lower() == "quaternion":
-            rmsd = quaternion_rmsd(coords, reference)
+            d = get_msd(coords_fitted, reference_fitted)
         
-        elif self.metric.lower() == "kabsch":
-            rmsd = kabsch_rmsd(coords, reference)
+        elif metric.lower() == "kabsch":
+            d = kabsch_rmsd(coords, reference)
         
-        elif self.metric.lower() == "abs_distance":
-            rmsd = torch.linalg.norm(coords - reference)
-
-        elif self.metric.lower() == "internal": 
-            zmatrix_coords = cartesians_to_internals(coords, ndim=self.ndim)
-            zmatrix_reference = cartesians_to_internals(reference, ndim=self.ndim) 
-            diff = zmatrix_coords - zmatrix_reference
-            rmsd = torch.sqrt(torch.sum(diff * diff) / len(diff))
-
-        elif self.metric.lower() == "selected_internal":
-
-            if self.cv_list == None:
-                raise ValueError(" >>> WARNING: missing `cv_list` for definition of `selected_internals` in PathCV")
-
-            cvs_coords = torch.zeros(len(self.cv_list))
-            cvs_reference = torch.zeros(len(self.cv_list))
-            for i, cv in enumerate(self.cv_list):
-                cvs_coords[i] = self._get_cv(cv, coords)
-                cvs_reference[i] = self._get_cv(cv, reference)
-            diff = cvs_coords - cvs_reference
-            rmsd = torch.sqrt(torch.sum(diff * diff) / len(diff))
-
-        elif self.metric.lower() == "2d":
-            diff = coords - reference
-            rmsd = torch.sqrt(torch.sum(diff * diff) / 2)
+        elif metric.lower() == "distance":
+            d = torch.linalg.norm(coords - reference)
         
         else:
             raise NotImplementedError(
-                "Available RMSD metrics are: `RMSD`, `MSD`, `kabsch`, `internal`, `selected_internal`"
+                "Available distance metrics are: `RMSD`, `MSD`, `kabsch`, `KMSD`, `distance`"
             )
 
-        return rmsd.type(torch.float64)
+        return d.type(torch.float64)
 
-    def _get_cv(self, cv, coords):
-        
-        z = torch.reshape(
-            coords, 
-            (int(len(coords)/self.ndim), self.ndim)
-        )
-
-        # dist
-        if len(cv) == 2:
-            # dist
-            xi = torch.linalg.norm(z[cv[0]] - z[cv[1]])
-
-        # angle
-        elif len(cv) == 3:
-            q12 = z[cv[0]] - z[cv[1]]
-            q23 = z[cv[1]] - z[cv[2]]
-
-            q12_n = torch.linalg.norm(q12)
-            q23_n = torch.linalg.norm(q23)
-                
-            q12_u = q12 / q12_n
-            q23_u = q23 / q23_n
-
-            xi = torch.arccos(torch.dot(-q12_u, q23_u))  
-                
-        # torsion
-        elif len(cv) == 4:
-            q12 = z[cv[1]] - z[cv[0]]
-            q23 = z[cv[2]] - z[cv[1]]
-            q34 = z[cv[3]] - z[cv[2]]
-
-            q23_u = q23 / torch.linalg.norm(q23)
-
-            n1 = -q12 - torch.dot(-q12, q23_u) * q23_u
-            n2 = q34 - torch.dot(q34, q23_u) * q23_u
-
-            xi = torch.atan2(
-                torch.dot(torch.cross(q23_u, n1), n2), torch.dot(n1, n2)
-            ) 
-        else:
-            raise ValueError(" >>> ERROR: wrong definition of internal coordinate in `cv_list`!")
-        
-        return xi
-
-    @staticmethod
-    def _read_path(filename: str, metric: str=None) -> tuple:
-        """Read cartesian coordinates of trajectory from file (*.xyz)
-        
-        Args:
-            xyz_name (str): file-name of xyz-file
-        
-        Returns:
-            traj: list of torch arrays containing xyz coordinates of nodes
-            nnodes: number of nodes in path
-            natoms: number of atoms of system
+    def _project_coords_on_path(self, z: torch.tensor, q: list) -> torch.tensor:
         """
-        if filename[-3:] == "dcd":
-            # TODO: Read guess path from dcd trajectory file
-            pass
-        else:
-            with open(filename, "r") as xyzf:
-                traj = []
-                mol = []
-                n = 0
-                for i, line in enumerate(xyzf):
-                    words = line.strip().split()
-                    if i == 0:
-                        n_atoms = int(words[0])
-                    elif n == n_atoms:
-                        n = 0
-                        mol = itertools.chain(*mol)
-                        mol = torch.FloatTensor(list(mol))
-                        traj.append(mol)
-                        mol = []
-                    elif len(words) >= 4:
-                        n += 1
-                        if metric.lower() == '2d':
-                            mol.append([float(words[1]), float(words[2])])
-                        else:
-                            mol.append([
-                                float(words[1]) / BOHR_to_ANGSTROM, 
-                                float(words[2]) / BOHR_to_ANGSTROM, 
-                                float(words[3]) / BOHR_to_ANGSTROM,
-                            ])
 
-            if mol:
-                mol = itertools.chain(*mol)
-                mol = torch.FloatTensor(list(mol))
-                traj.append(mol)
-    
-        return traj, len(traj), n_atoms
+        Args:
+            z: reduced coords 
+            q: coords of two neighbour nodes of z
+
+        Returns:
+            s: projection of coords on path 
+        """    
+        shape_z = z.shape        # for reshaping results
+        ncoords = torch.numel(z) # to flatten inputs
+
+        z = z.view(ncoords)
+        q0 = q[0].view(ncoords)
+        q1 = q[1].view(ncoords)
+        ap = z - q0
+        ab = q1 - q0
+        return (q0 + torch.matmul(ap,ab) / torch.matmul(ab,ab) * ab).view(shape_z)
+
+    def _get_closest_nodes(self, z: torch.tensor, rmsds: list) -> tuple:
+        """get two closest nodes of path
+
+        Args:
+            z: reduced coordinates
+            rmsds: list of rmsds of z to path nodes
+
+        Returns:
+            closest_index: list with indices of two closest nodes to z  
+            closest_coords: list with coordinates of two closest nodes to z
+        """
+        rmsds.insert(0, self.get_distance(z, self.boundary_nodes[0], metric=self.metric))
+        rmsds.append(self.get_distance(z, self.boundary_nodes[1], metric=self.metric))
+        closest_idx = sorted(range(len(rmsds)), key=rmsds.__getitem__)
+        
+        # find closest neighbour of closest node
+        for neighbour_idx in closest_idx[1:]:
+            if abs(neighbour_idx - closest_idx[0]) == 1:
+                break
+        
+        path_new = self.path.copy()
+        path_new.insert(0, self.boundary_nodes[0])
+        path_new.append(self.boundary_nodes[1])
+        closest_coords = [path_new[closest_idx[0]], path_new[neighbour_idx]]
+        
+        if self.verbose:
+            # if path gets highly irregualar this can fail, so print warning
+            if abs(closest_idx[0] - closest_idx[1]) != 1:
+                print(f" >>> WARNING: Two closest nodes of PathCV ({closest_idx[0]-1, closest_idx[1]-1}) are not neighbours!") 
+
+        return [closest_idx[0]-1, closest_idx[1]-1], closest_coords
 
     def interpolate(self, n_interpolate):
         """Add nodes by linear interpolation
@@ -537,18 +443,14 @@ class PathCV:
     def _reduce_path(self):
         """reduce coordinates in path to only active atoms
         """
-        if len(self.active) < self.natoms and self.metric.lower() != '2d':
-            path_reduced = []
-            for c in self.path:
-                coords = torch.reshape(c, (self.natoms, 3)).float()
-                path_reduced.append(torch.flatten(coords[self.active]))
-            self.path = path_reduced.copy()
-
-            if self.verbose:
-                print(f" >>> INFO: Reduced PathCV to {len(self.active)} active atoms.")
-
-        elif len(self.active) > self.natoms:
-            raise ValueError(f"Number of active atoms > number of atoms!")
+        path_reduced = []
+        for c in self.path:
+            path_reduced.append(
+                convert_coordinate_system(c, self.active, coord_system=self.coordinates, ndim=self.ndim)
+            )
+        self.path = path_reduced.copy()
+        if self.verbose:
+            print(f" >>> INFO: Reduced Path nodes to {torch.numel(self.path[0])} active coordinates.")
 
     def write_path(self, filename: str="path_cv.npy"):
         """write nodes of PathCV to dcd trajectory file
@@ -567,9 +469,6 @@ class PathCV:
             dcd = mdtraj.formats.DCDTrajectoryFile(filename, 'w', force_overwrite=True)
             for coords in self.path:
                 dcd.write(BOHR_to_ANGSTROM * coords.detach().numpy().reshape(len(self.active), 3))
-
-
-
 
 
 
