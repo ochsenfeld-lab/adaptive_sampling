@@ -12,7 +12,7 @@ class PathCV:
         guess_path: xyz file with initial path
         active: list of indices of atoms included in PathCV
         n_interpolate: Number of nodes that are added between original nodes by linear interpolation
-        metric: Metric for calculation of distance of points (`RMSD`, `kabsch`, `quaternion`, `abs_distance`, `internal`)
+        metric: Metric for calculation of distance of points (`RMSD`, `MSD`, `kabsch`, `quaternion`, `abs_distance`, `internal`, `selected_internal`)
         adaptive: if path is adaptive
         update_interval: number of steps between update of adaptive path
         half_life: number of steps til original path weights only half due to updates
@@ -24,7 +24,8 @@ class PathCV:
         active: list=None, 
         n_interpolate: int=0,
         smooth: bool=True,
-        smooth_damping: float=0.5,
+        smooth_damping: float=0.1,
+        coordinates: str="Cartesian",
         metric: str="kabsch",
         cv_list: list=None,
         adaptive: bool=False,
@@ -35,28 +36,27 @@ class PathCV:
         if guess_path == None:
             raise ValueError(" >>> ERROR: You have to provide a guess path to the PathCV")
         self.guess_path = guess_path
+        self.smooth = smooth
+        self.smooth_damping = smooth_damping
         self.metric = metric
         self.cv_list = cv_list
         self.adaptive = adaptive
-        self.smooth = smooth
-        self.smooth_damping = smooth_damping
         self.update_interval = update_interval
         self.half_life = half_life
         self.verbose = verbose
         
-        if self.metric.lower() == "2d":
-            self.ndim = 2
-        else:
-            self.ndim = 3
+        self.ndim = 2 if self.metric.lower() == "2d" else 3
         
         # initialized path nodes
         self.path, self.nnodes, self.natoms = self._read_path(self.guess_path, metric=self.metric)
+        
         self.active = active if active is not None else [i for i in range(self.natoms)]
         self._reduce_path()
+        
         if n_interpolate > 0:
             self.interpolate(n_interpolate)
+        
         self._reparametrize_path(smooth=self.smooth)
-        #self._optimize_path(self.path)
         self.boundary_nodes = self._get_boundary()
 
         # accumulators for path update
@@ -88,6 +88,7 @@ class PathCV:
 
         # avoids numerical inconsistency by never reaching absolute zero
         if abs(term2) < 1.e-15:
+            term1 += 1.e-15
             term2 += 1.e-15
 
         if not distance:
@@ -179,12 +180,10 @@ class PathCV:
         xi = math.exp(-math.log(2.) / float(self.half_life))
 
         for j, _ in enumerate(self.path[1:-1], start=1):
-            #dist_ij = torch.linalg.norm(self.path[j] - self.path[j+1])
-            #w = max([0, 1 - torch.linalg.norm(self.path[j] - s) / dist_ij])
             dist_ij = self._rmsd(self.path[j], self.path[j+1])
             w = max([0, 1 - self._rmsd(self.path[j], s) / dist_ij])
             self.sum_weights[j] += xi * w
-            self.weighted_dists[j] += w * (z-s) #/ torch.linalg.norm(z - s)   # TODO: is s needed?
+            self.weighted_dists[j] += w * (z-s) 
         self.n_updates += 1
         
         # update path all self.update_interval steps
@@ -195,7 +194,6 @@ class PathCV:
                     new_path[j+1] += (self.weighted_dists[j+1] / self.sum_weights[j+1])
                     new_path[j+1] = new_path[j+1].detach()
 
-            #self._optimize_path(new_path)
             self.path = new_path.copy()
             self._reparametrize_path(smooth=self.smooth)
 
@@ -414,7 +412,7 @@ class PathCV:
         
         else:
             raise NotImplementedError(
-                "Available RMSD metrics are: `RMSD`, `kabsch`, `quaternion`, `abs_distance`, `internal`"
+                "Available RMSD metrics are: `RMSD`, `MSD`, `kabsch`, `internal`, `selected_internal`"
             )
 
         return rmsd.type(torch.float64)

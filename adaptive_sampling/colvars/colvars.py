@@ -472,7 +472,7 @@ class CV:
         """
         if not hasattr(self, 'pathcv'):
             from .path_cv import PathCV
-            self.pathcv = PathCV(**cv_dev[0])
+            self.pathcv = PathCV(**cv_dev)
         
         self.update_coords()
 
@@ -491,7 +491,7 @@ class CV:
     def tube(self, cv_dev: list, method: str="path"):
         if not hasattr(self, 'pathcv'):
             from .path_cv import PathCV
-            self.pathcv = PathCV(**cv_dev[0])
+            self.pathcv = PathCV(**cv_dev)
         
         self.update_coords()
 

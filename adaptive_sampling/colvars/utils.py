@@ -268,7 +268,7 @@ def cartesians_to_internals(
         # angle
         if i > 1:
             q12 = z[i-2] - z[i-1]
-            q23 = z[i-1] - z[i]
+            q23 = z[i-1] - atom1
 
             q12_n = torch.linalg.norm(q12)
             q23_n = torch.linalg.norm(q23)
@@ -282,7 +282,7 @@ def cartesians_to_internals(
         if i > 2:
             q12 = z[i-2] - z[i-3]
             q23 = z[i-1] - z[i-2]
-            q34 = z[i-0] - z[i-1]
+            q34 = atom1  - z[i-1]
 
             q23_u = q23 / torch.linalg.norm(q23)
 
