@@ -88,7 +88,7 @@ def get_rmsd(V: torch.tensor, W: torch.tensor):
 
 
 def get_msd(V: torch.tensor, W: torch.tensor):
-    """root-mean-square deviation"""
+    """mean-square deviation"""
     diff = V - W
     return torch.sum(diff * diff) / len(V)
 
@@ -98,6 +98,7 @@ def kabsch_rmsd(
     coords2: torch.tensor,
     indices: bool = None,
     return_coords: bool=False,
+    ndim: int=3,
 ) -> torch.tensor:
     """minimize rmsd between cartesian coordinates by kabsch algorithm
 
@@ -109,9 +110,8 @@ def kabsch_rmsd(
     Returns:
         rmsd: root-mean-squared deviation after fit
     """
-    n = len(coords1)
-    coords1 = torch.reshape(coords1, (int(n / 3), 3)).float()
-    coords2 = torch.reshape(coords2, (int(n / 3), 3)).float()
+    coords1 = coords1.view(int(torch.numel(coords1) / ndim), ndim).float()
+    coords2 = coords2.view(int(torch.numel(coords2) / ndim), ndim).float()
 
     if indices != None:
         coords1 = coords1[indices]
@@ -396,7 +396,12 @@ def convert_coordinate_system(
     active: list=None,
     coord_system: str="Cartesian", 
     ndim: int=3,
-):
+) -> torch.tensor:
+    """Convert XYZ tensor to selected coordinate system
+
+    Args:
+        coords: 
+    """
     if coord_system.lower() == "cartesian":
         z = coords.view(int(torch.numel(coords)/ndim), ndim)
         if active != None:

@@ -422,7 +422,6 @@ class CV:
         
         return float(self.cv)
 
-
     def rmsd(
         self,
         cv_def: Union[str, list],

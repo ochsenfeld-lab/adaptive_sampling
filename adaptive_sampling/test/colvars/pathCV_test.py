@@ -29,7 +29,7 @@ def test_init_cartesian(input, path, bounds):
     path = [path[i] / BOHR_to_ANGSTROM for i in range(len(path))]
     bounds = [bounds[i] / BOHR_to_ANGSTROM for i in range(len(bounds))]
     
-    cv = PathCV(guess_path=input, metric="RMSD", coordinates="Cartesian")
+    cv = PathCV(guess_path=input, metric="RMSD", coordinate_system="Cartesian")
     assert cv.nnodes == len(path)
     assert torch.allclose(cv.path[0], path[0], atol=1.e-1)
     assert torch.allclose(cv.path[1], path[1], atol=1.e-1)
@@ -57,7 +57,7 @@ def test_init_zmatrix(input, path, bounds):
     path = [path[i] / BOHR_to_ANGSTROM for i in range(len(path))]
     bounds = [bounds[i] / BOHR_to_ANGSTROM for i in range(len(bounds))]
     
-    cv = PathCV(guess_path=input, metric="RMSD", coordinates="ZMatrix")
+    cv = PathCV(guess_path=input, metric="RMSD", coordinate_system="ZMatrix")
 
     assert cv.nnodes == len(path)
     assert torch.allclose(cv.path[0], path[0], atol=1.e-1)
@@ -86,7 +86,7 @@ def test_init_cv_space(input, path, bounds):
     path = [path[i] / BOHR_to_ANGSTROM for i in range(len(path))]
     bounds = [bounds[i] / BOHR_to_ANGSTROM for i in range(len(bounds))]
     
-    cv = PathCV(guess_path=input, metric="RMSD", coordinates="cv_space", active=[[0,1]])
+    cv = PathCV(guess_path=input, metric="RMSD", coordinate_system="cv_space", active=[[0,1]],smooth_damping=0.0)
 
     assert cv.nnodes == len(path)
     assert torch.allclose(cv.path[0], path[0], atol=1.e-1)
@@ -99,7 +99,7 @@ def test_init_cv_space(input, path, bounds):
     "input, coords1, coords2, coords3", [
         (
             "resources/path.xyz", 
-            torch.tensor([1.0, 0.0, 0.0, 0.0, 0.0, 0.0]),
+            torch.tensor([0.5, 0.0, 0.0, 0.0, 0.0, 0.0]),
             torch.tensor([3.0, 0.0, 0.0, 0.0, 0.0, 0.0]),
             torch.tensor([5.0, 0.0, 0.0, 0.0, 0.0, 0.0]),
         )
@@ -111,12 +111,11 @@ def test_calculate_gpath(input, coords1, coords2, coords3):
     coords3 = coords3 / BOHR_to_ANGSTROM
 
     cv = PathCV(guess_path=input, metric="RMSD")
-
     cv1 = cv.calculate_gpath(coords1)
     cv2 = cv.calculate_gpath(coords2) 
     cv3 = cv.calculate_gpath(coords3)
     assert isclose(float(cv1), float(0.0), abs_tol=1e-1)
-    assert isclose(float(cv2), float(0.7), abs_tol=1e-1)
+    assert isclose(float(cv2), float(0.6), abs_tol=1e-1)
     assert isclose(float(cv3), float(1.0), abs_tol=1e-1)
 
 @pytest.mark.parametrize(
@@ -158,7 +157,7 @@ def test_projection_point_on_path(input, coords1, coords2):
     cv = PathCV(guess_path=input, metric="RMSD")
     rmsds = cv._get_distance_to_path(coords1)
     _, q = cv._get_closest_nodes(coords1, rmsds)
-    cv1 = cv._project_coords_on_path(coords1, q)
+    cv1 = cv._project_coords_on_line(coords1, q)
     assert torch.allclose(cv1, coords2)
 
 @pytest.mark.parametrize(
@@ -189,7 +188,7 @@ def test_internals(coords, zmatrix):
 def test_selected_rmsd(input, coords):
     coords /= BOHR_to_ANGSTROM
 
-    cv = PathCV(guess_path=input, metric="RMSD", coordinates="cv_space", active=[[0,1]])
+    cv = PathCV(guess_path=input, metric="RMSD", coordinate_system="cv_space", active=[[0,1]])
 
     rmsd0 = get_rmsd(coords, cv.path[0]) * BOHR_to_ANGSTROM
     rmsd1 = get_rmsd(coords, cv.path[1]) * BOHR_to_ANGSTROM

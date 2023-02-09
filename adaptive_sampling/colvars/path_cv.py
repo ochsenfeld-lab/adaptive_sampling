@@ -10,12 +10,17 @@ class PathCV:
 
     Args:
         guess_path: xyz file with initial path
-        active: list of indices of atoms included in PathCV
+        active: list of atom indices or CVs included in PathCV 
         n_interpolate: Number of nodes that are added between original nodes by linear interpolation
-        metric: Metric for calculation of distance of points (`RMSD`, `MSD`, `kabsch`, `quaternion`, `abs_distance`, `internal`, `selected_internal`)
-        adaptive: if path is adaptive
+        smooth_damping: float in range [0,1] (0: no smoothing, 1: linear interpolation between neighbours)
+        coordinate_system: coordinate system for calculation of Path CV
+            available: `cartesian`, `zmatrix` or `cv_space`
+        metric: Metric for calculation of distance of points
+            available: `RMSD`, `MSD`, `kabsch`, `KMSD`, `distance`
+        adaptive: if adaptive, path converges to averge CV density perpendicular to path
         update_interval: number of steps between update of adaptive path
-        half_life: number of steps til original path weights only half due to updates
+        half_life: number of steps til weight of original path is half due to updates
+        ndim: number of dimensions (2 for 2D test potentials, 3 else)
         verbose: if verbose information should be printed
     """
     def __init__(
@@ -23,25 +28,23 @@ class PathCV:
         guess_path: str=None, 
         active: list=None, 
         n_interpolate: int=0,
-        smooth: bool=True,
         smooth_damping: float=0.1,
-        coordinates: str="Cartesian",
-        metric: str="kabsch",
-        ndim: int=3,
-        cv_list: list=None,
+        reparam_steps: int=1,
+        coordinate_system: str="Cartesian",
+        metric: str="Kabsch",
         adaptive: bool=False,
         update_interval: int=100,
         half_life: float=100, 
+        ndim: int=3,
         verbose: bool=False,
     ):  
         if guess_path == None:
             raise ValueError(" >>> ERROR: You have to provide a guess path to the PathCV")
         self.guess_path = guess_path
-        self.smooth = smooth
         self.smooth_damping = smooth_damping
-        self.coordinates = coordinates
+        self.reparam_steps = reparam_steps
+        self.coordinates = coordinate_system
         self.metric = metric
-        self.cv_list = cv_list
         self.adaptive = adaptive
         self.update_interval = update_interval
         self.half_life = half_life
@@ -56,11 +59,9 @@ class PathCV:
         
         self.active = active 
         self._reduce_path()
+        self._interpolate(n_interpolate)
         
-        if n_interpolate > 0:
-            self.interpolate(n_interpolate)
-        
-        self._reparametrize_path(smooth=self.smooth)
+        self._reparametrize_path(max_step=self.reparam_steps)
         self.boundary_nodes = self._get_boundary(self.path)
 
         # accumulators for path update
@@ -72,7 +73,7 @@ class PathCV:
         if self.verbose:
             print(f" >>> INFO: Initialization of PathCV with {self.nnodes} nodes finished.")
 
-    def calculate_path(self, coords: torch.tensor, distance: bool=False):
+    def calculate_path(self, coords: torch.tensor, distance: bool=False) -> torch.tensor:
         """calculate PathCV according to
         Branduardi, et al., J. Chem. Phys. (2007): https://doi.org/10.1063/1.2432340
         """
@@ -96,7 +97,6 @@ class PathCV:
 
         # avoids numerical inconsistency by never reaching absolute zero
         if abs(term2) < 1.e-15:
-            term1 += 1.e-15
             term2 += 1.e-15
 
         if not distance:
@@ -112,7 +112,7 @@ class PathCV:
 
         return self.path_cv
 
-    def calculate_gpath(self, coords: torch.tensor):
+    def calculate_gpath(self, coords: torch.tensor) -> torch.tensor:
         """Calculate geometric PathCV according to
         Leines et al., Phys. Ref. Lett. (2012): https://doi.org/10.1103/PhysRevLett.109.020601
         
@@ -160,7 +160,7 @@ class PathCV:
         
         return self.path_cv
 
-    def tube_potential(self, coords: torch.tensor) -> torch.tensor:
+    def path_distance(self, coords: torch.tensor) -> torch.tensor:
         """Constrain dynamics perpendicular to path with tube like potential
 
         Args:
@@ -174,13 +174,11 @@ class PathCV:
         )
         rmsds = self._get_distance_to_path(z)
         _, q = self._get_closest_nodes(z, rmsds)
-        s = self._project_coords_on_path(z, q)
-        vec = z - s
-        norm_vec = torch.linalg.norm(vec) 
+        norm_vec = torch.linalg.norm(z - self._project_coords_on_line(z, q)) 
         return norm_vec
 
     def update_path(self, z: torch.tensor, q: list):
-        """update path nodes to ensure convergence to MFEP
+        """update path nodes to ensure smooth convergence to the MFEP
 
         Args:
             z: reduced coords 
@@ -188,7 +186,7 @@ class PathCV:
 
         see: Ortiz et al., J. Chem. Phys. (2018): https://doi.org/10.1063/1.5027392
         """
-        s = self._project_coords_on_path(z, q)
+        s = self._project_coords_on_line(z, q)
         w = torch.zeros(self.nnodes)
 
         xi = math.exp(-math.log(2.) / float(self.half_life))
@@ -200,7 +198,7 @@ class PathCV:
             self.weighted_dists[j] += w * (z-s) 
         self.n_updates += 1
         
-        # update path all self.update_interval steps
+        # update path all `self.update_interval` steps
         if self.n_updates == self.update_interval:
             new_path = self.path.copy()
             for j in range(self.nnodes-1):
@@ -209,7 +207,7 @@ class PathCV:
                     new_path[j+1] = new_path[j+1].detach()
 
             self.path = new_path.copy()
-            self._reparametrize_path(smooth=self.smooth)
+            self._reparametrize_path(max_step=self.reparam_steps)
 
             self.n_updates = 0 
             self.sum_weights = torch.zeros_like(self.sum_weights)
@@ -217,13 +215,11 @@ class PathCV:
 
     def _reparametrize_path(
         self, 
-        tol: float=0.01, 
-        max_step: int=100,
+        tol: float=0.1, 
+        max_step: int=10,
         smooth: bool=True,
     ):
-        """Ensure equidistant nodes by iteratively placing middle nodes equidistant between neighbour nodes,
-        while keeping end nodes fixed.
-        Smoothing of path can be ensured by projecting position of middle node on line spanned by neighbour nodes
+        """Reparametrization to ensure equidistant path nodes and smoothing of path to remove kinks
 
         see: Maragliano et al., J. Chem. Phys. (2006): https://doi.org/10.1063/1.2212942
 
@@ -231,7 +227,6 @@ class PathCV:
             tol: tolerance of path distance
             max_step: maximum number of iterations
             smooth: if path should be smoothed to remove kinks
-            s: damping factor for smoothing in range(0,1)
         """        
         step = 0
         while step < max_step:
@@ -239,28 +234,26 @@ class PathCV:
             
             if smooth:
                 self.path = self._smooth_string(self.path, s=self.smooth_damping)
-            
-            l_ij = []
-            for i, coords in enumerate(self.path[1:], start=1):
-                l_ij.append(torch.linalg.norm(coords - self.path[i-1]))
 
-            L = sum(l_ij) / (self.nnodes-1)
+            # pair-wise distance
+            L_k = []            
+            for k, coords in enumerate(self.path[1:], start=1):
+                L_k.append(torch.linalg.norm(coords - self.path[k-1]))
 
+            # length of one equidistant line segment
+            if step == 1:
+                l_segment = sum(L_k) / float(self.nnodes-1)
+
+            # redistribute nodes 
             path_new = [self.path[0]]
             for i, coords in enumerate(self.path[1:-1]):
-                s_i = float(i+1) * L
-                update = s_i - sum(l_ij[:i])
-
-                grad = coords - self.path[i]
-                grad /= torch.linalg.norm(grad)
-
-                path_new.append(self.path[i] + update * grad)
+                vec = coords - self.path[i]
+                vec /= torch.linalg.norm(vec)
+                path_new.append(self.path[i] + l_segment * vec)
             path_new.append(self.path[-1])
             
             self.path = path_new.copy()
-
-            l_ij = torch.tensor(l_ij)
-            crit = torch.max(torch.abs(l_ij[1:]-l_ij[:1]))
+            crit = max([abs(l_segment-L_k[i]) for i in range(self.nnodes-1)])
             if crit < tol:
                 break
 
@@ -273,7 +266,7 @@ class PathCV:
         self.boundary_nodes = self._get_boundary(self.path)
 
     @staticmethod
-    def _smooth_string(path: list, s: float=0.5):
+    def _smooth_string(path: list, s: float=0.0):
         """Smooth string of nodes 
 
         Args:
@@ -301,19 +294,19 @@ class PathCV:
         return [lower_bound, upper_bound]
 
     def _get_distance_to_path(self, z: torch.tensor) -> list:
-        """Calculates RMSD according to chosen distance metric
+        """Calculates distance according to chosen metric
 
         Args:
             z: reduced coords 
 
         Return:
-            rmsds: list of RMSDs of z to every node of path
+            rmsds: list of distances of z to every node of path
         """
-        rmsds = []
+        d = []
         for i in range(self.nnodes):
-            rmsds.append(self.get_distance(z, self.path[i], metric=self.metric))
+            d.append(self.get_distance(z, self.path[i], metric=self.metric))
             self.path[i] = self.path[i].detach()
-        return rmsds
+        return d
 
     @staticmethod
     def get_distance(
@@ -321,17 +314,19 @@ class PathCV:
         reference: torch.tensor,
         metric: str="RMSD"    
     ) -> torch.tensor:
-        """Get distance between individual coordinates and reference calculated by `metric`
+        """Get distance between coordinates and reference calculated by `metric`
+        
         Available metrics are: 
             `RMSD`: Root mean square deviation
             `MSD`: Mean square deviation
-            `kabsch`: Root mean square deviation of optimally rotated and translated coords
-            `KMSD`: Mean square deviation of optimally rotated and translated coords
-            `distance`: Absolute distance
+            `kabsch`: Root mean square deviation of optimally fitted coords
+            `KMSD`: Mean square deviation of optimally fitted coords
+            `distance`: Absolute distance 
 
         Args:
             coords: coordinates 
             reference: coordinates of reference
+            metric: distance metric
 
         Returns:
             d: distance between coords and reference in `self.metric`
@@ -358,17 +353,17 @@ class PathCV:
         
         else:
             raise NotImplementedError(
-                "Available distance metrics are: `RMSD`, `MSD`, `kabsch`, `KMSD`, `distance`"
+                " >>> INFO: Available distance metrics in PathCV: `RMSD`, `MSD`, `kabsch`, `KMSD`, `distance`"
             )
 
         return d.type(torch.float64)
 
-    def _project_coords_on_path(self, z: torch.tensor, q: list) -> torch.tensor:
-        """
+    def _project_coords_on_line(self, z: torch.tensor, q: list) -> torch.tensor:
+        """Projection of coords on line
 
         Args:
             z: reduced coords 
-            q: coords of two neighbour nodes of z
+            q: coords of two nodes that span line on which to project
 
         Returns:
             s: projection of coords on path 
@@ -381,6 +376,7 @@ class PathCV:
         q1 = q[1].view(ncoords)
         ap = z - q0
         ab = q1 - q0
+
         return (q0 + torch.matmul(ap,ab) / torch.matmul(ab,ab) * ab).view(shape_z)
 
     def _get_closest_nodes(self, z: torch.tensor, rmsds: list) -> tuple:
@@ -415,33 +411,40 @@ class PathCV:
 
         return [closest_idx[0]-1, closest_idx[1]-1], closest_coords
 
-    def interpolate(self, n_interpolate):
-        """Add nodes by linear interpolation
+    def _interpolate(self, n_interpolate):
+        """Add nodes by linear interpolation or remove nodes by slicing
         
         Args:
             n_interpolate: Number of interpolated nodes between two original nodes
         """
-        path_new = []
-        for i in range(self.nnodes - 1):
-            a = self.path[i]
-            b = self.path[i + 1]
-            r = b - a
-            d = torch.linalg.norm(r)
-            unit_vec = r / d
-            step = d / (n_interpolate+1)
+        if n_interpolate > 0:
+            # fill path with n_interplate nodes per pair
+            path_new = []
+            for i in range(self.nnodes - 1):
+                a = self.path[i]
+                b = self.path[i + 1]
+                r = b - a
+                d = torch.linalg.norm(r)
+                unit_vec = r / d
+                step = d / (n_interpolate+1)
 
-            path_new.append(a)
-            for j in range(1, n_interpolate+1):
-                # linear interpolation
-                p = a + unit_vec * j * step
-                path_new.append(p)
+                path_new.append(a)
+                for j in range(1, n_interpolate+1):
+                    # linear interpolation
+                    p = a + unit_vec * j * step
+                    path_new.append(p)
 
-        path_new.append(b)
-        self.path = path_new.copy() 
+            path_new.append(b)
+            self.path = path_new.copy() 
+
+        elif n_interpolate < 0:
+            # slice path to keep only every n_interpolate node 
+            self.path = self.path[::abs(n_interpolate)]
+        
         self.nnodes = len(self.path)
 
     def _reduce_path(self):
-        """reduce coordinates in path to only active atoms
+        """reduce path nodes to only active coordinates
         """
         path_reduced = []
         for c in self.path:
@@ -468,7 +471,7 @@ class PathCV:
             import mdtraj
             dcd = mdtraj.formats.DCDTrajectoryFile(filename, 'w', force_overwrite=True)
             for coords in self.path:
-                dcd.write(BOHR_to_ANGSTROM * coords.detach().numpy().reshape(len(self.active), 3))
+                dcd.write(BOHR_to_ANGSTROM * coords.view(int(torch.numel(coords)/3),3).detach().numpy())
 
 
 
