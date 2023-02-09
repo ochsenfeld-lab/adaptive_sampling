@@ -96,27 +96,35 @@ def test_init_cv_space(input, path, bounds):
     assert torch.allclose(cv.boundary_nodes[1], bounds[1], atol=1.e-1)
 
 @pytest.mark.parametrize(
-    "input, coords1, coords2, coords3", [
+    "input, coords1, coords2, coords3, coords4, coords5", [
         (
             "resources/path.xyz", 
-            torch.tensor([0.5, 0.0, 0.0, 0.0, 0.0, 0.0]),
+            torch.tensor([1.0, 0.0, 0.0, 0.0, 0.0, 0.0]),
+            torch.tensor([2.0, 0.0, 0.0, 0.0, 0.0, 0.0]),
             torch.tensor([3.0, 0.0, 0.0, 0.0, 0.0, 0.0]),
+            torch.tensor([4.0, 0.0, 0.0, 0.0, 0.0, 0.0]),            
             torch.tensor([5.0, 0.0, 0.0, 0.0, 0.0, 0.0]),
         )
     ]
 )
-def test_calculate_gpath(input, coords1, coords2, coords3):
+def test_calculate_gpath(input, coords1, coords2, coords3, coords4, coords5):
     coords1 = coords1 / BOHR_to_ANGSTROM
     coords2 = coords2 / BOHR_to_ANGSTROM 
     coords3 = coords3 / BOHR_to_ANGSTROM
+    coords4 = coords4 / BOHR_to_ANGSTROM
+    coords5 = coords5 / BOHR_to_ANGSTROM
 
-    cv = PathCV(guess_path=input, metric="RMSD")
+    cv = PathCV(guess_path=input, metric="RMSD", coordinate_system="cv_space", active=[[0,1]])
     cv1 = cv.calculate_gpath(coords1)
     cv2 = cv.calculate_gpath(coords2) 
     cv3 = cv.calculate_gpath(coords3)
-    assert isclose(float(cv1), float(0.0), abs_tol=1e-1)
-    assert isclose(float(cv2), float(0.6), abs_tol=1e-1)
-    assert isclose(float(cv3), float(1.0), abs_tol=1e-1)
+    cv4 = cv.calculate_gpath(coords4)
+    cv5 = cv.calculate_gpath(coords5)
+    assert isclose(float(cv1), float(0.0), abs_tol=1e-2)
+    assert isclose(float(cv2), float(0.25), abs_tol=1e-2)
+    assert isclose(float(cv3), float(0.5), abs_tol=1e-2)
+    assert isclose(float(cv4), float(0.75), abs_tol=1e-2)
+    assert isclose(float(cv5), float(1.0), abs_tol=1e-2)
 
 @pytest.mark.parametrize(
     "input, coords1, coords2, coords3", [
