@@ -31,7 +31,7 @@ class PathCV:
         smooth_damping: float=0.1,
         reparam_steps: int=1,
         coordinate_system: str="Cartesian",
-        metric: str="Kabsch",
+        metric: str="RMSD",
         adaptive: bool=False,
         update_interval: int=100,
         half_life: float=100, 
@@ -141,10 +141,10 @@ class PathCV:
         isign = 1 if idx_nodemin[0] - idx_nodemin[1] > 0 else -1
         
         # TODO: can idx_nodemin[0] be one of the boundry nodes?
-        #if idx_nodemin[0] == 0:
-        #    idx_nodemin[0] += 1
-        #elif idx_nodemin[0] == self.nnodes+1:
-        #    idx_nodemin[0] -= 1
+        if idx_nodemin[0] == 0:
+            idx_nodemin[0] += 1
+        elif idx_nodemin[0] == self.nnodes+1:
+            idx_nodemin[0] -= 1
 
         idx_nodemin[1] = idx_nodemin[0] - isign
         idx_nodemin.append(idx_nodemin[0] + isign)
@@ -152,12 +152,9 @@ class PathCV:
         # compute some vectors
         v1 = self.path[idx_nodemin[0]] - z
         v3 = z - self.path[idx_nodemin[1]] 
-        if (idx_nodemin[2] < 0) or (idx_nodemin[2] >= len(self.path)):
-            v2 = self.path[idx_nodemin[0]] - self.path[idx_nodemin[1]]
-        else:
-            v2 = self.path[idx_nodemin[2]] - self.path[idx_nodemin[0]]
+        v2 = self.path[idx_nodemin[2]] - self.path[idx_nodemin[0]]
 
-        # actual computation of path cv
+        # get tangential `s` component of path cv (progress along path)
         v1 = v1.view(torch.numel(v1))
         v2 = v2.view(torch.numel(v2))
         v3 = v3.view(torch.numel(v3))
@@ -168,19 +165,20 @@ class PathCV:
         v3v3 = torch.matmul(v3, v3)
 
         root = torch.sqrt(torch.square(v1v2) - v2v2 * (v1v1 - v3v3))
-        dx = 0.5 * (( root - v1v2) / v2v2 - 1.)
+        dx = 0.5 * ((root - v1v2) / v2v2 - 1.)
         self.path_cv = ((idx_nodemin[0]-1) + isign * dx) / (self.nnodes-1)
 
-        # get `z` component (distance to path)
+        # get perpendicular `z` component (distance to path)
         v1 = z - self.path[idx_nodemin[0]] - dx * (self.path[idx_nodemin[0]] - idx_nodemin[1]) 
         self.path_z = torch.linalg.norm(v1)
         
         # remove boundary nodes from `self.path`
         del self.path[0]
         del self.path[-1]
-        
+
+        # accumulate average distance from path for path update
         if self.adaptive:
-            # accumulate average distance from path for path update
+
             w2 = -1. * dx
             w1 = 1. + dx
             if w1 > 1:
@@ -240,7 +238,7 @@ class PathCV:
         self.n_updates += 1
         if self.n_updates == self.update_interval:
             new_path = self.path.copy()
-            for j in range(self.nnodes-1):
+            for j in range(self.nnodes-2):
                 if self.weights[j+1] > 0:
                     new_path[j+1] += (self.avg_dists[j+1] / self.weights[j+1])
                     new_path[j+1] = new_path[j+1].detach()
@@ -258,9 +256,6 @@ class PathCV:
         max_step: int=10,
         smooth: bool=True,
     ):
-        if smooth:
-            self.path = self._smooth_string(self.path, s=self.smooth_damping)
- 
         # get length of path
         L, sumlen = [0], [0]
         for i, coords in enumerate(self.path[1:], start=1):
@@ -277,6 +272,9 @@ class PathCV:
                 sfrac.append(i * sumlen[-1] / float(self.nnodes-1))
 
             # update node positions
+            if smooth:
+                self.path = self._smooth_string(self.path, s=self.smooth_damping)
+
             path_new = [self.path[0]]
             for i, _ in enumerate(self.path[1:-1], start=1):
                 k = i
@@ -289,11 +287,10 @@ class PathCV:
                 vec = self.path[k+1] - self.path[k]
                 vec /= torch.linalg.norm(vec)
                 path_new.append(self.path[k] + dr * vec)
-
             path_new.append(self.path[-1])
             self.path = path_new.copy()
 
-            # get actual length of path
+            # get new length of path
             L, sumlen = [0], [0]
             for i, coords in enumerate(self.path[1:], start=1):
                 L.append(torch.linalg.norm(coords - self.path[i-1]))
@@ -305,9 +302,9 @@ class PathCV:
         if self.verbose:
             crit = abs(sumlen[-1]-prevsum)
             if crit < tol:
-                print(f" >>> INFO: Reparametrization of Path converged in {iter} steps. Max(delta d_ij)={crit:.3f}.")
+                print(f" >>> INFO: Reparametrization of Path converged in {iter} steps. Max(delta)={crit:.3f}.")
             else:
-                print(f" >>> WARNING: Reparametrization of Path not converged in {max_step} steps. Max(delta d_ij)={crit:.3f}.")        
+                print(f" >>> WARNING: Reparametrization of Path not converged in {max_step} steps. Max(delta)={crit:.3f}.")        
 
     @staticmethod
     def _smooth_string(path: list, s: float=0.0):
