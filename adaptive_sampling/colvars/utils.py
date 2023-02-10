@@ -34,19 +34,25 @@ def read_path(
     filename: str, 
     ndim: int,
 ) -> tuple:
-    """Read cartesian coordinates of trajectory from file (*.xyz)
+    """Read coordinates of path nodes from file (*.xyz, *.npy)
         
     Args:
-        xyz_name (str): file-name of xyz-file
+        filename 
         
     Returns:
-        traj: list of torch arrays containing xyz coordinates of nodes
+        traj: list of torch arrays containing coordinates of nodes
         nnodes: number of nodes in path
-        natoms: number of atoms of system
     """
     if filename[-3:] == "dcd":
-        # TODO: Read guess path from dcd trajectory file
+        # TODO: Read path from dcd file
         pass
+
+    elif filename[-3:] == "npy":
+        import numpy
+        traj = numpy.load(filename)
+        traj = traj.tolist()
+        traj = [torch.from_numpy(t) for t in traj]
+
     else:
         with open(filename, "r") as xyzf:
             traj = []
@@ -78,7 +84,7 @@ def read_path(
             mol = torch.FloatTensor(list(mol))
             traj.append(mol)
     
-    return traj, len(traj), n_atoms
+    return traj, len(traj)
 
 
 def get_rmsd(V: torch.tensor, W: torch.tensor):

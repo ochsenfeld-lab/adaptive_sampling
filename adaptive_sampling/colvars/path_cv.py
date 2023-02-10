@@ -52,7 +52,7 @@ class PathCV:
         self.ndim = ndim
         
         # initialized path nodes
-        self.path, self.nnodes, _ = read_path(
+        self.path, self.nnodes = read_path(
             self.guess_path, 
             ndim=self.ndim,
         )
@@ -127,50 +127,58 @@ class PathCV:
         z = convert_coordinate_system(
             coords, self.active, coord_system=self.coordinates, ndim=self.ndim
         )
-        rmsds = self._get_distance_to_path(z)
-        
-        index_nearest, coords_nearest = self._get_closest_nodes(z, rmsds)
-        
-        # calculate projection of coords on path
-        v1 = coords_nearest[0] - z       
+        dists = self._get_distance_to_path(z)
+        idx_nodemin, coords_nodemin = self._get_closest_nodes(z, dists)
 
-        if index_nearest[0] > 0:
-            v2 = z - self.path[index_nearest[0]-1] 
-        else:
-            v2 = z - self.boundary_nodes[0] 
+        # add boundary nodes to `self.path`
+        self.path.insert(0, self.boundary_nodes[0])
+        self.path.append(self.boundary_nodes[1])
+        idx_nodemin = [i+1 for i in idx_nodemin]
+
+        isign = idx_nodemin[0] - idx_nodemin[1]
+        if isign > 0:
+            isign = 1
+        elif isign < 0:
+            isign = -1
         
-        if index_nearest[0] < self.nnodes-1:
-            v3 = self.path[index_nearest[0]+1] - coords_nearest[0]
-        else:
-            v3 = self.boundary_nodes[1] - coords_nearest[0]
+        # TODO: can idx_nodemin[0] be one of the boundry nodes
+        #if idx_nodemin[0] == 0:
+        #    idx_nodemin[0] += 1
+        #elif idx_nodemin[0] ==self.nnodes+1:
+        #    idx_nodemin[0] -= 1
+
+        idx_nodemin[1] = idx_nodemin[0] - isign
+        idx_nodemin.append(idx_nodemin[0] + isign)
         
+        # compute some vectors
+        v1 = self.path[idx_nodemin[0]] - z
+        v3 = z - self.path[idx_nodemin[1]] 
+        if (idx_nodemin[2] < 0) or (idx_nodemin[2] >= len(self.path)):
+            v2 = self.path[idx_nodemin[0]] - self.path[idx_nodemin[1]]
+        else:
+            v2 = self.path[idx_nodemin[2]] - self.path[idx_nodemin[0]]
+        
+        # remove boundary nodes from `self.path`
+        del self.path[0]
+        del self.path[-1]
+
+        # actual computation of path cv
         v1 = v1.view(torch.numel(v1))
         v2 = v2.view(torch.numel(v2))
         v3 = v3.view(torch.numel(v3))
 
-        M = float(self.nnodes-1)
-        v1_sqnorm = torch.square(torch.linalg.norm(v1))
-        v2_sqnorm = torch.square(torch.linalg.norm(v2))
-        v3_sqnorm = torch.square(torch.linalg.norm(v3)) 
-        v1v3      = torch.matmul(v1, v3)
+        v1v1 = torch.matmul(v1, v1)
+        v1v2 = torch.matmul(v1, v2)
+        v2v2 = torch.matmul(v2, v2) 
+        v3v3 = torch.matmul(v3, v3)
 
-        f = torch.sqrt(torch.square(v1v3) - v3_sqnorm*(v1_sqnorm - v2_sqnorm)) - v1v3
-        f /= v3_sqnorm
-
-        if not distance:
-            # progress along path
-            self.path_cv = index_nearest[0] / M + (f-1) / (2. * M)
-        else:
-            # distance perpendicular to path
-            if index_nearest[0] > 0:
-                v4 = coords_nearest[0] - self.path[index_nearest[0]-1] 
-            else:
-                v4 = coords_nearest[0] - self.boundary_nodes[0] 
-            self.path_cv = torch.linalg.norm(v1 + 0.5 * f * v4)
+        root = torch.sqrt(torch.square(v1v2) - v2v2 * (v1v1 - v3v3))
+        dx = 0.5 * (( root - v1v2) / v2v2 - 1.)
+        self.path_cv = ((idx_nodemin[0]-1) + isign * dx) / (self.nnodes-1)
 
         if self.adaptive:
-            self.update_path(z, coords_nearest)
-        
+            self.update_path(z, coords_nodemin)
+
         return self.path_cv
 
     def path_distance(self, coords: torch.tensor) -> torch.tensor:
@@ -225,67 +233,67 @@ class PathCV:
             self.sum_weights = torch.zeros_like(self.sum_weights)
             self.weighted_dists = [torch.zeros_like(self.path[i]) for i in range(self.nnodes)]
 
+
     def _reparametrize_path(
         self, 
         tol: float=0.1, 
         max_step: int=10,
         smooth: bool=True,
     ):
-        """Reparametrization to ensure equidistant path nodes and smoothing of path to remove kinks
+        if smooth:
+            self.path = self._smooth_string(self.path, s=self.smooth_damping)
+ 
+        # get length of path
+        L = [0]
+        sumlen = [0]
+        for i, coords in enumerate(self.path[1:], start=1):
+            L.append(torch.linalg.norm(coords - self.path[i-1]))
+            sumlen.append(sumlen[-1] + L[-1])
 
-        see: Maragliano et al., J. Chem. Phys. (2006): https://doi.org/10.1063/1.2212942
+        prevsum, iter = 0, 0
+        while abs(sumlen[-1]-prevsum) > tol and iter <= max_step:
+            prevsum = sumlen[-1]
 
-        Args:
-            tol: tolerance of path distance
-            max_step: maximum number of iterations
-            smooth: if path should be smoothed to remove kinks
-        """
-        step = 0
-        while step < max_step:
-            step += 1
-            
-            if smooth:
-                self.path = self._smooth_string(self.path, s=self.smooth_damping)
-            
-            # get length of path
-            l_ij = []
-            for i, coords in enumerate(self.path[1:], start=1):
-                l_ij.append(torch.linalg.norm(coords - self.path[i-1]))
-            
-            L = sum(l_ij) / (self.nnodes-1)
-           
-            crit = max([abs(L-l) for l in l_ij])
-            if crit < tol:
-                break  
+            # cumulative target distance between nodes
+            sfrac = []
+            for i in range(self.nnodes):
+                sfrac.append(i * sumlen[-1] / float(self.nnodes-1))
 
-            # reparametrization
+            # update node positions
             path_new = [self.path[0]]
-            for i, coords in enumerate(self.path[1:-1]):
-                s_m = float(i+1) * L
-                grad = coords - self.path[i]
-                grad /= torch.linalg.norm(grad)
-                path_new.append(self.path[i] + (s_m - sum(l_ij[:i])) * grad)
+            for i, _ in enumerate(self.path[1:-1], start=1):
+                k = i
+
+                # TODO: this is how the original implementation does it, but it seems unstable?
+                #while not ((sumlen[k] < sfrac[i+1]) and (sumlen[k+1] >= sfrac[i+1])):
+                #    k += 1
+                #    if i >= self.nnodes:
+                #        raise ValueError(" >>> ERROR: Reparametrization of path failed!")
+
+                dr = sfrac[i] - sumlen[k] 
+                vec = self.path[k+1] - self.path[k]
+                vec /= torch.linalg.norm(vec)
+                path_new.append(self.path[k] + dr * vec)
+
             path_new.append(self.path[-1])
             self.path = path_new.copy()
-        
-        # final maximum deviation from equidistance
-        l_ij = []
-        for i, coords in enumerate(self.path[1:], start=1):
-            l_ij.append(torch.linalg.norm(coords - self.path[i-1])) 
-        L = sum(l_ij) / (self.nnodes-1)
-        crit = max([abs(L-l) for l in l_ij])
 
-        if self.verbose:
-            if crit < tol:
-                print(
-                    f" >>> INFO: Reparametrization of Path converged in {step} steps. Max(delta d_ij)={crit:.3f}."
-                )
-            else:
-                print(
-                    f" >>> WARNING: Reparametrization of Path not converged in {max_step} steps. Max(delta d_ij)={crit:.3f}."
-                )
+            # get actual length of path
+            l = [0]
+            sumlen = [0]
+            for i, coords in enumerate(self.path[1:], start=1):
+                l.append(torch.linalg.norm(coords - self.path[i-1]))
+                sumlen.append(sumlen[-1] + l[-1])
+            iter += 1
 
         self.boundary_nodes = self._get_boundary(self.path)
+        
+        if self.verbose:
+            crit = abs(sumlen[-1]-prevsum)
+            if crit < tol:
+                print(f" >>> INFO: Reparametrization of Path converged in {iter} steps. Max(delta d_ij)={crit:.3f}.")
+            else:
+                print(f" >>> WARNING: Reparametrization of Path not converged in {max_step} steps. Max(delta d_ij)={crit:.3f}.")        
 
     @staticmethod
     def _smooth_string(path: list, s: float=0.0):
@@ -401,7 +409,7 @@ class PathCV:
 
         return (q0 + torch.matmul(ap,ab) / torch.matmul(ab,ab) * ab).view(shape_z)
 
-    def _get_closest_nodes(self, z: torch.tensor, rmsds: list) -> tuple:
+    def _get_closest_nodes(self, z: torch.tensor, dists: list) -> tuple:
         """get two closest nodes of path
 
         Args:
@@ -412,28 +420,35 @@ class PathCV:
             closest_index: list with indices of two closest nodes to z  
             closest_coords: list with coordinates of two closest nodes to z
         """
-        rmsds.insert(0, self.get_distance(z, self.boundary_nodes[0], metric=self.metric))
-        rmsds.append(self.get_distance(z, self.boundary_nodes[1], metric=self.metric))
-        closest_idx = sorted(range(len(rmsds)), key=rmsds.__getitem__)
+        dists.insert(0, self.get_distance(z, self.boundary_nodes[0], metric=self.metric))
+        dists.append(self.get_distance(z, self.boundary_nodes[1], metric=self.metric))
         
-        # find closest neighbour of closest node
-        for neighbour_idx in closest_idx[1:]:
-            if abs(neighbour_idx - closest_idx[0]) == 1:
-                break
-        
-        path_new = self.path.copy()
-        path_new.insert(0, self.boundary_nodes[0])
-        path_new.append(self.boundary_nodes[1])
-        closest_coords = [path_new[closest_idx[0]], path_new[neighbour_idx]]
-        
+        distmin1, idxmin1 = 99999, 0
+        distmin2, idxmin2 = 99999, 1
+        for i, dist in enumerate(dists):
+            if dist < distmin1:
+                distmin2 = distmin1
+                idxmin2 = idxmin1
+                distmin1 = dist
+                idxmin1 = i
+            elif (dist < distmin2):
+                distmin2 = dist
+                idxmin2 = i
+
+        self.path.insert(0, self.boundary_nodes[0])
+        self.path.append(self.boundary_nodes[1])
+        closest_coords = [self.path[idxmin1], self.path[idxmin2]]
+        del self.path[0]
+        del self.path[-1]
+
         if self.verbose:
             # if path gets highly irregualar this can fail, so print warning
-            if abs(closest_idx[0] - closest_idx[1]) != 1:
+            if abs(idxmin1 - idxmin2) != 1:
                 print(
-                    f" >>> WARNING: Two closest nodes of PathCV ({closest_idx[0]-1, closest_idx[1]-1}) are not neighbours!"
+                    f" >>> WARNING: Two closest nodes of PathCV ({idxmin1-1,idxmin2-1}) are not neighbours!"
                 ) 
-
-        return [closest_idx[0]-1, closest_idx[1]-1], closest_coords
+        
+        return [idxmin1-1, idxmin2-1], closest_coords
 
     def _interpolate(self, n_interpolate):
         """Add nodes by linear interpolation or remove nodes by slicing
