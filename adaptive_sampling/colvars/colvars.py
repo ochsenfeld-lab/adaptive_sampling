@@ -520,7 +520,7 @@ class CV:
             self.type = None
         elif cv.lower() == "path_z":
             xi = self.path_z(atoms)
-            self.type = "distance"
+            self.type = None
         else:
             print(" >>> Error in CV: Unknown Collective Variable")
             sys.exit(1)
