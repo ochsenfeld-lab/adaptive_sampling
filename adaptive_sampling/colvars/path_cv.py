@@ -12,7 +12,7 @@ class PathCV:
         guess_path: xyz file with initial path
         active: list of atom indices or CVs included in PathCV 
         n_interpolate: Number of nodes that are added between original nodes by linear interpolation
-        smooth_damping: float in range [0,1] (0: no smoothing, 1: linear interpolation between neighbours)
+        smooth_damping: controls smoothing of path (0: no smoothing, 1: linear interpolation between neighbours)
         coordinate_system: coordinate system for calculation of Path CV
             available: `cartesian`, `zmatrix` or `cv_space`
         metric: Metric for calculation of distance of points
@@ -20,6 +20,7 @@ class PathCV:
         adaptive: if adaptive, path converges to averge CV density perpendicular to path
         update_interval: number of steps between update of adaptive path
         half_life: number of steps til weight of original path is half due to updates
+        requires_z: if distance to path should be calculated
         ndim: number of dimensions (2 for 2D test potentials, 3 else)
         verbose: if verbose information should be printed
     """
@@ -28,13 +29,14 @@ class PathCV:
         guess_path: str=None, 
         active: list=None, 
         n_interpolate: int=0,
-        smooth_damping: float=0.1,
+        smooth_damping: float=0.0,
         reparam_steps: int=1,
         coordinate_system: str="Cartesian",
         metric: str="RMSD",
         adaptive: bool=False,
         update_interval: int=100,
         half_life: float=100, 
+        requires_z: bool=False,
         ndim: int=3,
         verbose: bool=False,
     ):  
@@ -50,6 +52,7 @@ class PathCV:
         self.half_life = half_life
         self.verbose = verbose
         self.ndim = ndim
+        self.requires_z = requires_z
         
         # initialized path nodes
         self.path, self.nnodes = read_path(
@@ -111,7 +114,12 @@ class PathCV:
         self.path_cv = (1. / (self.nnodes-1)) * (term1 / term2)
         
         # distance from path
-        self.path_z = -1. / la * torch.log(term2)
+        if self.requires_z:
+            self.path_z = -1. / la * torch.log(term2)
+            self.grad_z = torch.autograd.grad(
+                self.path_z, coords, allow_unused=True, retain_graph=True,
+            )[0]
+            self.grad_z = self.grad_z.detach().numpy()
 
         if self.adaptive:
             _, coords_nearest = self._get_closest_nodes(z, rmsds)
@@ -154,7 +162,7 @@ class PathCV:
         v3 = z - self.path[idx_nodemin[1]] 
         v2 = self.path[idx_nodemin[2]] - self.path[idx_nodemin[0]]
 
-        # get tangential `s` component of path cv (progress along path)
+        # get tangential `s` component (progress along path)
         v1 = v1.view(torch.numel(v1))
         v2 = v2.view(torch.numel(v2))
         v3 = v3.view(torch.numel(v3))
@@ -169,9 +177,14 @@ class PathCV:
         self.path_cv = ((idx_nodemin[0]-1) + isign * dx) / (self.nnodes-1)
 
         # get perpendicular `z` component (distance to path)
-        v1 = z - self.path[idx_nodemin[0]] - dx * (self.path[idx_nodemin[0]] - idx_nodemin[1]) 
-        self.path_z = torch.linalg.norm(v1)
-        
+        if self.requires_z:
+            v1 = z - self.path[idx_nodemin[0]] - dx * (self.path[idx_nodemin[0]] - idx_nodemin[1]) 
+            self.path_z = torch.linalg.norm(v1)
+            self.grad_z = torch.autograd.grad(
+                self.path_z, coords, allow_unused=True, retain_graph=True,
+            )[0]
+            self.grad_z = self.grad_z.detach().numpy()
+
         # remove boundary nodes from `self.path`
         del self.path[0]
         del self.path[-1]
@@ -199,23 +212,6 @@ class PathCV:
             self.update_path(z, coords_nodemin, gpath=True)
         
         return self.path_cv
-
-    def path_distance(self, coords: torch.tensor) -> torch.tensor:
-        """Constrain dynamics perpendicular to path with tube like potential
-
-        Args:
-            coords: xyz coordinates of system
-        
-        Returns:
-            d: distance to projection of coords on path
-        """
-        z = convert_coordinate_system(
-            coords, self.active, coord_system=self.coordinates, ndim=self.ndim
-        )
-        rmsds = self._get_distance_to_path(z)
-        _, q = self._get_closest_nodes(z, rmsds)
-        norm_vec = torch.linalg.norm(z - self._project_coords_on_line(z, q)) 
-        return norm_vec
 
     def update_path(self, z: torch.tensor, q: list, gpath=False):
         """update path nodes to ensure smooth convergence to the MFEP
@@ -309,9 +305,9 @@ class PathCV:
         if self.verbose:
             crit = abs(sumlen[-1]-prevsum)
             if crit < tol:
-                print(f" >>> INFO: Reparametrization of Path converged in {iter} steps. Max(delta)={crit:.3f}.")
+                print(f" >>> INFO: Reparametrization of Path converged in {iter} steps. Final convergence: {crit:.3f}.")
             else:
-                print(f" >>> WARNING: Reparametrization of Path not converged in {max_step} steps. Max(delta)={crit:.3f}.")        
+                print(f" >>> WARNING: Reparametrization of Path not converged in {max_step} steps. Final convergence: {crit:.3f}.")        
 
     @staticmethod
     def _smooth_string(path: list, s: float=0.0):

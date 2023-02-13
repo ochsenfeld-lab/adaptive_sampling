@@ -340,48 +340,6 @@ class CV:
             self.gradient = self.gradient.detach().numpy()
 
         return float(self.cv)
-
-    def environmental_distance(
-        self,
-        cv_def: list,
-    ):
-        """Distance coordinate, weighted by electrostatic potential of midpoint of distance
- 
-        Args:
-            cv_def: list with involved atoms, [[a1, a2], [atoms for electrostatic potential]]
-
-        Returns:
-            cv: electroststic potential in a.u.
-        """
-        try:
-            charges = np.load("charges.npy")
-        except:
-            raise ValueError("CV ERROR: Could not find charges for electrostatic potential in charges.npy")
-
-        if len(cv_def[1]) != len(charges):
-            raise ValueError(
-                "CV ERROR: Number of charges for electrostatic potential has to match number of Atoms!"
-            )
-        self.update_coords()
-
-        A = self._get_com(cv_def[0][0])
-        B = self._get_com(cv_def[0][1])
-        M = (A + B) / 2.
-        AB = torch.linalg.norm(B-A, dtype=torch.float)
-
-        self.cv = 0
-        for i, atom in enumerate(cv_def[1]):
-            C = self._get_com(atom)
-            self.cv += charges[i] / torch.linalg.norm(M-C, dtype=torch.float)
-        self.cv *= AB
-
-        if self.requires_grad:
-            self.gradient = torch.autograd.grad(
-                self.cv, self.coords, allow_unused=True
-            )[0]
-            self.gradient = self.gradient.detach().numpy()
-        
-        return float(self.cv)
     
     def electrostatic_potential(
         self, 
@@ -463,7 +421,7 @@ class CV:
 
         return float(self.cv)
 
-    def path(self, cv_dev: list, method: str="path"):
+    def path(self, cv_dev: list, method: str="gpath") -> float:
         """Adaptive path collective variable
 
         Args:
@@ -487,25 +445,19 @@ class CV:
             self.gradient = self.gradient.detach().numpy()
         return float(self.cv)
 
-    def tube(self, cv_dev: list, method: str="path"):
-        if not hasattr(self, 'pathcv'):
-            from .path_cv import PathCV
-            self.pathcv = PathCV(**cv_dev)
+    def path_z(self, pathcv: object) -> float:
+        """Get z component of path cv (distance to path)
+        only available if `self.path` was called first to calculate PathCV
+
+        Args:
+            pathcv: PathCV object that contains path_z 
+        """
+        if not hasattr(pathcv, "path_z"):
+            raise ValueError(" >>> ERROR: `pathcv` has to require z!")
         
-        self.update_coords()
-
-        if method == 'gpath':
-            self.cv = self.pathcv.tube_potential(self.coords)
-        else:
-            self.cv = self.pathcv.calculate_path(self.coords, distance=True)
-
-        if self.requires_grad:
-            #self.gradient = self.gradient.detach().numpy()
-            self.gradient = torch.autograd.grad(
-                self.cv, self.coords, allow_unused=True
-            )[0]
-            self.gradient = self.gradient.detach().numpy()
-
+        self.cv = pathcv.path_z
+        self.gradient = pathcv.grad_z
+        
         return float(self.cv)
 
     def get_cv(self, cv: str, atoms: list, **kwargs) -> Tuple[float, np.ndarray]:
@@ -557,9 +509,6 @@ class CV:
         elif cv.lower() == "distorted_distance":
             xi = self.distorted_distance(atoms, **kwargs)
             self.type = None
-        elif cv.lower() == "environmental_distance":
-            xi = self.environmental_distance(atoms)
-            self.type = None
         elif cv.lower() == "rmsd":
             xi = self.rmsd(atoms)
             self.type = "distance"
@@ -569,11 +518,8 @@ class CV:
         elif cv.lower() == "gpath":
             xi = self.path(atoms, method="gpath")
             self.type = None
-        elif cv.lower() == "path_distance":
-            xi = self.tube(atoms, method="path")
-            self.type = "distance"
-        elif cv.lower() == "gpath_distance":
-            xi = self.tube(atoms, method="gpath")
+        elif cv.lower() == "path_z":
+            xi = self.path_z(atoms)
             self.type = "distance"
         else:
             print(" >>> Error in CV: Unknown Collective Variable")
