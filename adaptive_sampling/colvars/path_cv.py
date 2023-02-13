@@ -140,7 +140,7 @@ class PathCV:
 
         isign = 1 if idx_nodemin[0] - idx_nodemin[1] > 0 else -1
         
-        # TODO: can idx_nodemin[0] be one of the boundry nodes?
+        # deal with path boundaries and get neighbour nodes
         if idx_nodemin[0] == 0:
             idx_nodemin[0] += 1
         elif idx_nodemin[0] == self.nnodes+1:
@@ -256,6 +256,14 @@ class PathCV:
         max_step: int=10,
         smooth: bool=True,
     ):
+        """Smoothing and reparametrization of path to ensure equidistant nodes
+        see: Maragliano et al., J. Chem. Phys. (2006): https://doi.org/10.1063/1.2212942
+        
+        Args:
+            tol: tolerance for convergence, difference of absolute path length to previous cycle
+            max_step: maximum number of iterations
+            smooth: if path should be smoothed to remove kinks
+        """ 
         # get length of path
         L, sumlen = [0], [0]
         for i, coords in enumerate(self.path[1:], start=1):
@@ -277,12 +285,11 @@ class PathCV:
 
             path_new = [self.path[0]]
             for i, _ in enumerate(self.path[1:-1], start=1):
-                k = i
-                # TODO: this is how the original implementation does it, but it seems unstable?
-                #while not ((sumlen[k] < sfrac[i+1]) and (sumlen[k+1] >= sfrac[i+1])):
-                #    k += 1
-                #    if i >= self.nnodes:
-                #        raise ValueError(" >>> ERROR: Reparametrization of path failed!")
+                k = 0
+                while not ((sumlen[k] < sfrac[i]) and (sumlen[k+1] >= sfrac[i])):
+                    k += 1
+                    if i >= self.nnodes:
+                        raise ValueError(" >>> ERROR: Reparametrization of path failed!")
                 dr = sfrac[i] - sumlen[k] 
                 vec = self.path[k+1] - self.path[k]
                 vec /= torch.linalg.norm(vec)
