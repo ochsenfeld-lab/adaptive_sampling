@@ -9,15 +9,23 @@ class PathCV:
     """Adaptive Path Collective Variables
 
     Args:
-        guess_path: xyz file with initial path
-        active: list of atom indices or CVs included in PathCV 
-        n_interpolate: Number of nodes that are added between original nodes by linear interpolation
-        smooth_damping: controls smoothing of path (0: no smoothing, 1: linear interpolation between neighbours)
+        guess_path: filename of `.xyz` or `.npy` with initial path 
+        active: list of atom indices included in PathCV
+            if `coordinate_system=cv_space`, has to contain list of list of indices for distances, angles and torsions that define CV space 
+        n_interpolate: Number of nodes that are added between original nodes by linear interpolation,
+            if negative, slice path nodes according to `self.path[::abs(n_interpolate)]`
+        smooth_damping: Controls smoothing of path (0: no smoothing, 1: linear interpolation between neighbours)
+        reparam_steps: Maximum number of cycles for reparamerization of path to ensure equidistant nodes
+        reparam_tol: Tolerance for reparametrization of path to ensure equidistant nodes
         coordinate_system: coordinate system for calculation of Path CV
             available: `cartesian`, `zmatrix` or `cv_space`
         metric: Metric for calculation of distance of points
-            available: `RMSD`, `MSD`, `kabsch`, `KMSD`, `distance`
-        adaptive: if adaptive, path converges to averge CV density perpendicular to path
+            `RMSD`: Root mean square deviation
+            `MSD`: Mean square deviation
+            `Kabsch`: Root mean square deviation of optimally fitted coords
+            `KMSD`: Mean square deviation of optimally fitted coords
+            `distance`: Absolute distance 
+        adaptive: if adaptive, path converges to average CV density perpendicular to path
         update_interval: number of steps between update of adaptive path
         half_life: number of steps til weight of original path is half due to updates
         requires_z: if distance to path should be calculated
@@ -31,11 +39,12 @@ class PathCV:
         n_interpolate: int=0,
         smooth_damping: float=0.0,
         reparam_steps: int=1,
+        reparam_tol: float=0.01,
         coordinate_system: str="Cartesian",
         metric: str="RMSD",
         adaptive: bool=False,
         update_interval: int=100,
-        half_life: float=100, 
+        half_life: float=-1, 
         requires_z: bool=False,
         ndim: int=3,
         verbose: bool=False,
@@ -43,28 +52,31 @@ class PathCV:
         if guess_path == None:
             raise ValueError(" >>> ERROR: You have to provide a guess path to the PathCV")
         self.guess_path = guess_path
+        self.active = active 
         self.smooth_damping = smooth_damping
         self.reparam_steps = reparam_steps
+        self.reparam_tol = reparam_tol
         self.coordinates = coordinate_system
         self.metric = metric
         self.adaptive = adaptive
         self.update_interval = update_interval
         self.half_life = half_life
-        self.verbose = verbose
-        self.ndim = ndim
         self.requires_z = requires_z
-        
-        # initialized path nodes
+        self.ndim = ndim
+        self.verbose = verbose
+       
+        # initialize path
         self.path, self.nnodes = read_path(
             self.guess_path, 
             ndim=self.ndim,
         )
-        
-        self.active = active 
-        self._reduce_path()
+
+        # if `.xyz` is given convert coordinate system 
+        if self.guess_path[-3:] == 'xyz':
+            self._reduce_path()
+
         self._interpolate(n_interpolate)
-        
-        self._reparametrize_path(max_step=self.reparam_steps)
+        self._reparametrize_path(tol=self.reparam_tol, max_step=self.reparam_steps)
         self.boundary_nodes = self._get_boundary(self.path)
 
         # accumulators for path update
@@ -72,7 +84,7 @@ class PathCV:
             self.n_updates = 0 
             self.weights = torch.zeros(self.nnodes)    
             self.avg_dists = [torch.zeros_like(self.path[0]) for _ in range(self.nnodes)]
-            if half_life<0:
+            if half_life < 0:
                 self.fade_factor = 1.0
             else:
                 self.fade_factor = math.exp(-math.log(2.) / float(self.half_life))
@@ -85,8 +97,10 @@ class PathCV:
         Branduardi, et al., J. Chem. Phys. (2007): https://doi.org/10.1063/1.2432340
 
         Args:
-            coords: cartesian coordinates
-            distance: if True, get orthogonal distance to path instead of progress
+            coords: cartesian coordinates 
+
+        Returns:
+            path_cv: progress anlong path in range [0,1]
         """
         z = convert_coordinate_system(
             coords, self.active, coord_system=self.coordinates, ndim=self.ndim
@@ -133,7 +147,9 @@ class PathCV:
         
         Args:
             coords: cartesian coordinates
-            distance: if True, get orthogonal distance to path instead of progress
+
+        Returns:
+            path_cv: progress anlong path in range [0,1]
         """
         z = convert_coordinate_system(
             coords, self.active, coord_system=self.coordinates, ndim=self.ndim
@@ -214,7 +230,7 @@ class PathCV:
         return self.path_cv
 
     def update_path(self, z: torch.tensor, q: list, gpath=False):
-        """update path nodes to ensure smooth convergence to the MFEP
+        """Update path nodes to ensure smooth convergence to the MFEP
         
         see: Ortiz et al., J. Chem. Phys. (2018): https://doi.org/10.1063/1.5027392
 
@@ -240,15 +256,16 @@ class PathCV:
                     new_path[j+1] = new_path[j+1].detach()
 
             self.path = new_path.copy()
-            self._reparametrize_path(max_step=self.reparam_steps)
+            self._reparametrize_path(tol=self.reparam_tol, max_step=self.reparam_steps)
 
+            # reset accumulators
             self.n_updates = 0 
             self.weights = torch.zeros_like(self.weights)
             self.avg_dists = [torch.zeros_like(self.avg_dists[0]) for _ in range(self.nnodes)]
 
     def _reparametrize_path(
         self, 
-        tol: float=0.1, 
+        tol: float=0.01, 
         max_step: int=10,
         smooth: bool=True,
     ):
@@ -260,6 +277,10 @@ class PathCV:
             max_step: maximum number of iterations
             smooth: if path should be smoothed to remove kinks
         """ 
+        # TODO: When smoothing only once there might be too many kinks in the path in some cases?
+        if smooth:
+            self.path = self._smooth_string(self.path, s=self.smooth_damping)
+
         # get length of path
         L, sumlen = [0], [0]
         for i, coords in enumerate(self.path[1:], start=1):
@@ -275,10 +296,11 @@ class PathCV:
             for i in range(self.nnodes):
                 sfrac.append(i * sumlen[-1] / float(self.nnodes-1))
 
-            # update node positions
-            if smooth:
-                self.path = self._smooth_string(self.path, s=self.smooth_damping)
+            # TODO: Smoothing in every cycle might introduce too much corner cutting?
+            #if smooth:
+            #    self.path = self._smooth_string(self.path, s=self.smooth_damping)
 
+            # update node positions
             path_new = [self.path[0]]
             for i, _ in enumerate(self.path[1:-1], start=1):
                 k = 0
@@ -310,7 +332,7 @@ class PathCV:
                 print(f" >>> WARNING: Reparametrization of Path not converged in {max_step} steps. Final convergence: {crit:.3f}.")        
 
     @staticmethod
-    def _smooth_string(path: list, s: float=0.0):
+    def _smooth_string(path: list, s: float=0.0) -> list:
         """Smooth string of nodes 
 
         Args:
@@ -328,8 +350,14 @@ class PathCV:
         return path_new
 
     @staticmethod
-    def _get_boundary(path):
+    def _get_boundary(path: list) -> list:
         """compute one final lower and upper node by linear interpolation of path
+        
+        Args:
+            path: list of path nodes
+        
+        Returns:
+            boundaries: list with lower and upper boundary node
         """
         delta_lower = path[1] - path[0]
         lower_bound = path[0] - delta_lower
@@ -349,7 +377,7 @@ class PathCV:
         d = []
         for i in range(self.nnodes):
             d.append(self.get_distance(z, self.path[i], metric=self.metric))
-            self.path[i] = self.path[i].detach()
+            self.path[i] = self.path[i].detach()  # for performance reasons
         return d
 
     @staticmethod

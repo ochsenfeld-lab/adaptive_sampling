@@ -453,11 +453,10 @@ class CV:
             pathcv: PathCV object that contains path_z 
         """
         if not hasattr(pathcv, "path_z"):
-            raise ValueError(" >>> ERROR: `pathcv` has to require z!")
+            raise ValueError(" >>> ERROR: `pathcv` has to `require_z`!")
         
         self.cv = pathcv.path_z
         self.gradient = pathcv.grad_z
-        
         return float(self.cv)
 
     def get_cv(self, cv: str, atoms: list, **kwargs) -> Tuple[float, np.ndarray]:
