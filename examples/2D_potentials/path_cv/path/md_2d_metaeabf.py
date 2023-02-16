@@ -1,5 +1,4 @@
 #!/usr/bin/env python
-import time
 from adaptive_sampling.sampling_tools import WTM, eABF, Reference, WTMeABF
 from adaptive_sampling.interface.interfaceMD_2D import *
 from adaptive_sampling.units import *
@@ -7,32 +6,36 @@ from adaptive_sampling.units import *
 ################# Imput Section ####################
 # MD
 seed = 42
-nsteps = 100000  # number of MD steps
+nsteps = 40000  # number of MD steps
 dt = 5.0e0  # stepsize in fs
 target_temp = 300.0  # Kelvin
 mass = 10.0  # a.u.
-potential = "2"
+potential = "1"
 
 # eABF
-dev = [
-    {
-        "guess_path": "guess_path.xyz",
-        "metric": "2d",
-        "verbose": True,
-        "n_interpolate": 0,
-        "adaptive": True,
-        "update_interval": 1000,
-        "half_life": 100,
-        }
-]
+dev = {
+    "guess_path": "../guess_path.xyz",
+    "metric": "RMSD",
+    "coordinate_system": "Cartesian",
+    "ndim": 2,
+    "smooth_damping": 0.5,
+    "verbose": True,
+    "n_interpolate": 0,
+    "adaptive": True,
+    "update_interval": 1000,
+    "half_life": 5000,
+}
+
 tube = False
 
 ats = [["path", dev, 0.0, 1.0, 0.05]]
-conf = [["GPath_tube", dev, 0.0, 0.0, 0.0]]
+
+conf = [["GPath_distance", dev, 0.0, 0.0, 0.0]]
+
 N_full = 100
 
 step_count = 0
-coords = [-50.0, -30.0]
+coords = [80.0, 1.0]
 the_md = MD(
     mass_in=mass,
     coords_in=coords,
@@ -60,12 +63,13 @@ if tube:
         conf,
         nfull=100,
         output_freq=1000,
-        f_conf=50.0,
+        f_conf=5.0,
         equil_temp=300.0,
         multiple_walker=False,
     )
 
 # the_abm.restart()
+
 the_md.calc_init()
 the_abm.step_bias()
 if tube:
@@ -96,20 +100,19 @@ while step_count < nsteps:
     step_count += 1
 
     the_md.propagate(langevin=True)
-    t = time.perf_counter()
     the_md.calc()
-    calc_time = time.perf_counter() - t
-    t = time.perf_counter()
+    
+    the_abm.the_cv.pathcv.adaptive = True
     the_md.forces += the_abm.step_bias()
-    bias_time = time.perf_counter() - t 
     if tube:
+        the_abm.the_cv.pathcv.adaptive = False
         the_md.forces += the_conf.step_bias()
 
     the_md.up_momenta(langevin=True)
     the_md.calc_etvp()
 
     print(
-        "%11.2f\t%14.6f\t%14.6f\t%14.6f\t%14.6f\t%14.6f\t%14.6f\t%14.6f\t%14.6f"
+        "%11.2f\t%14.6f\t%14.6f\t%14.6f\t%14.6f\t%14.6f\t%14.6f"
         % (
             the_md.step * the_md.dt * atomic_to_fs,
             the_md.coords[0],
@@ -118,9 +121,7 @@ while step_count < nsteps:
             the_md.ekin,
             the_md.epot + the_md.ekin,
             the_md.temp,
-            calc_time,
-            bias_time,
         )
     )
-    if not the_md.step % 1000 and dev[0]["adaptive"]:
+    if not the_md.step % 1000 and dev["adaptive"]:
         the_abm.the_cv.pathcv.write_path(filename=f'path_{step_count}.npy')

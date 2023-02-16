@@ -6,27 +6,30 @@ from adaptive_sampling.units import *
 ################# Imput Section ####################
 # MD
 seed = 42
-nsteps = 200000  # number of MD steps
+nsteps = 100000  # number of MD steps
 dt = 5.0e0  # stepsize in fs
 target_temp = 300.0  # Kelvin
 mass = 10.0  # a.u.
 potential = "1"
 
 # eABF
-dev = [
-    {
-        "guess_path": "guess_path2.xyz",
-        "metric": "2d",
-        "verbose": True,
-        "n_interpolate": 1,
-        "adaptive": True,
-        "update_interval": 1000,
-        "half_life": 5000,
-        }
-]
-tube = True
+dev = {
+    "guess_path": "../guess_path.xyz",
+    "metric": "RMSD",
+    "coordinate_system": "Cartesian",
+    "smooth_damping": 0.5,
+    "reparam_steps": 100,
+    "verbose": True,
+    "n_interpolate": 0,
+    "adaptive": True,
+    "update_interval": 1000,
+    "half_life": 5000,
+    "ndim": 2,
+}
 
-ats = [["path", dev, 0.0, 1.0, 0.05]]
+tube = False
+
+ats = [["gpath", dev, 0.02, 0.98, 0.02]]
 
 conf = [["GPath_distance", dev, 0.0, 0.0, 0.0]]
 
@@ -51,7 +54,7 @@ the_abm = WTMeABF(
     ats,
     nfull=100,
     output_freq=10,
-    f_conf=1000.0,
+    f_conf=10.0,
     equil_temp=300.0,
     multiple_walker=False,
 )
@@ -100,11 +103,11 @@ while step_count < nsteps:
     the_md.propagate(langevin=True)
     the_md.calc()
     
-    the_abm.the_cv.pathcv.adaptive = True
     the_md.forces += the_abm.step_bias()
     if tube:
         the_abm.the_cv.pathcv.adaptive = False
         the_md.forces += the_conf.step_bias()
+        the_abm.the_cv.pathcv.adaptive = dev["adaptive"]
 
     the_md.up_momenta(langevin=True)
     the_md.calc_etvp()
@@ -121,5 +124,5 @@ while step_count < nsteps:
             the_md.temp,
         )
     )
-    if not the_md.step % 10000 and dev[0]["adaptive"]:
+    if not the_md.step % 4000 and dev["adaptive"]:
         the_abm.the_cv.pathcv.write_path(filename=f'path_{step_count}.npy')

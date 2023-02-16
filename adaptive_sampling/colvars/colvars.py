@@ -436,7 +436,7 @@ class CV:
         if method == 'gpath':
             self.cv = self.pathcv.calculate_gpath(self.coords)
         else:
-            self.cv = self.pathcv.calculate_path(self.coords, distance=False)
+            self.cv = self.pathcv.calculate_path(self.coords)
 
         if self.requires_grad:
             self.gradient = torch.autograd.grad(

@@ -188,7 +188,9 @@ class PathCV:
         self.path_cv = ((idx_nodemin[0]-1) + isign * dx) / (self.nnodes-1)
 
         if self.requires_z or self.adaptive:
-            v = z - self.path[idx_nodemin[0]] - dx * (self.path[idx_nodemin[0]] - idx_nodemin[1])
+            v = z - self.path[idx_nodemin[0]] - dx * (
+                self.path[idx_nodemin[0]] - self.path[idx_nodemin[1]]
+            )
 
         # remove boundary nodes from `self.path`
         del self.path[0]
@@ -213,12 +215,12 @@ class PathCV:
                 w1, w2 = 0.0, 1.0
             
             if idx_nodemin[0] > 0 and idx_nodemin[0] <= self.nnodes:
-                self.avg_dists[idx_nodemin[0]-1] = w1 * v
+                self.avg_dists[idx_nodemin[0]-1] += w1 * v
                 self.weights[idx_nodemin[0]-1] *= self.fade_factor
                 self.weights[idx_nodemin[0]-1] += w1
             
             if idx_nodemin[1] > 0 and idx_nodemin[1] <= self.nnodes:
-                self.avg_dists[idx_nodemin[1]-1] = w2 * v
+                self.avg_dists[idx_nodemin[1]-1] += w2 * v
                 self.weights[idx_nodemin[1]-1] *= self.fade_factor
                 self.weights[idx_nodemin[1]-1] += w2
             
@@ -240,7 +242,8 @@ class PathCV:
             dist_ij = self.get_distance(self.path[0], self.path[1], metric=self.metric)
             for j, _ in enumerate(self.path[1:-1], start=1):
                 w = max([0, 1 - self.get_distance(self.path[j], s, metric=self.metric) / dist_ij])
-                self.weights[j] += self.fade_factor * w
+                self.weights[j] *= self.fade_factor 
+                self.weights[j] += w
                 self.avg_dists[j] += w * (z-s)
                 
         # update path all `self.update_interval` steps
