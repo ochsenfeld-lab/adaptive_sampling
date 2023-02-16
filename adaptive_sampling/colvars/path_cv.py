@@ -1,8 +1,6 @@
-import math, time
+import math
 import torch
-import itertools
 
-from ..units import BOHR_to_ANGSTROM
 from .utils import *
 
 class PathCV:
@@ -26,9 +24,9 @@ class PathCV:
             `KMSD`: Mean square deviation of optimally fitted coords
             `distance`: Absolute distance 
         adaptive: if adaptive, path converges to average CV density perpendicular to path
-        update_interval: number of steps between update of adaptive path
+        update_interval: number of steps between updates of adaptive path
         half_life: number of steps til weight of original path is half due to updates
-        requires_z: if distance to path should be calculated
+        requires_z: if distance to path should be calculated and stored for confinement to path
         ndim: number of dimensions (2 for 2D test potentials, 3 else)
         verbose: if verbose information should be printed
     """
@@ -163,12 +161,6 @@ class PathCV:
         idx_nodemin = [i+1 for i in idx_nodemin]
 
         isign = 1 if idx_nodemin[0] - idx_nodemin[1] > 0 else -1
-        
-        # deal with path boundaries and get neighbour nodes
-        if idx_nodemin[0] == 0:
-            idx_nodemin[0] += 1
-        elif idx_nodemin[0] == self.nnodes+1:
-            idx_nodemin[0] -= 1
 
         idx_nodemin[1] = idx_nodemin[0] - isign
         idx_nodemin.append(idx_nodemin[0] + isign)
@@ -176,9 +168,12 @@ class PathCV:
         # compute some vectors
         v1 = self.path[idx_nodemin[0]] - z
         v3 = z - self.path[idx_nodemin[1]] 
-        v2 = self.path[idx_nodemin[2]] - self.path[idx_nodemin[0]]
+        if idx_nodemin[2] < 0 or idx_nodemin[2] >= self.nnodes+1:
+            v2 = self.path[idx_nodemin[0]] - self.path[idx_nodemin[1]]
+        else:
+            v2 = self.path[idx_nodemin[2]] - self.path[idx_nodemin[0]]
 
-        # get tangential `s` component (progress along path)
+        # get `s` component of PathCV (progress along path)
         v1 = v1.view(torch.numel(v1))
         v2 = v2.view(torch.numel(v2))
         v3 = v3.view(torch.numel(v3))
@@ -192,18 +187,20 @@ class PathCV:
         dx = 0.5 * ((root - v1v2) / v2v2 - 1.)
         self.path_cv = ((idx_nodemin[0]-1) + isign * dx) / (self.nnodes-1)
 
-        # get perpendicular `z` component (distance to path)
-        if self.requires_z:
-            v1 = z - self.path[idx_nodemin[0]] - dx * (self.path[idx_nodemin[0]] - idx_nodemin[1]) 
-            self.path_z = torch.linalg.norm(v1)
-            self.grad_z = torch.autograd.grad(
-                self.path_z, coords, allow_unused=True, retain_graph=True,
-            )[0]
-            self.grad_z = self.grad_z.detach().numpy()
+        if self.requires_z or self.adaptive:
+            v = z - self.path[idx_nodemin[0]] - dx * (self.path[idx_nodemin[0]] - idx_nodemin[1])
 
         # remove boundary nodes from `self.path`
         del self.path[0]
         del self.path[-1]
+
+        # get perpendicular `z` component (distance to path)
+        if self.requires_z: 
+            self.path_z = torch.linalg.norm(v)
+            self.grad_z = torch.autograd.grad(
+                self.path_z, coords, allow_unused=True, retain_graph=True,
+            )[0]
+            self.grad_z = self.grad_z.detach().numpy()
 
         # accumulate average distance from path for path update
         if self.adaptive:
@@ -216,12 +213,12 @@ class PathCV:
                 w1, w2 = 0.0, 1.0
             
             if idx_nodemin[0] > 0 and idx_nodemin[0] <= self.nnodes:
-                self.avg_dists[idx_nodemin[0]-1] = w1 * v1
-                self.weights[idx_nodemin[0]-1]  *= self.fade_factor
-                self.weights[idx_nodemin[0]-1]  += w1
+                self.avg_dists[idx_nodemin[0]-1] = w1 * v
+                self.weights[idx_nodemin[0]-1] *= self.fade_factor
+                self.weights[idx_nodemin[0]-1] += w1
             
             if idx_nodemin[1] > 0 and idx_nodemin[1] <= self.nnodes:
-                self.avg_dists[idx_nodemin[1]-1] = w2 * v1
+                self.avg_dists[idx_nodemin[1]-1] = w2 * v
                 self.weights[idx_nodemin[1]-1] *= self.fade_factor
                 self.weights[idx_nodemin[1]-1] += w2
             
@@ -269,7 +266,7 @@ class PathCV:
         max_step: int=10,
         smooth: bool=True,
     ):
-        """Smoothing and reparametrization of path to ensure equidistant nodes
+        """Reparametrization of path to ensure equidistant nodes
         see: Maragliano et al., J. Chem. Phys. (2006): https://doi.org/10.1063/1.2212942
         
         Args:
@@ -327,9 +324,9 @@ class PathCV:
         if self.verbose:
             crit = abs(sumlen[-1]-prevsum)
             if crit < tol:
-                print(f" >>> INFO: Reparametrization of Path converged in {iter} steps. Final convergence: {crit:.3f}.")
+                print(f" >>> INFO: Reparametrization of Path converged in {iter} steps. Final convergence: {crit:.6f}.")
             else:
-                print(f" >>> WARNING: Reparametrization of Path not converged in {max_step} steps. Final convergence: {crit:.3f}.")        
+                print(f" >>> WARNING: Reparametrization of Path not converged in {max_step} steps. Final convergence: {crit:.6f}.")        
 
     @staticmethod
     def _smooth_string(path: list, s: float=0.0) -> list:
@@ -534,7 +531,7 @@ class PathCV:
             )
         self.path = path_reduced.copy()
         if self.verbose:
-            print(f" >>> INFO: Reduced Path nodes to {torch.numel(self.path[0])} active coordinates.")
+            print(f" >>> INFO: Reduced coordinate system to {torch.numel(self.path[0])} {self.coordinates} coordinates.")
 
     def write_path(self, filename: str="path_cv.npy"):
         """write nodes of PathCV to dcd trajectory file
@@ -550,9 +547,11 @@ class PathCV:
             np.save(filename, path_tmp, allow_pickle=True)
         else:
             import mdtraj
+            from ..units import BOHR_to_ANGSTROM
+
             dcd = mdtraj.formats.DCDTrajectoryFile(filename, 'w', force_overwrite=True)
             for coords in self.path:
                 dcd.write(BOHR_to_ANGSTROM * coords.view(int(torch.numel(coords)/3),3).detach().numpy())
-
+            dcd.close()
 
 

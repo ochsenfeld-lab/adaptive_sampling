@@ -45,7 +45,7 @@ def read_path(
     """
     if filename[-3:] == "dcd":
         # TODO: Read path from dcd file
-        pass
+        raise NotImplementedError(" >>> ERROR: Reading path from dcd not yet implemented. Use instead: `.xzy` or `.npy`")
 
     elif filename[-3:] == "npy":
         import numpy
@@ -53,7 +53,7 @@ def read_path(
         traj = traj.tolist()
         traj = [torch.from_numpy(t) for t in traj]
 
-    else:
+    elif filename[-3:] == "xyz":
         with open(filename, "r") as xyzf:
             traj = []
             mol = []
@@ -69,7 +69,6 @@ def read_path(
                     traj.append(mol)
                     mol = []
                 elif len(words) >= 4:
-                    n += 1
                     if ndim == 2:
                         mol.append([float(words[1]), float(words[2])])
                     else:
@@ -78,12 +77,16 @@ def read_path(
                             float(words[2]) / BOHR_to_ANGSTROM, 
                             float(words[3]) / BOHR_to_ANGSTROM,
                         ])
+                    n += 1
 
         if mol:
             mol = itertools.chain(*mol)
             mol = torch.FloatTensor(list(mol))
             traj.append(mol)
     
+    else:
+        raise ValueError(" >>> ERROR: Unnown format of path. Available: `.xzy`, `.npy`, `.dcd`.")
+
     return traj, len(traj)
 
 
@@ -286,6 +289,7 @@ def quaternion_rotate(
     rot = _quaternion_transform(r)
     return rot
 
+
 def get_amber_charges(prmtop: str) -> list:
     """Parse charges from AMBER parameter file 
 
@@ -316,12 +320,21 @@ def get_amber_charges(prmtop: str) -> list:
 
     return charge
 
+
 def get_internal_coordinate(
     cv: list, 
     coords: torch.tensor, 
     ndim: int=3,
 ) -> torch.tensor:
     """Get internal coordinate (distance, angle or torsion)
+
+    Args:
+        cv: inidices of atoms that are included in cv
+        coords: cartesian coords
+        ndim: umber of dimensions of coords
+    
+    Returns:
+        cv: internal coordinate
     """
     z = coords.view(int(torch.numel(coords)/ndim), ndim)
 
@@ -357,9 +370,10 @@ def get_internal_coordinate(
             torch.dot(torch.cross(q23_u, n1), n2), torch.dot(n1, n2)
         ) 
     else:
-        raise ValueError(" >>> ERROR: wrong definition of internal coordinate in `cv_list`!")
+        raise ValueError(" >>> ERROR: wrong definition of internal coordinate!")
         
     return xi
+
 
 def cartesians_to_internals(
     coords: torch.tensor, 
@@ -369,6 +383,7 @@ def cartesians_to_internals(
 
     Args:  
         coords: reduced cartesian coordinates
+        ndim: Number of dimensions of input coordinates
         
     Returns:
         zmatrix: Z-Matrix with angles given in radians
@@ -397,6 +412,7 @@ def cartesians_to_internals(
     
     return zmatrix
 
+
 def convert_coordinate_system(
     coords: torch.tensor,
     active: list=None,
@@ -406,7 +422,16 @@ def convert_coordinate_system(
     """Convert XYZ tensor to selected coordinate system
 
     Args:
-        coords: 
+        coords: xyz coordinates 
+        active: list of active atoms or list of internal coordinates
+        coord_system: Selected new coordinate system:
+            `Cartesian`: xyz coordinates reduced to `active` atoms
+            `ZMatric`: Z-Matrix of `active` atoms
+            `CV_space`: Selected internal coordinates (distances, angles and torsions)
+        ndim: Number of dimensions of input coordinates
+
+    Returns:
+        new_coords: Converted coords 
     """
     if coord_system.lower() == "cartesian":
         z = coords.view(int(torch.numel(coords)/ndim), ndim)
