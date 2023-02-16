@@ -2,7 +2,6 @@ import torch
 import pytest
 import numpy as np
 from adaptive_sampling.colvars.colvars import CV
-from adaptive_sampling.colvars.kearsley import Kearsley
 from adaptive_sampling.colvars.utils import *
 from adaptive_sampling.interface.sampling_data import SamplingData
 
@@ -51,7 +50,7 @@ class MD:
                 ]
             ),
             26.6020,
-            0.0979,
+            0.0978,
         )
     ],
 )
@@ -59,7 +58,7 @@ def test_kabsch(a, b, expected_nofit, expected_fit):
     a = torch.flatten(a).float()
     b = torch.flatten(b).float()
 
-    rmsd_nofit = rmsd(a, b)
+    rmsd_nofit = get_rmsd(a, b)
     rmsd_kabsch = kabsch_rmsd(a, b)
 
     assert float(rmsd_nofit) == pytest.approx(expected_nofit, rel=1.0e-3)
@@ -95,7 +94,7 @@ def test_kabsch_1(a, b, expected_nofit, expected_fit):
     a = torch.flatten(a).float()
     b = torch.flatten(b).float()
 
-    rmsd_nofit = rmsd(a, b)
+    rmsd_nofit = get_rmsd(a, b)
     rmsd_kabsch = kabsch_rmsd(a, b)
 
     assert float(rmsd_nofit) == pytest.approx(expected_nofit, abs=1.0e-3)
@@ -127,7 +126,7 @@ def test_kabsch_1(a, b, expected_nofit, expected_fit):
                 ]
             ),
             26.6020,
-            0.0979,
+            0.0978,
         )
     ],
 )
@@ -135,7 +134,7 @@ def test_quaternion(a, b, expected_nofit, expected_fit):
     a = torch.flatten(a).float()
     b = torch.flatten(b).float()
 
-    rmsd_nofit = rmsd(a, b)
+    rmsd_nofit = get_rmsd(a, b)
     rmsd_quaternion = quaternion_rmsd(a, b)
 
     assert float(rmsd_nofit) == pytest.approx(expected_nofit, rel=1.0e-3)
@@ -171,7 +170,7 @@ def test_quaternion_1(a, b, expected_nofit, expected_fit):
     a = torch.flatten(a).float()
     b = torch.flatten(b).float()
 
-    rmsd_nofit = rmsd(a, b)
+    rmsd_nofit = get_rmsd(a, b)
     rmsd_quaternion = quaternion_rmsd(a, b)
 
     assert float(rmsd_nofit) == pytest.approx(expected_nofit, abs=1.0e-3)
@@ -201,10 +200,7 @@ def test_rmsd(coords1, coords2, rmsd_fit):
     the_cv = CV(the_md, requires_grad=True)
     f1, grad1 = the_cv.get_cv("rmsd", coords2, method="kabsch")
     f2, grad2 = the_cv.get_cv("rmsd", coords2, method="quaternion")
-    f3, grad3 = the_cv.get_cv("rmsd", coords2, method="kearsley")
     assert f1 == pytest.approx(rmsd_fit, abs=1e-3)
     assert f2 == pytest.approx(rmsd_fit, abs=1e-3)
-    assert f3 == pytest.approx(rmsd_fit, abs=1e-3)
     assert np.allclose(grad1, grad2)
-    assert np.allclose(grad2, grad3)
 

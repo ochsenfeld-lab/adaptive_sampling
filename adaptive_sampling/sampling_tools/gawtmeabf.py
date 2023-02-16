@@ -297,7 +297,8 @@ class GaWTMeABF(WTMeABF, GaMD, EnhancedSampling):
         if self.verbose:
             print(f" >>> Info: Adaptive sampling restartet from {filename}!")
 
-    def write_traj(self, filename='CV_traj.dat'):
+
+    def write_traj(self, filename: str = 'CV_traj.dat'):
         """save trajectory for post-processing"""
 
         data = self._write_ext_traj()
