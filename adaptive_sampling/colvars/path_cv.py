@@ -160,7 +160,11 @@ class PathCV:
         self.path.append(self.boundary_nodes[1])
         idx_nodemin = [i+1 for i in idx_nodemin]
 
-        isign = 1 if idx_nodemin[0] - idx_nodemin[1] > 0 else -1
+        isign = idx_nodemin[0] - idx_nodemin[1] 
+        if isign > 1:
+            isign = 1
+        elif isign < -1:
+            isign = -1
 
         idx_nodemin[1] = idx_nodemin[0] - isign
         idx_nodemin.append(idx_nodemin[0] + isign)

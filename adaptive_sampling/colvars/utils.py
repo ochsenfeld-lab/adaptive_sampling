@@ -50,7 +50,6 @@ def read_path(
     elif filename[-3:] == "npy":
         import numpy
         traj = numpy.load(filename)
-        traj = traj.tolist()
         traj = [torch.from_numpy(t) for t in traj]
 
     elif filename[-3:] == "xyz":
