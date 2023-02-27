@@ -86,7 +86,7 @@ def test_init_cv_space(input, path, bounds):
     path = [path[i] / BOHR_to_ANGSTROM for i in range(len(path))]
     bounds = [bounds[i] / BOHR_to_ANGSTROM for i in range(len(bounds))]
     
-    cv = PathCV(guess_path=input, metric="RMSD", smooth_damping=0.0, coordinate_system="cv_space", active=[[0,1]])
+    cv = PathCV(guess_path=input, metric="RMSD", smooth_damping=0.0, coordinate_system="cv_space", active=[["distance", [0,1]]])
 
     assert cv.nnodes == len(path)
     assert torch.allclose(cv.path[0], path[0], atol=1.e-1)
@@ -114,7 +114,7 @@ def test_calculate_gpath(input, coords1, coords2, coords3, coords4, coords5):
     coords4 = coords4 / BOHR_to_ANGSTROM
     coords5 = coords5 / BOHR_to_ANGSTROM
 
-    cv = PathCV(guess_path=input, metric="RMSD", smooth_damping=0.0, coordinate_system="cv_space", active=[[0,1]])
+    cv = PathCV(guess_path=input, metric="RMSD", smooth_damping=0.0, coordinate_system="cv_space", active=[["distance", [0,1]]])
     cv1 = cv.calculate_gpath(coords1)
     cv2 = cv.calculate_gpath(coords2) 
     cv3 = cv.calculate_gpath(coords3)
@@ -196,7 +196,7 @@ def test_internals(coords, zmatrix):
 def test_selected_rmsd(input, coords):
     coords /= BOHR_to_ANGSTROM
 
-    cv = PathCV(guess_path=input, metric="RMSD", coordinate_system="cv_space", active=[[0,1]])
+    cv = PathCV(guess_path=input, metric="RMSD", coordinate_system="cv_space", active=[["distance", [0,1]]])
 
     rmsd0 = get_rmsd(coords, cv.path[0]) * BOHR_to_ANGSTROM
     rmsd1 = get_rmsd(coords, cv.path[1]) * BOHR_to_ANGSTROM

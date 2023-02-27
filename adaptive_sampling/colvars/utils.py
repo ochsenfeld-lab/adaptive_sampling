@@ -45,7 +45,7 @@ def read_path(
     """
     if filename[-3:] == "dcd":
         # TODO: Read path from dcd file
-        raise NotImplementedError(" >>> ERROR: Reading path from dcd not yet implemented. Use instead: `.xzy` or `.npy`")
+        raise NotImplementedError(" >>> ERROR: Reading path from dcd not yet implemented. Use `.xzy` or `.npy` file")
 
     elif filename[-3:] == "npy":
         import numpy
@@ -325,26 +325,29 @@ def get_internal_coordinate(
     coords: torch.tensor, 
     ndim: int=3,
 ) -> torch.tensor:
-    """Get internal coordinate (distance, angle or torsion)
+    """Get internal coordinate 
 
     Args:
-        cv: inidices of atoms that are included in cv
-        coords: cartesian coords
-        ndim: umber of dimensions of coords
+        cv: definition of internal coordinate
+            Available:
+                ["distance",     [idx0, idx1]]
+                ["angle",        [idx0, idx1, idx2]]
+                ["dihedral",     [idx0, idx1, idx2, idx3]]
+                ["min_distance", [[idx0, idx1], [idx2, idx3], ...]]
+        coords: Cartesian coordinates
+        ndim: Number of dimensions of coords
     
     Returns:
         cv: internal coordinate
     """
     z = coords.view(int(torch.numel(coords)/ndim), ndim)
+    
+    if cv[0].lower() == "distance":
+        xi = torch.linalg.norm(z[cv[1][0]] - z[cv[1][1]])
 
-    # dist
-    if len(cv) == 2:
-        xi = torch.linalg.norm(z[cv[0]] - z[cv[1]])
-
-    # angle
-    elif len(cv) == 3:
-        q12 = z[cv[0]] - z[cv[1]]
-        q23 = z[cv[1]] - z[cv[2]]
+    elif cv[0].lower() == "angle":
+        q12 = z[cv[1][0]] - z[cv[1][1]]
+        q23 = z[cv[1][1]] - z[cv[1][2]]
 
         q12_n = torch.linalg.norm(q12)
         q23_n = torch.linalg.norm(q23)
@@ -354,11 +357,10 @@ def get_internal_coordinate(
 
         xi = torch.arccos(torch.dot(-q12_u, q23_u))  
                 
-    # torsion
-    elif len(cv) == 4:
-        q12 = z[cv[1]] - z[cv[0]]
-        q23 = z[cv[2]] - z[cv[1]]
-        q34 = z[cv[3]] - z[cv[2]]
+    elif cv[0].lower() == "dihedral":
+        q12 = z[cv[1][1]] - z[cv[1][0]]
+        q23 = z[cv[1][2]] - z[cv[1][1]]
+        q34 = z[cv[1][3]] - z[cv[1][2]]
 
         q23_u = q23 / torch.linalg.norm(q23)
 
@@ -368,6 +370,13 @@ def get_internal_coordinate(
         xi = torch.atan2(
             torch.dot(torch.cross(q23_u, n1), n2), torch.dot(n1, n2)
         ) 
+
+    elif cv[0].lower() == "min_distance":
+        dists = []
+        for x in cv[1]:
+            dists.append(torch.linalg.norm(z[x[0]] - z[x[1]]))
+        xi = min(dists)
+
     else:
         raise ValueError(" >>> ERROR: wrong definition of internal coordinate!")
         
@@ -388,25 +397,23 @@ def cartesians_to_internals(
         zmatrix: Z-Matrix with angles given in radians
     """
         
-    z = coords.view(int(torch.numel(coords)/ndim), ndim)
+    z = coords.view(int(torch.numel(coords) / ndim), ndim)
     zmatrix = torch.zeros_like(z)
             
     for i, _ in enumerate(z[1:], start=1):
-        # distance
+
         zmatrix[i, 0] = get_internal_coordinate(
-            [i-1, i], coords, ndim=ndim
+            ["distance", [i-1, i]], coords, ndim=ndim
         )  
 
-        # angle
         if i > 1:
             zmatrix[i, 1] = get_internal_coordinate(
-                [i-2, i-1, i], coords, ndim=ndim
+                ["angle", [i-2, i-1, i]], coords, ndim=ndim
             ) 
                 
-        # torsion
         if i > 2:
             zmatrix[i, 2] = get_internal_coordinate(
-                [i-3, i-2, i-1, i], coords, ndim=ndim
+                ["dihedral", [i-3, i-2, i-1, i]], coords, ndim=ndim
             )
     
     return zmatrix

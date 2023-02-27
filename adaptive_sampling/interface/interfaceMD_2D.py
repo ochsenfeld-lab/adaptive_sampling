@@ -140,6 +140,25 @@ class MD:
                 )
                 / atomic_to_kJmol
             )
+        
+        elif potential == "3":
+
+            B     = 1.0
+            A     = B * np.asarray([-40.0, -10.0, -34.0, 3.0])
+            alpha = np.asarray([-1.00, -1.00, -6.50, 0.7])
+            beta  = np.asarray([ 0.00,  0.00, 11.00, 0.6])
+            gamma = np.asarray([-10.0, -10.0, -6.50, 0.7])
+            x0    = np.asarray([1.0, 0.0, -0.5, -1.0])
+            y0    = np.asarray([0.0, 0.5,  1.5,  1.0])
+    
+            exp = (
+                A * np.exp(alpha*(x-x0)*(x-x0) + beta*(x-x0)*(y-y0) + gamma*(y-y0)*(y-y0))
+            )
+
+            self.epot = B * exp.sum()
+
+            self.forces[0] = (B * exp * (2*alpha*(x-x0) + beta*(y-y0))).sum() 
+            self.forces[1] = (B * exp * (2*gamma*(y-y0) + beta*(x-x0))).sum() 
 
         else:
             raise ValueError(" >>> Invalid Potential!")
@@ -180,11 +199,11 @@ class MD:
 
             self.momenta += np.sqrt(self.masses) * rand_push * self.rand_gauss
             self.momenta -= 0.5e0 * self.dt * self.forces
-            self.coords += prefac * self.dt * self.momenta / self.masses
+            self.coords  += prefac * self.dt * self.momenta / self.masses
 
         else:
             self.momenta -= 0.5e0 * self.dt * self.forces
-            self.coords += self.dt * self.momenta / self.masses
+            self.coords  += self.dt * self.momenta / self.masses
 
     # -----------------------------------------------------------------------------------------------------
     def up_momenta(self, langevin=True, friction=1.0e-3):

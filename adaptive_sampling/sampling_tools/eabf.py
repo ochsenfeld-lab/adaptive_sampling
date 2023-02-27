@@ -77,13 +77,7 @@ class eABF(ABF, EnhancedSampling):
                     )
 
         # initialize extended system at target temp of MD simulation
-        for i in range(self.ncoords):
-            self.ext_momenta[i] = random.gauss(0.0, 1.0) * np.sqrt(
-                self.equil_temp * self.ext_mass[i]
-            )
-            ttt = (np.power(self.ext_momenta, 2) / self.ext_mass).sum()
-            ttt /= self.ncoords
-            self.ext_momenta *= np.sqrt(self.equil_temp / (ttt * atomic_to_K))
+        self._reinit_ext_system(xi)
 
     def step_bias(self, write_output: bool = True, write_traj: bool = True, **kwargs):
 
@@ -335,6 +329,17 @@ class eABF(ABF, EnhancedSampling):
                     time.sleep(0.1)
                 else:
                     raise Exception(f" >>> Fatal Error: Failed to sync bias with `{mw_file}.npz`.")
+
+    def _reinit_ext_system(self, xi):
+        """initialize extended-system dynamics with random momenta"""
+        self.ext_coords = np.copy(xi)
+        for i in range(self.ncoords):
+            self.ext_momenta[i] = random.gauss(0.0, 1.0) * np.sqrt(
+                self.equil_temp * self.ext_mass[i]
+            )
+            ttt = (np.power(self.ext_momenta, 2) / self.ext_mass).sum()
+            ttt /= self.ncoords
+            self.ext_momenta *= np.sqrt(self.equil_temp / (ttt * atomic_to_K))
 
     def _propagate(self, langevin: bool = True):
         """Propagate momenta/coords of extended variable in time with Velocity Verlet

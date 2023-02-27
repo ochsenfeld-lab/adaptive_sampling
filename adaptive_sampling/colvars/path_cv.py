@@ -15,7 +15,7 @@ class PathCV:
         smooth_damping: Controls smoothing of path (0: no smoothing, 1: linear interpolation between neighbours)
         reparam_steps: Maximum number of cycles for reparamerization of path to ensure equidistant nodes
         reparam_tol: Tolerance for reparametrization of path to ensure equidistant nodes
-        coordinate_system: coordinate system for calculation of Path CV
+        coordinate_system: coordinate system for calculation of PathCV
             available: `cartesian`, `zmatrix` or `cv_space`
         metric: Metric for calculation of distance of points
             `RMSD`: Root mean square deviation
@@ -62,7 +62,7 @@ class PathCV:
         self.requires_z = requires_z
         self.ndim = ndim
         self.verbose = verbose
-       
+        
         # initialize path
         self.path, self.nnodes = read_path(
             self.guess_path, 
@@ -79,7 +79,7 @@ class PathCV:
 
         # accumulators for path update
         if self.adaptive:
-            self.n_updates = 0 
+            self.n_updates = -4 # TODO: don't count calls during init
             self.weights = torch.zeros(self.nnodes)    
             self.avg_dists = [torch.zeros_like(self.path[0]) for _ in range(self.nnodes)]
             if half_life < 0:
@@ -154,25 +154,27 @@ class PathCV:
         )
         dists = self._get_distance_to_path(z)
         idx_nodemin, coords_nodemin = self._get_closest_nodes(z, dists)
-
+        
         # add boundary nodes to `self.path`
         self.path.insert(0, self.boundary_nodes[0])
         self.path.append(self.boundary_nodes[1])
         idx_nodemin = [i+1 for i in idx_nodemin]
 
-        isign = idx_nodemin[0] - idx_nodemin[1] 
-        if isign > 1:
-            isign = 1
-        elif isign < -1:
-            isign = -1
+        # start of main computation of PathCV        
+        isign = 1 if idx_nodemin[0] - idx_nodemin[1] > 1 else -1
 
         idx_nodemin[1] = idx_nodemin[0] - isign
         idx_nodemin.append(idx_nodemin[0] + isign)
         
-        # compute some vectors
         v1 = self.path[idx_nodemin[0]] - z
+
+        # if idx_nodemin[1] is out of bounds, switch with idx_nodemin[2] 
+        if idx_nodemin[1] < 0 or idx_nodemin[1] > self.nnodes+1:
+            idx_nodemin = [idx_nodemin[i] for i in [0,2,1]]
         v3 = z - self.path[idx_nodemin[1]] 
-        if idx_nodemin[2] < 0 or idx_nodemin[2] >= self.nnodes+1:
+        
+        # if idx_nodemin[2] is out of bounds, use idx_nodemin[1]
+        if idx_nodemin[2] < 0 or idx_nodemin[2] > self.nnodes+1:
             v2 = self.path[idx_nodemin[0]] - self.path[idx_nodemin[1]]
         else:
             v2 = self.path[idx_nodemin[2]] - self.path[idx_nodemin[0]]
@@ -190,15 +192,16 @@ class PathCV:
         root = torch.sqrt(torch.square(v1v2) - v2v2 * (v1v1 - v3v3))
         dx = 0.5 * ((root - v1v2) / v2v2 - 1.)
         self.path_cv = ((idx_nodemin[0]-1) + isign * dx) / (self.nnodes-1)
-
+        
         if self.requires_z or self.adaptive:
             v = z - self.path[idx_nodemin[0]] - dx * (
                 self.path[idx_nodemin[0]] - self.path[idx_nodemin[1]]
             )
 
-        # remove boundary nodes from `self.path`
+        # finished with PathCV, remove boundary nodes from `self.path`
         del self.path[0]
         del self.path[-1]
+        idx_nodemin = [idx-1 for idx in idx_nodemin]
 
         # get perpendicular `z` component (distance to path)
         if self.requires_z: 
@@ -218,15 +221,13 @@ class PathCV:
             elif w2 > 1:
                 w1, w2 = 0.0, 1.0
             
-            if idx_nodemin[0] > 0 and idx_nodemin[0] <= self.nnodes:
+            if idx_nodemin[0] >= 0 and idx_nodemin[0] < self.nnodes:
                 self.avg_dists[idx_nodemin[0]-1] += w1 * v
-                self.weights[idx_nodemin[0]-1] *= self.fade_factor
-                self.weights[idx_nodemin[0]-1] += w1
+                self.weights[idx_nodemin[0]-1]   += w1 * self.fade_factor 
             
-            if idx_nodemin[1] > 0 and idx_nodemin[1] <= self.nnodes:
+            if idx_nodemin[1] >= 0 and idx_nodemin[1] < self.nnodes:
                 self.avg_dists[idx_nodemin[1]-1] += w2 * v
-                self.weights[idx_nodemin[1]-1] *= self.fade_factor
-                self.weights[idx_nodemin[1]-1] += w2
+                self.weights[idx_nodemin[1]-1]   += w2 + self.fade_factor
             
             self.update_path(z, coords_nodemin, gpath=True)
         
@@ -246,10 +247,14 @@ class PathCV:
             dist_ij = self.get_distance(self.path[0], self.path[1], metric=self.metric)
             for j, _ in enumerate(self.path[1:-1], start=1):
                 w = max([0, 1 - self.get_distance(self.path[j], s, metric=self.metric) / dist_ij])
-                self.weights[j] *= self.fade_factor 
-                self.weights[j] += w
+                self.weights[j] += self.fade_factor * w
                 self.avg_dists[j] += w * (z-s)
-                
+
+        # don't count calls during init
+        if self.n_updates < 0:
+            self.weights = torch.zeros_like(self.weights)
+            self.avg_dists = [torch.zeros_like(self.avg_dists[0]) for _ in range(self.nnodes)]
+       
         # update path all `self.update_interval` steps
         self.n_updates += 1
         if self.n_updates == self.update_interval:
@@ -381,7 +386,7 @@ class PathCV:
         d = []
         for i in range(self.nnodes):
             d.append(self.get_distance(z, self.path[i], metric=self.metric))
-            self.path[i] = self.path[i].detach()  # for performance reasons
+            self.path[i] = self.path[i].detach()  # keep path detached for performance reasons
         return d
 
     @staticmethod
@@ -444,7 +449,7 @@ class PathCV:
         Returns:
             s: projection of coords on path 
         """    
-        shape_z = z.shape        # for reshaping results
+        shape_z = z.shape        # to reshape results
         ncoords = torch.numel(z) # to flatten inputs
 
         z = z.view(ncoords)
@@ -460,7 +465,7 @@ class PathCV:
 
         Args:
             z: reduced coordinates
-            rmsds: list of rmsds of z to path nodes
+            dists: list of distances of z to path nodes
 
         Returns:
             closest_index: list with indices of two closest nodes to z  
@@ -469,8 +474,8 @@ class PathCV:
         dists.insert(0, self.get_distance(z, self.boundary_nodes[0], metric=self.metric))
         dists.append(self.get_distance(z, self.boundary_nodes[1], metric=self.metric))
         
-        distmin1, idxmin1 = 99999, 0
-        distmin2, idxmin2 = 99999, 1
+        distmin1, idxmin1 = 99999., 0
+        distmin2, idxmin2 = 99999., 1
         for i, dist in enumerate(dists):
             if dist < distmin1:
                 distmin2 = distmin1
@@ -488,10 +493,10 @@ class PathCV:
         del self.path[-1]
 
         if self.verbose:
-            # if path gets highly irregualar this can fail, so print warning
+            # if path gets highly irregualar, print warning
             if abs(idxmin1 - idxmin2) != 1:
                 print(
-                    f" >>> WARNING: Two closest nodes of PathCV ({idxmin1-1,idxmin2-1}) are not neighbours!"
+                    f" >>> WARNING: Two closest nodes of path ({idxmin1-1,idxmin2-1}) are not neighbours!"
                 ) 
         
         return [idxmin1-1, idxmin2-1], closest_coords
@@ -540,11 +545,32 @@ class PathCV:
         if self.verbose:
             print(f" >>> INFO: Reduced coordinate system to {torch.numel(self.path[0])} {self.coordinates} coordinates.")
 
+    def write_update_info(self, filename: str="update_info"):
+        """write accumulators for path update to `.npz` file
+
+        Arg:
+            filename
+        """
+        import numpy as np
+        
+        # convert to numpy
+        w = self.weights.detach().numpy()
+        avg_dist = []
+        for dists in self.avg_dists:
+            avg_dist.append(dists.detach().numpy())
+        
+        np.savez(
+            file=filename,
+            weights=w,
+            avg_dists=avg_dist,
+            n_updates=self.n_updates,
+        )
+
     def write_path(self, filename: str="path_cv.npy"):
         """write nodes of PathCV to dcd trajectory file
 
         Args:
-            filename
+            filename: filename for path output, can be in `.npy` or `.dcd` format 
         """
         if filename[-3:] == "npy":
             import numpy as np
