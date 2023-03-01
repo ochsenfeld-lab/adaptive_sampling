@@ -221,13 +221,14 @@ class PathCV:
             elif w2 > 1:
                 w1, w2 = 0.0, 1.0
             
+            
             if idx_nodemin[0] >= 0 and idx_nodemin[0] < self.nnodes:
-                self.avg_dists[idx_nodemin[0]-1] += w1 * v
-                self.weights[idx_nodemin[0]-1]   += w1 * self.fade_factor 
+                self.avg_dists[idx_nodemin[0]] += w1 * v
+                self.weights[idx_nodemin[0]]   += w1 * self.fade_factor 
             
             if idx_nodemin[1] >= 0 and idx_nodemin[1] < self.nnodes:
-                self.avg_dists[idx_nodemin[1]-1] += w2 * v
-                self.weights[idx_nodemin[1]-1]   += w2 + self.fade_factor
+                self.avg_dists[idx_nodemin[1]] += w2 * v
+                self.weights[idx_nodemin[1]]   += w2 + self.fade_factor
             
             self.update_path(z, coords_nodemin, gpath=True)
         

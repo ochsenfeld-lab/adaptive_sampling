@@ -11,7 +11,7 @@ class MD:
 
     def __init__(
         self,
-        mass_in=1,
+        mass_in=1.,
         coords_in=[0.0, 0.0],
         potential="1",
         dt_in=0.1e0,
@@ -45,9 +45,7 @@ class MD:
         # Mass
         self.mass = mass_in
         self.conf_forces = np.zeros(2 * self.natoms)
-        self.masses = np.zeros(2 * self.natoms)
-        self.masses[0] = self.mass
-        self.masses[1] = self.mass
+        self.masses = np.full(2, self.mass)
 
         # Ekin and print
         self.epot = 0.0e0
@@ -94,9 +92,13 @@ class MD:
         Args:
             potential: selects potential energy function
         """
-        x = self.coords[0]
-        y = self.coords[1]
-        self.forces = np.zeros(2 * self.natoms)
+        import torch
+
+        coords = torch.from_numpy(self.coords)
+        coords.requires_grad = True
+
+        x = coords[0]
+        y = coords[1]
 
         d = 40.0
         e = 20.0
@@ -113,55 +115,37 @@ class MD:
 
             self.epot = a * s1 * s2 + b * y * y
 
-            self.forces[0] = 2.0 * a * ((x - d) * s2 + s1 * (x - e))
-            self.forces[1] = 2.0 * b * y
-
         elif potential == "2":
 
             a = 0.005
             b = 0.040
 
-            exp_1 = np.exp((-a * (x - d) * (x - d)) + (-b * (y - e) * (y - e)))
-            exp_2 = np.exp((-a * (x + d) * (x + d)) + (-b * (y + e) * (y + e)))
+            exp_1 = torch.exp((-a * (x - d) * (x - d)) + (-b * (y - e) * (y - e)))
+            exp_2 = torch.exp((-a * (x + d) * (x + d)) + (-b * (y + e) * (y + e)))
 
-            self.epot = -np.log(exp_1 + exp_2) / atomic_to_kJmol
+            self.epot = -torch.log(exp_1 + exp_2) / atomic_to_kJmol
 
-            self.forces[0] = (
-                -(
-                    (-2.0 * a * (x - d) * exp_1 - 2.0 * a * (x + d) * exp_2)
-                    / (exp_1 + exp_2)
-                )
-                / atomic_to_kJmol
-            )
-            self.forces[1] = (
-                -(
-                    (-2.0 * b * (y - e) * exp_1 - 2.0 * b * (y + e) * exp_2)
-                    / (exp_1 + exp_2)
-                )
-                / atomic_to_kJmol
-            )
-        
         elif potential == "3":
 
-            B     = 1.0
-            A     = B * np.asarray([-40.0, -10.0, -34.0, 3.0])
-            alpha = np.asarray([-1.00, -1.00, -6.50, 0.7])
-            beta  = np.asarray([ 0.00,  0.00, 11.00, 0.6])
-            gamma = np.asarray([-10.0, -10.0, -6.50, 0.7])
-            x0    = np.asarray([1.0, 0.0, -0.5, -1.0])
-            y0    = np.asarray([0.0, 0.5,  1.5,  1.0])
+            B     = 1.0 / atomic_to_kJmol
+            A     = B * torch.tensor([-40.0, -10.0, -34.0, 3.0])
+            alpha = torch.tensor([-1.00, -1.00, -6.50, 0.7])
+            beta  = torch.tensor([ 0.00,  0.00, 11.00, 0.6])
+            gamma = torch.tensor([-10.0, -10.0, -6.50, 0.7])
+            x0    = torch.tensor([1.0, 0.0, -0.5, -1.0])
+            y0    = torch.tensor([0.0, 0.5,  1.5,  1.0])
     
-            exp = (
-                A * np.exp(alpha*(x-x0)*(x-x0) + beta*(x-x0)*(y-y0) + gamma*(y-y0)*(y-y0))
-            )
-
-            self.epot = B * exp.sum()
-
-            self.forces[0] = (B * exp * (2*alpha*(x-x0) + beta*(y-y0))).sum() 
-            self.forces[1] = (B * exp * (2*gamma*(y-y0) + beta*(x-x0))).sum() 
+            self.epot = (
+                A * torch.exp(alpha*(x-x0)*(x-x0) + beta*(x-x0)*(y-y0) + gamma*(y-y0)*(y-y0))
+            ).sum()
 
         else:
             raise ValueError(" >>> Invalid Potential!")
+                
+        self.forces = torch.autograd.grad(
+            self.epot, coords, allow_unused=True
+        )[0]
+        self.forces = self.forces.detach().numpy()
 
         return (self.epot, self.forces)
 
@@ -175,10 +159,9 @@ class MD:
         Returns:
            -
         """
-        self.ekin = (np.power(self.momenta, 2) / self.masses).sum()
+        self.ekin = (np.square(self.momenta) / self.masses).sum()
         self.ekin /= 2.0
-
-        self.temp = self.ekin / kB_in_atomic
+        self.temp = (self.ekin*2.0) / kB_in_atomic
 
     # -----------------------------------------------------------------------------------------------------
     def propagate(self, langevin=True, friction=1.0e-3):

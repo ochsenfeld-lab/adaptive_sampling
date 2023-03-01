@@ -32,7 +32,7 @@ class WTM(EnhancedSampling):
         hill_drop_freq: int = 20,
         well_tempered_temp: float = 3000.0,
         force_from_grid: bool = True,
-        estimator: str = "TI",
+        estimator: str = "Potential",
         **kwargs,
     ):
         super().__init__(*args, **kwargs)

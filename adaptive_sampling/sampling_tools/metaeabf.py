@@ -369,7 +369,7 @@ class WTMeABF(eABF, WTM, EnhancedSampling):
             center=self.center,
             metapot=self.metapot,
             ext_momenta=self.ext_momenta,
-            ext_coors=self.ext_coords,
+            ext_coords=self.ext_coords,
         )
 
     def restart(self, filename: str = "restart_wtmeabf", restart_ext_sys=True):
