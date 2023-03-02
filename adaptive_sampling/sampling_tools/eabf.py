@@ -77,7 +77,7 @@ class eABF(ABF, EnhancedSampling):
                     )
 
         # initialize extended system at target temp of MD simulation
-        self._reinit_ext_system(xi)
+        self.reinit_ext_system(xi)
 
     def step_bias(self, write_output: bool = True, write_traj: bool = True, **kwargs):
 
@@ -330,7 +330,7 @@ class eABF(ABF, EnhancedSampling):
                 else:
                     raise Exception(f" >>> Fatal Error: Failed to sync bias with `{mw_file}.npz`.")
 
-    def _reinit_ext_system(self, xi):
+    def reinit_ext_system(self, xi):
         """initialize extended-system dynamics with random momenta"""
         self.ext_coords = np.copy(xi)
         for i in range(self.ncoords):

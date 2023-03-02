@@ -76,6 +76,7 @@ class PathCV:
         self._interpolate(n_interpolate)
         self._reparametrize_path(tol=self.reparam_tol, max_step=self.reparam_steps)
         self.boundary_nodes = self._get_boundary(self.path)
+        self.closest_prev = None
 
         # accumulators for path update
         if self.adaptive:
@@ -153,28 +154,28 @@ class PathCV:
             coords, self.active, coord_system=self.coordinates, ndim=self.ndim
         )
         dists = self._get_distance_to_path(z)
-        idx_nodemin, coords_nodemin = self._get_closest_nodes(z, dists)
+        idx_nodemin, coords_nodemin = self._get_closest_nodes(z, dists, regulize=True)
         
         # add boundary nodes to `self.path`
         self.path.insert(0, self.boundary_nodes[0])
         self.path.append(self.boundary_nodes[1])
         idx_nodemin = [i+1 for i in idx_nodemin]
 
-        # start of main computation of PathCV        
-        isign = 1 if idx_nodemin[0] - idx_nodemin[1] > 1 else -1
+        # start of main computation of PathCV   
+        isign = idx_nodemin[0] - idx_nodemin[1]
+        if isign > 1:
+            isign = 1
+        elif isign < 1:
+            isign = -1
 
         idx_nodemin[1] = idx_nodemin[0] - isign
         idx_nodemin.append(idx_nodemin[0] + isign)
         
         v1 = self.path[idx_nodemin[0]] - z
-
-        # if idx_nodemin[1] is out of bounds, switch with idx_nodemin[2] 
-        if idx_nodemin[1] < 0 or idx_nodemin[1] > self.nnodes+1:
-            idx_nodemin = [idx_nodemin[i] for i in [0,2,1]]
         v3 = z - self.path[idx_nodemin[1]] 
         
         # if idx_nodemin[2] is out of bounds, use idx_nodemin[1]
-        if idx_nodemin[2] < 0 or idx_nodemin[2] > self.nnodes+1:
+        if idx_nodemin[2] < 0 or idx_nodemin[2] > self.nnodes:
             v2 = self.path[idx_nodemin[0]] - self.path[idx_nodemin[1]]
         else:
             v2 = self.path[idx_nodemin[2]] - self.path[idx_nodemin[0]]
@@ -189,10 +190,10 @@ class PathCV:
         v2v2 = torch.matmul(v2, v2) 
         v3v3 = torch.matmul(v3, v3)
 
-        root = torch.sqrt(torch.square(v1v2) - v2v2 * (v1v1 - v3v3))
+        root = torch.sqrt(torch.abs(torch.square(v1v2) - v2v2 * (v1v1 - v3v3)))
         dx = 0.5 * ((root - v1v2) / v2v2 - 1.)
         self.path_cv = ((idx_nodemin[0]-1) + isign * dx) / (self.nnodes-1)
-        
+
         if self.requires_z or self.adaptive:
             v = z - self.path[idx_nodemin[0]] - dx * (
                 self.path[idx_nodemin[0]] - self.path[idx_nodemin[1]]
@@ -221,14 +222,15 @@ class PathCV:
             elif w2 > 1:
                 w1, w2 = 0.0, 1.0
             
-            
-            if idx_nodemin[0] >= 0 and idx_nodemin[0] < self.nnodes:
+            if idx_nodemin[0] > 0 and idx_nodemin[0] < self.nnodes-1:
                 self.avg_dists[idx_nodemin[0]] += w1 * v
-                self.weights[idx_nodemin[0]]   += w1 * self.fade_factor 
+                self.weights[idx_nodemin[0]]   *= self.fade_factor 
+                self.weights[idx_nodemin[0]]   += w1 
             
-            if idx_nodemin[1] >= 0 and idx_nodemin[1] < self.nnodes:
+            if idx_nodemin[1] > 0 and idx_nodemin[1] < self.nnodes-1:
                 self.avg_dists[idx_nodemin[1]] += w2 * v
-                self.weights[idx_nodemin[1]]   += w2 + self.fade_factor
+                self.weights[idx_nodemin[1]]   *= self.fade_factor 
+                self.weights[idx_nodemin[1]]   += w2
             
             self.update_path(z, coords_nodemin, gpath=True)
         
@@ -248,8 +250,9 @@ class PathCV:
             dist_ij = self.get_distance(self.path[0], self.path[1], metric=self.metric)
             for j, _ in enumerate(self.path[1:-1], start=1):
                 w = max([0, 1 - self.get_distance(self.path[j], s, metric=self.metric) / dist_ij])
-                self.weights[j] += self.fade_factor * w
                 self.avg_dists[j] += w * (z-s)
+                self.weights[j] *= self.fade_factor
+                self.weights[j] += w
 
         # don't count calls during init
         if self.n_updates < 0:
@@ -263,14 +266,12 @@ class PathCV:
             for j in range(self.nnodes-2):
                 if self.weights[j+1] > 0:
                     new_path[j+1] += (self.avg_dists[j+1] / self.weights[j+1])
-                    new_path[j+1] = new_path[j+1].detach()
 
             self.path = new_path.copy()
             self._reparametrize_path(tol=self.reparam_tol, max_step=self.reparam_steps)
 
             # reset accumulators
             self.n_updates = 0 
-            self.weights = torch.zeros_like(self.weights)
             self.avg_dists = [torch.zeros_like(self.avg_dists[0]) for _ in range(self.nnodes)]
 
     def _reparametrize_path(
@@ -386,7 +387,7 @@ class PathCV:
         """
         d = []
         for i in range(self.nnodes):
-            d.append(self.get_distance(z, self.path[i], metric=self.metric))
+            d.append(float(self.get_distance(z, self.path[i], metric=self.metric)))
             self.path[i] = self.path[i].detach()  # keep path detached for performance reasons
         return d
 
@@ -461,7 +462,7 @@ class PathCV:
 
         return (q0 + torch.matmul(ap,ab) / torch.matmul(ab,ab) * ab).view(shape_z)
 
-    def _get_closest_nodes(self, z: torch.tensor, dists: list) -> tuple:
+    def _get_closest_nodes(self, z: torch.tensor, dists: list, regulize: bool=False) -> tuple:
         """get two closest nodes of path
 
         Args:
@@ -472,35 +473,50 @@ class PathCV:
             closest_index: list with indices of two closest nodes to z  
             closest_coords: list with coordinates of two closest nodes to z
         """
-        dists.insert(0, self.get_distance(z, self.boundary_nodes[0], metric=self.metric))
-        dists.append(self.get_distance(z, self.boundary_nodes[1], metric=self.metric))
+        dists.insert(0, float(self.get_distance(z, self.boundary_nodes[0], metric=self.metric)))
+        dists.append(float(self.get_distance(z, self.boundary_nodes[1], metric=self.metric)))
         
-        distmin1, idxmin1 = 99999., 0
-        distmin2, idxmin2 = 99999., 1
-        for i, dist in enumerate(dists):
-            if dist < distmin1:
-                distmin2 = distmin1
-                idxmin2 = idxmin1
-                distmin1 = dist
-                idxmin1 = i
-            elif (dist < distmin2):
-                distmin2 = dist
-                idxmin2 = i
+        dists_sorted = dists.copy()
+        dists_sorted.sort()
+
+        idxmin1 = dists.index(dists_sorted[0])
+        idxmin2 = dists.index(dists_sorted[1])
+
+        if regulize: 
+            idxmin1 = self._check_nodemin_prev(idxmin1, dists)
 
         self.path.insert(0, self.boundary_nodes[0])
         self.path.append(self.boundary_nodes[1])
         closest_coords = [self.path[idxmin1], self.path[idxmin2]]
         del self.path[0]
         del self.path[-1]
-
+        
         if self.verbose:
             # if path gets highly irregualar, print warning
             if abs(idxmin1 - idxmin2) != 1:
                 print(
                     f" >>> WARNING: Two closest nodes of path ({idxmin1-1,idxmin2-1}) are not neighbours!"
-                ) 
-        
+                )
+
         return [idxmin1-1, idxmin2-1], closest_coords
+        
+    def _check_nodemin_prev(self, idx: int, dists: list) -> int:
+        """ensures that index of closest node changes no more than 1 to previous step
+        """
+        if self.closest_prev != None:
+            if abs(self.closest_prev - idx) > 1:
+                if self.closest_prev >= self.nnodes+1:
+                    d = [dists[self.closest_prev-1], dists[self.closest_prev]]
+                if self.closest_prev == 0:
+                    d = [dists[self.closest_prev], dists[self.closest_prev+1]]
+                else:
+                    d = [dists[self.closest_prev-1], dists[self.closest_prev], dists[self.closest_prev+1]]
+                
+                d.sort()
+                idx = dists.index(d[0])
+                
+        self.closest_prev = idx
+        return idx
 
     def _interpolate(self, n_interpolate):
         """Add nodes by linear interpolation or remove nodes by slicing
