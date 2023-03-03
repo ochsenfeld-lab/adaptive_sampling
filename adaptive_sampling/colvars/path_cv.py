@@ -9,7 +9,7 @@ class PathCV:
     Args:
         guess_path: filename of `.xyz` or `.npy` with initial path 
         active: list of atom indices included in PathCV
-            if `coordinate_system=cv_space`, has to contain list of list of indices for distances, angles and torsions that define CV space 
+            if `coordinate_system=cv_space`, has to contain list of lists of indices for distances, angles and torsions that define CV space 
         n_interpolate: Number of nodes that are added between original nodes by linear interpolation,
             if negative, slice path nodes according to `self.path[::abs(n_interpolate)]`
         smooth_damping: Controls smoothing of path (0: no smoothing, 1: linear interpolation between neighbours)
@@ -136,7 +136,7 @@ class PathCV:
 
         if self.adaptive:
             _, coords_nearest = self._get_closest_nodes(z, rmsds)
-            self.update_path(z, coords_nearest)
+            self.update_path(z, q=coords_nearest)
 
         return self.path_cv
 
@@ -232,11 +232,11 @@ class PathCV:
                 self.weights[idx_nodemin[1]]   *= self.fade_factor 
                 self.weights[idx_nodemin[1]]   += w2
             
-            self.update_path(z, coords_nodemin, gpath=True)
+            self.update_path(z, q=None)
         
         return self.path_cv
 
-    def update_path(self, z: torch.tensor, q: list, gpath=False):
+    def update_path(self, z: torch.tensor, q: list=None):
         """Update path nodes to ensure smooth convergence to the MFEP
         
         see: Ortiz et al., J. Chem. Phys. (2018): https://doi.org/10.1063/1.5027392
@@ -245,7 +245,7 @@ class PathCV:
             z: reduced coords 
             q: coords of two neighbour nodes of z
         """
-        if not gpath:
+        if q != None:
             s = self._project_coords_on_line(z, q)
             dist_ij = self.get_distance(self.path[0], self.path[1], metric=self.metric)
             for j, _ in enumerate(self.path[1:-1], start=1):
@@ -603,5 +603,3 @@ class PathCV:
             for coords in self.path:
                 dcd.write(BOHR_to_ANGSTROM * coords.view(int(torch.numel(coords)/3),3).detach().numpy())
             dcd.close()
-
-
