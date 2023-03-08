@@ -293,24 +293,3 @@ def fes_from_weights(
     return xx, yy, fes.reshape(xx.shape)
 
 
-def deltaf_from_weights(
-    TS: float, cv: np.array, weights: np.array, equil_temp: float = 300.0
-) -> Tuple[np.array, np.array]:
-    """Compute free energy difference from statistical weigths obtained by MBAR
-
-    Args:
-        TS: position of transition state on CV
-        cv: trajectory of CV
-        weights: MBAR weights of data points
-        equil_temp: temperature
-
-    Returns:
-        deltaF: free energy difference
-    """
-    RT = R_in_SI * equil_temp / 1000.0
-    weights /= weights.sum()
-
-    p_a = weights[np.where(cv < TS)].sum()
-    p_b = weights[np.where(cv > TS)].sum()
-
-    return -RT * np.log(p_b / p_a)
