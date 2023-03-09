@@ -154,7 +154,7 @@ class PathCV:
             coords, self.active, coord_system=self.coordinates, ndim=self.ndim
         )
         dists = self._get_distance_to_path(z)
-        idx_nodemin, coords_nodemin = self._get_closest_nodes(z, dists, regulize=True)
+        idx_nodemin, _ = self._get_closest_nodes(z, dists, regulize=True)
         
         # add boundary nodes to `self.path`
         self.path.insert(0, self.boundary_nodes[0])
@@ -382,7 +382,7 @@ class PathCV:
         """
         d = []
         for i in range(self.nnodes):
-            d.append(float(self.get_distance(z, self.path[i], metric=self.metric)))
+            d.append(self.get_distance(z, self.path[i], metric=self.metric))
             self.path[i] = self.path[i].detach()  # keep path detached for performance reasons
         return d
 
@@ -468,8 +468,8 @@ class PathCV:
             closest_index: list with indices of two closest nodes to z  
             closest_coords: list with coordinates of two closest nodes to z
         """
-        dists.insert(0, float(self.get_distance(z, self.boundary_nodes[0], metric=self.metric)))
-        dists.append(float(self.get_distance(z, self.boundary_nodes[1], metric=self.metric)))
+        dists.insert(0, self.get_distance(z, self.boundary_nodes[0], metric=self.metric))
+        dists.append(self.get_distance(z, self.boundary_nodes[1], metric=self.metric))
         
         dists_sorted = dists.copy()
         dists_sorted.sort()
