@@ -74,7 +74,13 @@ class PathCV:
             self._reduce_path()
 
         self._interpolate(n_interpolate)
-        self._reparametrize_path(tol=self.reparam_tol, max_step=self.reparam_steps)
+        self.path = PathCV.reparametrize_path(
+            self.path, 
+            smooth_damping=self.smooth_damping, 
+            tol=self.reparam_tol, 
+            max_step=self.reparam_steps, 
+            verbose=self.verbose
+        )
         self.boundary_nodes = self._get_boundary(self.path)
         self.closest_prev = None
 
@@ -267,34 +273,50 @@ class PathCV:
                 if self.weights[j+1] > 0:
                     new_path[j+1] += (self.avg_dists[j+1] / self.weights[j+1])
 
-            self.path = new_path.copy()
-            self._reparametrize_path(tol=self.reparam_tol, max_step=self.reparam_steps)
-
+            self.path = PathCV.reparametrize_path(
+                new_path, 
+                smooth_damping=self.smooth_damping, 
+                tol=self.reparam_tol, 
+                max_step=self.reparam_steps,
+                verbose=self.verbose,
+            )
+            self.boundary_nodes = self._get_boundary(self.path)
+            
             # reset accumulators
             self.n_updates = 0 
             self.avg_dists = [torch.zeros_like(self.avg_dists[0]) for _ in range(self.nnodes)]
 
-    def _reparametrize_path(
-        self, 
+    @staticmethod
+    def reparametrize_path(
+        path: torch.tensor, 
         tol: float=0.01, 
         max_step: int=10,
-        smooth: bool=True,
-    ):
+        smooth_damping: float=0.0,
+        verbose: bool=True,
+    ) -> list:
         """Reparametrization of path to ensure equidistant nodes
         see: Maragliano et al., J. Chem. Phys. (2006): https://doi.org/10.1063/1.2212942
         
         Args:
+            path: list of coordinates of path nodes
+            smooth_damping: 
             tol: tolerance for convergence, difference of absolute path length to previous cycle
             max_step: maximum number of iterations
-            smooth: if path should be smoothed to remove kinks
+            smooth_damping: damping factor for smoothing in range(0,1)
+            verbose: print info massage
+        
+        Returns:
+            path: reparametrized list of coordinates of path nodes
         """ 
-        if smooth:
-            self.path = self.smooth_string(self.path, s=self.smooth_damping)
+        if smooth_damping > 0:
+            path = PathCV.smooth_string(path, s=smooth_damping)
+
+        nnodes = len(path)
 
         # get length of path
         L, sumlen = [0], [0]
-        for i, coords in enumerate(self.path[1:], start=1):
-            L.append(torch.linalg.norm(coords - self.path[i-1]))
+        for i, coords in enumerate(path[1:], start=1):
+            L.append(torch.linalg.norm(coords - path[i-1]))
             sumlen.append(sumlen[-1] + L[-1])
 
         prevsum, iter = 0, 0
@@ -303,39 +325,39 @@ class PathCV:
 
             # cumulative target distance between nodes
             sfrac = []
-            for i in range(self.nnodes):
-                sfrac.append(i * sumlen[-1] / float(self.nnodes-1))
+            for i in range(nnodes):
+                sfrac.append(i * sumlen[-1] / float(nnodes-1))
 
             # update node positions
-            path_new = [self.path[0]]
-            for i, _ in enumerate(self.path[1:-1], start=1):
+            path_new = [path[0]]
+            for i, _ in enumerate(path[1:-1], start=1):
                 k = 0
                 while not ((sumlen[k] < sfrac[i]) and (sumlen[k+1] >= sfrac[i])):
                     k += 1
-                    if i >= self.nnodes:
+                    if i >= nnodes:
                         raise ValueError(" >>> ERROR: Reparametrization of path failed!")
                 dr = sfrac[i] - sumlen[k] 
-                vec = self.path[k+1] - self.path[k]
+                vec = path[k+1] - path[k]
                 vec /= torch.linalg.norm(vec)
-                path_new.append(self.path[k] + dr * vec)
-            path_new.append(self.path[-1])
-            self.path = path_new.copy()
+                path_new.append(path[k] + dr * vec)
+            path_new.append(path[-1])
+            path = path_new.copy()
 
             # get new length of path
             L, sumlen = [0], [0]
-            for i, coords in enumerate(self.path[1:], start=1):
-                L.append(torch.linalg.norm(coords - self.path[i-1]))
+            for i, coords in enumerate(path[1:], start=1):
+                L.append(torch.linalg.norm(coords - path[i-1]))
                 sumlen.append(sumlen[-1] + L[-1])
             iter += 1
-
-        self.boundary_nodes = self._get_boundary(self.path)
         
-        if self.verbose:
+        if verbose:
             crit = abs(sumlen[-1]-prevsum)
             if crit < tol:
                 print(f" >>> INFO: Reparametrization of Path converged in {iter} steps. Final convergence: {crit:.6f}.")
             else:
-                print(f" >>> WARNING: Reparametrization of Path not converged in {max_step} steps. Final convergence: {crit:.6f}.")        
+                print(f" >>> WARNING: Reparametrization of Path not converged in {max_step} steps. Final convergence: {crit:.6f}.")
+
+        return path    
 
     @staticmethod
     def smooth_string(path: list, s: float=0.0) -> list:
