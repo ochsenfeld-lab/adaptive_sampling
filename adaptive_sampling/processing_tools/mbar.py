@@ -114,7 +114,8 @@ def build_boltzmann(
     traj_list: list, 
     meta_f: np.ndarray, 
     dU_list: list=None,
-    equil_temp: float=300.0
+    equil_temp: float=300.0,
+    periodicity: list=None
 ) -> Tuple[np.ndarray, np.ndarray]:
     """Build Boltzmann factores for MBAR
     
@@ -123,7 +124,8 @@ def build_boltzmann(
         meta_f: definition of simulation with force constants and cv grid
         dU_list: optional, additional potential that enters boltzmann factor (GaMD, confinement, reweighting, ...)
         equil_temp: equilibrium temperature of the simulation
-    
+        periodicity: list with upper and lower bound for periodic CVs such as angles or PBC boxes
+
     Returns:
         exp_U: num_trajs**num_frames array of Boltzmann factors
         frames_per_traj: Number of frames per trajectory
@@ -131,6 +133,11 @@ def build_boltzmann(
     RT = R_in_SI * equil_temp / 1000.0
     beta = 1.0 / RT
     
+    if periodicity:
+        lower_bound = periodicity[0]
+        upper_bound = periodicity[1]
+        period = upper_bound - lower_bound
+
     all_frames, num_frames, frames_per_traj = join_frames(traj_list)
     if dU_list is not None:
         all_dU, dU_num, dU_per_traj = join_frames(dU_list)
@@ -140,18 +147,23 @@ def build_boltzmann(
 
     exp_U = []
     for _, line in enumerate(meta_f):
+        diffs = all_frames - line[1]
+        if periodicity:
+            diffs[diffs > upper_bound] -= period
+            diffs[diffs < lower_bound] += period
+
         if dU_list:
             exp_U.append(
                 np.exp(
                     -beta
-                    * (all_dU + 0.5 * line[2] * np.power(all_frames - line[1], 2)),
+                    * (all_dU + 0.5 * line[2] * np.power(diffs, 2)),
                     dtype=float,
                 )
             )
         else:
             exp_U.append(
                 np.exp(
-                    -beta * 0.5 * line[2] * np.power(all_frames - line[1], 2),
+                    -beta * 0.5 * line[2] * np.power(diffs, 2),
                     dtype=float,
                 )
             )
@@ -281,24 +293,3 @@ def fes_from_weights(
     return xx, yy, fes.reshape(xx.shape)
 
 
-def deltaf_from_weights(
-    TS: float, cv: np.array, weights: np.array, equil_temp: float = 300.0
-) -> Tuple[np.array, np.array]:
-    """Compute free energy difference from statistical weigths obtained by MBAR
-
-    Args:
-        TS: position of transition state on CV
-        cv: trajectory of CV
-        weights: MBAR weights of data points
-        equil_temp: temperature
-
-    Returns:
-        deltaF: free energy difference
-    """
-    RT = R_in_SI * equil_temp / 1000.0
-    weights /= weights.sum()
-
-    p_a = weights[np.where(cv < TS)].sum()
-    p_b = weights[np.where(cv > TS)].sum()
-
-    return -RT * np.log(p_b / p_a)
