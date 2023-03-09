@@ -43,8 +43,9 @@ class WTM(EnhancedSampling):
         if hill_height <= 0:
             raise ValueError(" >>> Error: Gaussian height for MtD has to be > 0!")
 
-        if well_tempered_temp is None and self.verbose:
-            print(" >>> Info: well-tempered scaling of WTM hill_height switched off")
+        if well_tempered_temp is None:
+            if self.verbose:
+                print(" >>> Info: Well-tempered scaling of MtD hill_height switched off")
         elif well_tempered_temp <= 0:
             raise ValueError(
                 " >>> Error: Effective temperature for Well-Tempered MtD has to be > 0!"

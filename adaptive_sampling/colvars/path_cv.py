@@ -288,9 +288,8 @@ class PathCV:
             max_step: maximum number of iterations
             smooth: if path should be smoothed to remove kinks
         """ 
-        # TODO: When smoothing only once there might be too many kinks in the path in some cases?
         if smooth:
-            self.path = self._smooth_string(self.path, s=self.smooth_damping)
+            self.path = self.smooth_string(self.path, s=self.smooth_damping)
 
         # get length of path
         L, sumlen = [0], [0]
@@ -306,10 +305,6 @@ class PathCV:
             sfrac = []
             for i in range(self.nnodes):
                 sfrac.append(i * sumlen[-1] / float(self.nnodes-1))
-
-            # TODO: Smoothing in every cycle might introduce too much corner cutting?
-            #if smooth:
-            #    self.path = self._smooth_string(self.path, s=self.smooth_damping)
 
             # update node positions
             path_new = [self.path[0]]
@@ -343,7 +338,7 @@ class PathCV:
                 print(f" >>> WARNING: Reparametrization of Path not converged in {max_step} steps. Final convergence: {crit:.6f}.")        
 
     @staticmethod
-    def _smooth_string(path: list, s: float=0.0) -> list:
+    def smooth_string(path: list, s: float=0.0) -> list:
         """Smooth string of nodes 
 
         Args:
@@ -568,20 +563,21 @@ class PathCV:
         Arg:
             filename
         """
-        import numpy as np
+        if self.adaptive:
+            import numpy as np
         
-        # convert to numpy
-        w = self.weights.detach().numpy()
-        avg_dist = []
-        for dists in self.avg_dists:
-            avg_dist.append(dists.detach().numpy())
+            # convert to numpy
+            w = self.weights.detach().numpy()
+            avg_dist = []
+            for dists in self.avg_dists:
+                avg_dist.append(dists.detach().numpy())
         
-        np.savez(
-            file=filename,
-            weights=w,
-            avg_dists=avg_dist,
-            n_updates=self.n_updates,
-        )
+            np.savez(
+                file=filename,
+                weights=w,
+                avg_dists=avg_dist,
+                n_updates=self.n_updates,
+            )
 
     def write_path(self, filename: str="path_cv.npy"):
         """write nodes of PathCV to dcd trajectory file
