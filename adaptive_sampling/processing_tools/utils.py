@@ -244,6 +244,77 @@ def reaction_freeE(
     return dA, dA_grid, dA_approx
 
 
+def DeltaF_fromweights(
+    xi_traj: np.ndarray,
+    weights: np.ndarray,
+    cv_thresh: List,
+    T: float = 300.0,
+) -> float:
+    """calculate free energy difference
+       see: Dietschreit et al., J. Chem. Phys. 156, 114105 (2022); https://doi.org/10.1063/5.0083423
+
+    Args:
+        xi_traj (np.array): CV values for trajectory frames
+        weights (np.array): Unbiased Boltzmann weights for trajectory frames
+        cv_thresh (list of i3 floats): lower boundary of reactant, TS value, upper boundary of P
+                                       (not just TS value, in case there are several minima along a curve)
+        T (float): temperature
+
+    Returns:
+        dA (float): free energy difference
+    """
+    RT = (R_in_SI * T) / 1000.0
+
+    R_min = cv_thresh[0]
+    TS    = cv_thresh[1]
+    P_max = cv_thresh[2]
+
+    in_R  = np.where((xi_traj > R_min) & (xi_traj < TS))
+    in_P  = np.where((xi_traj > TS) & (xi_traj < P_max))
+
+    P_R = weights[in_R].sum()
+    P_P = weights[in_P].sum()
+
+    dA = RT * np.log(P_R / P_P)
+
+    return dA
+
+
+def DeltaE_fromweights(
+    xi_traj: np.ndarray,
+    Epot: np.ndarray,
+    weights: np.ndarray,
+    cv_thresh: List
+    ) -> float:
+    """calculate reaction internal energy
+       see: Dietschreit et al., whenever wherever
+
+    Args:
+        xi_traj (np.array): CV values for trajectory frames
+        weights (np.array): Unbiased Boltzmann weights for trajectory frames
+        Epot (np.ndarray): Potential energy for trajectory frames
+        cv_thresh (list of i3 floats): lower boundary of reactant, TS value, upper boundary of P
+                                       (not just TS value, in case there are several minima along a curve)
+
+    Returns:
+        dE (float): reaction internal energy
+
+    """
+
+    R_min = cv_thresh[0]
+    TS    = cv_thresh[1]
+    P_max = cv_thresh[2]
+
+    in_R  = np.where((xi_traj > R_min) & (xi_traj < TS))
+    in_P  = np.where((xi_traj > TS) & (xi_traj < P_max))
+
+    U_R   = np.average(Epot[in_R], weights=weights[in_R])
+    U_P   = np.average(Epot[in_P], weights=weights[in_P])
+    dE = U_P - U_R
+
+    return dE
+
+
 def activation_freeE(
     pmf: np.ndarray,
     m_xi_inv: np.ndarray,
@@ -289,3 +360,96 @@ def activation_freeE(
     dA_b2a_approx = pmf[TS] - pmf[TS:].min()
 
     return dA_a2b, dA_b2a, dA_a2b_approx, dA_b2a_approx
+
+
+def DeltaFact_fromweights(
+    xi_traj: np.ndarray,
+    mxi_inv:  np.ndarray,
+    weights: np.ndarray,
+    cv_thresh: List,
+    tol: float,
+    T: float = 300.0,
+) -> float:
+    """calculate free energy difference
+       see: Dietschreit et al., J. Chem. Phys., 157, 084113 (2022).; <https://aip.scitation.org/doi/10.1063/5.0102075>
+
+    Args:
+        xi_traj (np.array): CV values for trajectory frames
+        weights (np.array): Unbiased Boltzmann weights for trajectory frames
+        mxi_inv (np.array): value of inverse mass for trajectory frames
+        cv_thresh (list of i3 floats): lower boundary of reactant, TS value, upper boundary of P
+                                       (not just TS value, in case there are several minima along a curve)
+        tol (float): width of the TS region
+        T (float): equilibrium temperature
+
+    Returns:
+        dF_act (float): activation free energy
+    """
+    RT = (R_in_SI * T) / 1000.0
+
+    a_min = cv_thresh[0]
+    TS    = cv_thresh[1]
+    b_max = cv_thresh[2]
+    dxi2  = tol/2
+
+    lam_xi = np.sqrt(h_in_SI * h_in_SI * mxi_inv /
+                    (2.0 * np.pi * atomic_to_kg * kB_in_SI * T)
+                   ) * 1.0e10
+
+    in_a  = np.where((xi_traj >= a_min) & (xi_traj < TS))
+    in_all= np.where((xi_traj >= a_min) & (xi_traj <= b_max))
+    in_TS = np.where((xi_traj > TS-dxi2) & (xi_traj < TS+dxi2))
+
+    allW  = weights[in_all].sum()
+    P_a   = weights[in_a].sum() / allW
+    rho_TS= (weights[in_TS].sum() / allW) / tol
+    lam_TS= np.average(lam_xi[in_TS], weights=weights[in_TS])
+
+    dF_act = -RT * np.log(rho_TS * lam_TS / P_a)
+
+    return dF_act
+
+
+def DeltaEact_fromweights(
+    xi_traj: np.ndarray,
+    Epot: np.ndarray,
+    mxi_inv:  np.ndarray,
+    weights: np.ndarray,
+    cv_thresh: List,
+    tol: float,
+    T: float = 300.0,
+) -> tuple:
+    """calculate free energy difference
+       see: Dietschreit et al., whenever wherever
+
+    Args:
+        xi_traj (np.array): CV values for trajectory frames
+        Epot (np.array): potential energy for trajectory frames
+        weights (np.array): Unbiased Boltzmann weights for trajectory frames
+        mxi_inv (np.array): value of inverse mass for trajectory frames
+        cv_thresh (list of i3 floats): lower boundary of reactant, TS value, upper boundary of P
+                                       (not just TS value, in case there are several minima along a curve)
+        tol (float): width of the TS region
+        T (float): equilibrium temperature
+
+    Returns:
+        dE_act (float): activation internal energy
+    """
+    RT = (R_in_SI * T) / 1000.0
+
+    a_min = cv_thresh[0]
+    TS    = cv_thresh[1]
+    dxi2  = tol/2
+
+
+    in_a  = np.where((xi_traj >= a_min) & (xi_traj < TS))
+    in_TS = np.where((xi_traj > TS-dxi2) & (xi_traj < TS+dxi2))
+
+    absgrad_TS  = np.average(np.sqrt(mxi_inv)[in_TS], weights=weights[in_TS])
+    Uabsgrad_TS = np.average((Epot*np.sqrt(mxi_inv))[in_TS], weights=weights[in_TS])
+    U_R         = np.average(Epot[in_a], weights=weights[in_a])
+
+    dE_act = (Uabsgrad_TS / absgrad_TS ) -RT/2 - U_R
+
+    return dE_act
+
