@@ -9,7 +9,7 @@ class PathCV:
     Args:
         guess_path: filename of `.xyz` or `.npy` with initial path 
         active: list of atom indices included in PathCV
-            if `coordinate_system=cv_space`, has to contain list of lists of indices for distances, angles and torsions that define CV space 
+            if `coordinate_system=cv_space`, has to contain cv definitions to define CV space 
         n_interpolate: Number of nodes that are added between original nodes by linear interpolation,
             if negative, slice path nodes according to `self.path[::abs(n_interpolate)]`
         smooth_damping: Controls smoothing of path (0: no smoothing, 1: linear interpolation between neighbours)
@@ -112,11 +112,7 @@ class PathCV:
         )
         rmsds = self._get_distance_to_path(z)
         
-        la = (
-            1. / torch.square(
-                self.get_distance(self.path[1], self.path[0], metric=self.metric)
-            )
-        ).type(torch.float64)
+        la = self._calc_1overlambda()
         
         term1 = 0.0
         term2 = 0.0
@@ -393,6 +389,14 @@ class PathCV:
         upper_bound = path[-1] - delta_upper
         return [lower_bound, upper_bound]
 
+    def _calc_1overlambda(self):
+        """get lambda parameter for smoothing of arithmetic path"""
+        sumlen = 0
+        for i, coords in enumerate(self.path[1:], start=1):
+            d = self.get_distance(coords, self.path[i-1], metric=self.metric)
+            sumlen += d
+        return sumlen / (self.nnodes-1)
+        
     def _get_distance_to_path(self, z: torch.tensor) -> list:
         """Calculates distance according to chosen metric
 
@@ -485,7 +489,8 @@ class PathCV:
         Args:
             z: reduced coordinates
             dists: list of distances of z to path nodes
-
+            regulize: ensure that closest node moves no more than 1 index between steps
+            
         Returns:
             closest_index: list with indices of two closest nodes to z  
             closest_coords: list with coordinates of two closest nodes to z

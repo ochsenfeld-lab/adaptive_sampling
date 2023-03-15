@@ -146,9 +146,9 @@ def test_calculate_path(input, coords1, coords2, coords3):
     cv1 = cv.calculate_path(coords1)
     cv2 = cv.calculate_path(coords2) 
     cv3 = cv.calculate_path(coords3)
-    assert isclose(float(cv1), float(0.1), abs_tol=1e-1)
-    assert isclose(float(cv2), float(0.5), abs_tol=1e-1)
-    assert isclose(float(cv3), float(0.9), abs_tol=1e-1)
+    assert isclose(float(cv1), float(0.0), abs_tol=1e-3)
+    assert isclose(float(cv2), float(0.5), abs_tol=1e-3)
+    assert isclose(float(cv3), float(1.0), abs_tol=1e-3)
 
 @pytest.mark.parametrize(
     "input, coords1, coords2", [
