@@ -164,8 +164,9 @@ def test_projection_point_on_path(input, coords1, coords2):
     coords2 = coords2.view(2,3) / BOHR_to_ANGSTROM
     cv = PathCV(guess_path=input, metric="RMSD")
     rmsds = cv._get_distance_to_path(coords1)
-    _, q = cv._get_closest_nodes(coords1, rmsds)
-    cv1 = cv._project_coords_on_line(coords1, q)
+    idx_min = cv._get_closest_nodes(coords1, rmsds)
+    nodes = [cv.path[idx_min[0]], cv.path[idx_min[1]]]
+    cv1 = cv._project_coords_on_line(coords1, nodes)
     assert torch.allclose(cv1, coords2)
 
 @pytest.mark.parametrize(

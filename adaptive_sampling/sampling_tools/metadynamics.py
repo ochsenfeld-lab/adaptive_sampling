@@ -311,7 +311,7 @@ class WTM(EnhancedSampling):
         if len(self.center) == 0:
             if self.verbose:
                 print(" >>> Warning: no metadynamics hills stored")
-            return bias_force
+            return bias_force, local_pot
 
         if self.ncoords == 1:
 

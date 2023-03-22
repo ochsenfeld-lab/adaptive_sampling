@@ -452,4 +452,3 @@ def DeltaEact_fromweights(
     dE_act = (Uabsgrad_TS / absgrad_TS ) -RT/2 - U_R
 
     return dE_act
-

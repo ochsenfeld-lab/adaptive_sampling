@@ -137,8 +137,17 @@ class PathCV:
             self.grad_z = self.grad_z.detach().numpy()
 
         if self.adaptive:
-            _, coords_nearest = self._get_closest_nodes(z, rmsds)
-            self.update_path(z, q=coords_nearest)
+            min_idx = self._get_closest_nodes(z, rmsds)
+            min_coords = []
+            for idx in min_idx:
+                if idx == -1:
+                    min_coords.append(self.boundary_nodes[0])
+                elif idx == self.nnodes:
+                    min_coords.append(self.boundary_nodes[1])
+                else:
+                    min_coords.append(self.path[idx])
+
+            self.update_path(z, q=min_coords)
 
         return self.path_cv
 
@@ -156,7 +165,7 @@ class PathCV:
             coords, self.active, coord_system=self.coordinates, ndim=self.ndim
         )
         dists = self._get_distance_to_path(z)
-        idx_nodemin, _ = self._get_closest_nodes(z, dists, regulize=True)
+        idx_nodemin = self._get_closest_nodes(z, dists, regulize=True)
         
         # add boundary nodes to `self.path`
         self.path.insert(0, self.boundary_nodes[0])
@@ -492,41 +501,39 @@ class PathCV:
             regulize: ensure that closest node moves no more than 1 index between steps
             
         Returns:
-            closest_index: list with indices of two closest nodes to z  
-            closest_coords: list with coordinates of two closest nodes to z
+            min_idx: list with indices of two closest nodes to z  
         """
         dists.insert(0, self.get_distance(z, self.boundary_nodes[0], metric=self.metric))
         dists.append(self.get_distance(z, self.boundary_nodes[1], metric=self.metric))
         
-        dists_sorted = dists.copy()
-        dists_sorted.sort()
-
-        idxmin1 = dists.index(dists_sorted[0])
-        idxmin2 = dists.index(dists_sorted[1])
+        min1 = min2 = float('inf')
+        min1_idx = min2_idx = -1
+        for i, num in enumerate(dists):
+            if num < min1:
+                min2 = min1
+                min2_idx = min1_idx
+                min1 = num
+                min1_idx = i
+            elif num < min2:
+                min2 = num
+                min2_idx = i
 
         if regulize: 
-            idxmin1 = self._check_nodemin_prev(idxmin1, dists)
-
-        self.path.insert(0, self.boundary_nodes[0])
-        self.path.append(self.boundary_nodes[1])
-        closest_coords = [self.path[idxmin1], self.path[idxmin2]]
-        del self.path[0]
-        del self.path[-1]
+            min1_idx, min2_idx = self._check_nodemin_prev(min1_idx, min2_idx, dists)
         
         if self.verbose:
-            # if path gets highly irregualar, print warning
-            if abs(idxmin1 - idxmin2) != 1:
+            if abs(min1_idx - min2_idx) != 1:
                 print(
-                    f" >>> WARNING: Two closest nodes of path ({idxmin1-1,idxmin2-1}) are not neighbours!"
+                    f" >>> WARNING: Shortcutting path at node indices ({min1_idx-1, min2_idx-1})"
                 )
 
-        return [idxmin1-1, idxmin2-1], closest_coords
+        return [min1_idx-1, min2_idx-1]
         
-    def _check_nodemin_prev(self, idx: int, dists: list) -> int:
+    def _check_nodemin_prev(self, idx0: int, idx1: int, dists: list) -> int:
         """ensures that index of closest node changes no more than 1 to previous step
         """
         if self.closest_prev != None:
-            if abs(self.closest_prev - idx) > 1:
+            if abs(self.closest_prev - idx0) > 1:
                 if self.closest_prev >= self.nnodes+1:
                     d = [dists[self.closest_prev-1], dists[self.closest_prev]]
                 if self.closest_prev == 0:
@@ -535,10 +542,11 @@ class PathCV:
                     d = [dists[self.closest_prev-1], dists[self.closest_prev], dists[self.closest_prev+1]]
                 
                 d.sort()
-                idx = dists.index(d[0])
+                idx0 = dists.index(d[0])
+                idx1 = dists.index(d[1])
                 
-        self.closest_prev = idx
-        return idx
+        self.closest_prev = idx0
+        return idx0, idx1
 
     def _interpolate(self, n_interpolate):
         """Add nodes by linear interpolation or remove nodes by slicing

@@ -45,6 +45,7 @@ class MD:
         # Mass
         self.mass = mass_in
         self.conf_forces = np.zeros(2 * self.natoms)
+        self.conf_traj = []
         self.masses = np.full(2, self.mass)
 
         # Ekin and print
@@ -206,6 +207,48 @@ class MD:
             self.momenta -= 0.5e0 * self.dt * self.forces
         else:
             self.momenta -= 0.5e0 * self.dt * self.forces
+
+    # -----------------------------------------------------------------------------------------------------
+    def confine_colvar(self, ats):
+        """Confine atom to collective variable (CV)
+
+        Args:
+            ats (list): list of lists with definition of confinement 
+                [cv, grad_cv, r_0, k in kJ/mol]]
+ 
+        Returns:
+            -
+        """
+        self.conf_forces = np.zeros_like(self.forces)
+        for cv in ats:
+            d = (cv[0] - cv[2])
+            k = cv[3] / atomic_to_kJmol
+            conf_energy = 0.5 * k * d * d
+            self.epot += conf_energy
+            self.conf_forces += k * d * cv[1]
+        self.forces += self.conf_forces
+        self.conf_traj.append([cv[0], conf_energy])
+
+    # -----------------------------------------------------------------------------------------------------
+    def print_confine(self, name):
+        '''Saves the current value of the confinements and their energy contributions to a file
+
+        Args:
+            name (str): name of output file
+
+        Returns:
+            -
+        '''
+        if self.step == 0:
+            f = open(name,"w")
+        else:
+            f = open(name,"a")
+        string = str("%20.10e  " % (self.step*self.dt_fs))
+        for conf in self.conf_traj[-1]:
+            string += str("%20.10e  " % (conf))
+        string += "\n"
+        f.write(string)
+        f.close()
 
     # -----------------------------------------------------------------------------------------------------
     def get_sampling_data(self):

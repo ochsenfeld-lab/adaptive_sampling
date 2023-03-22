@@ -372,7 +372,7 @@ class WTMeABF(eABF, WTM, EnhancedSampling):
             ext_coords=self.ext_coords,
         )
 
-    def restart(self, filename: str = "restart_wtmeabf", restart_ext_sys=True):
+    def restart(self, filename: str = "restart_wtmeabf", restart_ext_sys=False):
         """restart from restart file
 
         Args:
