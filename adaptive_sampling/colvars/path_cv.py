@@ -27,6 +27,7 @@ class PathCV:
         update_interval: number of steps between updates of adaptive path
         half_life: number of steps til weight of original path is half due to updates
         requires_z: if distance to path should be calculated and stored for confinement to path
+        device: desired device of torch tensors 
         ndim: number of dimensions (2 for 2D test potentials, 3 else)
         verbose: if verbose information should be printed
     """
@@ -44,6 +45,7 @@ class PathCV:
         update_interval: int=100,
         half_life: float=-1, 
         requires_z: bool=False,
+        device: str='cpu',
         ndim: int=3,
         verbose: bool=False,
     ):  
@@ -60,6 +62,7 @@ class PathCV:
         self.update_interval = update_interval
         self.half_life = half_life
         self.requires_z = requires_z
+        self.device = device
         self.ndim = ndim
         self.verbose = verbose
         
@@ -87,8 +90,8 @@ class PathCV:
         # accumulators for path update
         if self.adaptive:
             self.n_updates = -4 # TODO: don't count calls during init
-            self.weights = torch.zeros(self.nnodes)    
-            self.avg_dists = [torch.zeros_like(self.path[0]) for _ in range(self.nnodes)]
+            self.weights = torch.zeros(self.nnodes, device=self.device, requires_grad=False)    
+            self.avg_dists = [torch.zeros_like(self.path[0], device=self.device, requires_grad=False) for _ in range(self.nnodes)]
             if half_life < 0:
                 self.fade_factor = 1.0
             else:
@@ -109,7 +112,7 @@ class PathCV:
         """
         z = convert_coordinate_system(
             coords, self.active, coord_system=self.coordinates, ndim=self.ndim
-        )
+        ).to(self.device)
         rmsds = self._get_distance_to_path(z)
         
         la = self._calc_1overlambda()
@@ -163,9 +166,9 @@ class PathCV:
         """
         z = convert_coordinate_system(
             coords, self.active, coord_system=self.coordinates, ndim=self.ndim
-        )
+        ).to(self.device)
         dists = self._get_distance_to_path(z)
-        idx_nodemin = self._get_closest_nodes(z, dists, regulize=True)
+        idx_nodemin = self._get_closest_nodes(z, dists, regulize=False)
         
         # add boundary nodes to `self.path`
         self.path.insert(0, self.boundary_nodes[0])
@@ -267,8 +270,8 @@ class PathCV:
 
         # don't count calls during init
         if self.n_updates < 0:
-            self.weights = torch.zeros_like(self.weights)
-            self.avg_dists = [torch.zeros_like(self.avg_dists[0]) for _ in range(self.nnodes)]
+            self.weights = torch.zeros_like(self.weights, device=self.device, requires_grad=False)
+            self.avg_dists = [torch.zeros_like(self.avg_dists[0], device=self.device, requires_grad=False) for _ in range(self.nnodes)]
        
         # update path all `self.update_interval` steps
         self.n_updates += 1
@@ -289,7 +292,7 @@ class PathCV:
             
             # reset accumulators
             self.n_updates = 0 
-            self.avg_dists = [torch.zeros_like(self.avg_dists[0]) for _ in range(self.nnodes)]
+            self.avg_dists = [torch.zeros_like(self.avg_dists[0], device=self.device, requires_grad=False) for _ in range(self.nnodes)]
 
     @staticmethod
     def reparametrize_path(
@@ -417,8 +420,8 @@ class PathCV:
         """
         d = []
         for i in range(self.nnodes):
+            self.path[i] = self.path[i].detach().to(self.device)
             d.append(self.get_distance(z, self.path[i], metric=self.metric))
-            self.path[i] = self.path[i].detach()  # keep path detached for performance reasons
         return d
 
     @staticmethod

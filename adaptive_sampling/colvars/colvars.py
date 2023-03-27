@@ -20,18 +20,19 @@ class CV:
                                 and saved to self.gradient
     """
 
-    def __init__(self, the_mol: MDInterface, requires_grad: bool = False):
+    def __init__(self, the_mol: MDInterface, requires_grad: bool = False, device='cpu'):
 
         self.the_mol = the_mol
         self.requires_grad = requires_grad
+        self.device = device
 
         if self.requires_grad:
             torch.autograd.set_detect_anomaly(True)
 
         md_state = self.the_mol.get_sampling_data()
 
-        self.mass = torch.from_numpy(md_state.mass).float()
-        self.coords = torch.from_numpy(md_state.coords.ravel()).float()
+        self.mass = torch.from_numpy(md_state.mass, device=self.device).float()
+        self.coords = torch.from_numpy(md_state.coords.ravel(), device=self.device).float()
         self.natoms = len(self.mass)
         self.requires_grad = requires_grad
         self.gradient = None
@@ -44,7 +45,7 @@ class CV:
         """The coords tensor and ndarray share the same memory.
         Modifications to the tensor will be reflected in the ndarray and vice versa!"""
         self.coords = torch.from_numpy(self.the_mol.get_sampling_data().coords.ravel())
-        self.coords = self.coords.float()
+        self.coords = self.coords.float().to(self.device)
         self.coords.requires_grad = self.requires_grad
 
     def _get_com(self, atoms: Union[int, list]) -> Tuple[torch.tensor, float]:
