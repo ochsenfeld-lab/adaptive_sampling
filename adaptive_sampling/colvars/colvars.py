@@ -31,8 +31,11 @@ class CV:
 
         md_state = self.the_mol.get_sampling_data()
 
-        self.mass = torch.from_numpy(md_state.mass, device=self.device).float()
-        self.coords = torch.from_numpy(md_state.coords.ravel(), device=self.device).float()
+        self.mass = torch.from_numpy(md_state.mass).float()
+        self.coords = torch.from_numpy(md_state.coords.ravel()).float()
+        self.mass = self.mass.to(device)
+        self.coords = self.coords.to(device)
+        
         self.natoms = len(self.mass)
         self.requires_grad = requires_grad
         self.gradient = None
