@@ -58,8 +58,8 @@ class GaMD(EnhancedSampling):
         self.pot_std = 0.0
         self.pot_m2 = 0.0
         self.pot_avg = 0.0
-        self.pot_min = 0.0
-        self.pot_max = 0.0
+        self.pot_min = float('inf')
+        self.pot_max = float('-inf')
         self.k0 = 0.0
         self.E = 0.0
 

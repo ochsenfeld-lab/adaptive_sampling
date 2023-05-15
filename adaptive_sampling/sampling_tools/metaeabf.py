@@ -352,7 +352,7 @@ class WTMeABF(eABF, WTM, EnhancedSampling):
             metapot=new_metapot,
         )                           
 
-    def write_restart(self, filename: str = "restart_wtmeabf"):
+    def write_restart(self, filename: str="restart_wtmeabf"):
         """write restart file
 
         Args:
@@ -372,11 +372,12 @@ class WTMeABF(eABF, WTM, EnhancedSampling):
             ext_coords=self.ext_coords,
         )
 
-    def restart(self, filename: str = "restart_wtmeabf", restart_ext_sys=False):
+    def restart(self, filename: str = "restart_wtmeabf", restart_ext_sys: bool=False):
         """restart from restart file
 
         Args:
             filename: name of restart file
+            restart_ext_sys: restart coordinates and momenta of extended system
         """
         try:
             data = np.load(filename + ".npz", allow_pickle=True)

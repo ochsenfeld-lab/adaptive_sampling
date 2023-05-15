@@ -452,3 +452,76 @@ def DeltaEact_fromweights(
     dE_act = (Uabsgrad_TS / absgrad_TS ) -RT/2 - U_R
 
     return dE_act
+
+
+def pmf_reweighting(
+    grid: List[np.ndarray], 
+    cv: List[np.ndarray], 
+    la: List[np.ndarray], 
+    ext_sigmas: List[float], 
+    grid_new: np.ndarray, 
+    cv_new: List[np.ndarray], 
+    equil_temp: float=300.0,
+    **kwargs,
+) -> Tuple[np.ndarray, np.ndarray]:
+    """Get PMF along new CV from multiple simulations with different CVs,
+
+    Args:
+        grid: grids along CVs during sampling
+        cv: trajectories of original CVs
+        la: trajectories of extended-system
+        ext_sigmas: list of thermal coupling width of cv and la
+        grid_new: grid for PMF along new CV
+        cv_new: trajectory of new CV
+        equil_temp: equilibrium temperature 
+
+    Returns:
+        pmf: Potential of mean force along grid_new
+        rho: probability density along grid_new
+    """
+    from .mbar import get_windows, build_boltzmann, run_mbar, pmf_from_weights
+    
+    all_trajs  = []
+    all_metafs = []
+    all_idx    = []
+    frames_start = 0
+    
+    for (ext_sigma, grid_i, cv_i, la_i) in zip(ext_sigmas, grid, cv, la):
+        
+        traj_list, indices, meta_f = get_windows(
+            grid_i,
+            cv_i, 
+            la_i, 
+            ext_sigma, 
+            equil_temp=equil_temp,
+        )
+        
+        all_trajs.append(traj_list)
+        all_metafs.append(meta_f)
+        all_idx.append(indices+frames_start)
+        frames_start += len(cv_i)
+    
+    all_trajs   = [item for sublist in all_trajs for item in sublist]
+    all_indices = [item for sublist in all_idx for item in sublist]
+    all_metafs  = np.concatenate(all_metafs)
+    
+    exp_U, frames_per_traj = build_boltzmann(
+        all_trajs, 
+        all_metafs, 
+        equil_temp=equil_temp,
+    )
+    
+    weights = run_mbar(
+        exp_U,
+        frames_per_traj, 
+        **kwargs,
+    )
+    
+    cv_new = np.hstack(cv_new)[all_indices]
+    pmf, rho = pmf_from_weights(
+        grid_new,
+        cv_new,
+        weights,
+        equil_temp=equil_temp,
+    )
+    return pmf, rho
