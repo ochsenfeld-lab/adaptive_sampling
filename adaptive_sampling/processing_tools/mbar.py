@@ -1,10 +1,9 @@
 import sys
 import numpy as np
-from typing import List, Tuple
+from typing import List, Tuple, Union, Dict
 from .utils import join_frames
 from ..units import *
 import torch
-from tqdm import tqdm
 
 
 def run_mbar(
@@ -46,7 +45,7 @@ def run_mbar(
     denominator = 1.0 / torch.matmul(frames_per_traj * torch.exp(beta_Ai), exp_U)
     expU_dot_denom = torch.matmul(exp_U, denominator)
 
-    print("All ready!\n")
+    #print("All ready!\n")
     print("Start of the self-consistent iteration.")
     print("========================================================================")
     sys.stdout.flush()
@@ -118,8 +117,9 @@ def build_boltzmann(
     meta_f: np.ndarray, 
     dU_list: List=None,
     equil_temp: float=300.0,
-    periodicity: Union[List, np.ndarray]=None,,
-    constraints: List[Dict]=None
+    periodicity: Union[List, np.ndarray]=None,
+    constraints: List[Dict]=None,
+    progress_bar: bool=False,
 ) -> Tuple[np.ndarray, np.ndarray]:
     """Build Boltzmann factores for MBAR
     
@@ -130,6 +130,7 @@ def build_boltzmann(
         equil_temp: equilibrium temperature of the simulation
         periodicity: list with upper and lower bound for periodic CVs such as angles or PBC boxes
         constraints: list of dictionaries for harmonic constraints, that were the same everywhere but necessary to constrain simulation
+        progress_bar: show progress bar for generation of Boltzmann factors
 
     Returns:
         exp_U: num_trajs**num_frames array of Boltzmann factors
@@ -175,7 +176,12 @@ def build_boltzmann(
                 const_energy = 0.5 * const_dict['k'] * np.power(diffs, 2)
             
     exp_U = []
-    for line in tqdm(meta_f):
+
+    if progress_bar:
+        from tqdm import tqdm
+        meta_f = tqdm(meta_f)
+
+    for line in meta_f:
         diffs = all_frames - line[1]
         if periodicity:
             for ii in range(diffs.shape[1]):
@@ -222,7 +228,7 @@ def get_windows(
         la: Trajectory of the extended variable
         sigma: Thermal width of coupling of xi and la
         equil_temp: equillibrium temperature
-
+        
     Returns:
         traj_list: list of window trajectories,
         index_list: list of frame indices in original trajectory,
@@ -243,7 +249,8 @@ def get_windows(
         
     traj_list = []
     index_list = np.array([])
-    for center in tqdm(centers):
+
+    for center in centers:
         indices = np.where(np.logical_and((la >= center - dx2).all(axis=-1), 
                               (la < center + dx2).all(axis=-1)))
         index_list = np.append(index_list, indices[0])
