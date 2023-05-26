@@ -4,6 +4,8 @@ from typing import List, Tuple
 from .utils import join_frames
 from ..units import *
 import torch
+from tqdm import tqdm
+
 
 def run_mbar(
     exp_U: np.ndarray,
@@ -110,12 +112,14 @@ def run_mbar(
 
     return weights
 
+
 def build_boltzmann(
-    traj_list: list, 
+    traj_list: List, 
     meta_f: np.ndarray, 
-    dU_list: list=None,
+    dU_list: List=None,
     equil_temp: float=300.0,
-    periodicity: list=None
+    periodicity: Union[List, np.ndarray]=None,,
+    constraints: List[Dict]=None
 ) -> Tuple[np.ndarray, np.ndarray]:
     """Build Boltzmann factores for MBAR
     
@@ -125,6 +129,7 @@ def build_boltzmann(
         dU_list: optional, additional potential that enters boltzmann factor (GaMD, confinement, reweighting, ...)
         equil_temp: equilibrium temperature of the simulation
         periodicity: list with upper and lower bound for periodic CVs such as angles or PBC boxes
+        constraints: list of dictionaries for harmonic constraints, that were the same everywhere but necessary to constrain simulation
 
     Returns:
         exp_U: num_trajs**num_frames array of Boltzmann factors
@@ -139,44 +144,73 @@ def build_boltzmann(
         period = upper_bound - lower_bound
 
     all_frames, num_frames, frames_per_traj = join_frames(traj_list)
+    # adding an extra axis to 1D sims, for compatibility with x-D eABF
+    if len(all_frames.shape) == 1:
+        all_frames = all_frames[:, np.newaxis]
+        if periodicity:
+            if type(lower_bound) == float:
+                lower_bound = np.array([lower_bound])
+                upper_bound = np.array([upper_bound])
+                period = np.array([period])
+
     if dU_list is not None:
         all_dU, dU_num, dU_per_traj = join_frames(dU_list)
         all_dU *= atomic_to_kJmol  # kJ/mol
         if (dU_num != num_frames) or (frames_per_traj != dU_per_traj).all():
             raise ValueError(" >>> Error: GaMD frames have to match eABF frames!")
 
+    if constraints:
+        for const_dict in constraints:
+            const_frames, _ , _ = join_frames(const_dict['traj_list'])
+            diffs = const_frames - const_dict['eq_value']
+            if 'period' in const_dict.keys():
+                const_lb = const_dict['period'][0]
+                const_ub = const_dict['period'][1]
+                const_period = const_ub - const_lb
+                diffs[diffs > const_ub] -= const_period
+                diffs[diffs < const_lb] += const_period
+            if const_energy:
+                const_energy += 0.5 * const_dict['k'] * np.power(diffs, 2)
+            else:
+                const_energy = 0.5 * const_dict['k'] * np.power(diffs, 2)
+            
     exp_U = []
-    for _, line in enumerate(meta_f):
+    for line in tqdm(meta_f):
         diffs = all_frames - line[1]
         if periodicity:
-            diffs[diffs > upper_bound] -= period
-            diffs[diffs < lower_bound] += period
-
+            for ii in range(diffs.shape[1]):
+                diffs[diffs[:,ii] > upper_bound[ii], ii] -= period[ii]
+                diffs[diffs[:,ii] < lower_bound[ii], ii] += period[ii]
         if dU_list:
             exp_U.append(
                 np.exp(
                     -beta
-                    * (all_dU + 0.5 * line[2] * np.power(diffs, 2)),
-                    dtype=float,
+                    * (all_dU + 0.5 * (line[2] * np.power(diffs, 2)).sum(axis=1)),
+                    dtype=np.float64,
                 )
             )
         else:
             exp_U.append(
                 np.exp(
-                    -beta * 0.5 * line[2] * np.power(diffs, 2),
-                    dtype=float,
+                    -beta * 0.5 * (line[2] * np.power(diffs, 2)).sum(axis=1),
+                    dtype=np.float64,
                 )
             )
+            
+        if constraints:
+            exp_U[-1] *= np.exp(-beta * const_energy, dtype=np.float64)
 
     exp_U = np.asarray(exp_U, dtype=np.float64)   # this is a num_trajs x num_frames list
     return exp_U, frames_per_traj
+
 
 def get_windows(
     centers: np.ndarray,
     xi: np.ndarray,
     la: np.ndarray,
-    sigma: float,
+    sigma: Union[float, np.ndarray],
     equil_temp: float = 300.0,
+    dx: np.ndarray = None,
 ) -> Tuple[List[np.ndarray], np.ndarray, np.ndarray]:
     """generate mixture distribution of Gaussian shaped windows from eABF trajectory
        
@@ -195,101 +229,76 @@ def get_windows(
         meta_f: window information for MBAR (compatible with other popular MBAR/WHAM implementations)
     """
     RT = R_in_SI * equil_temp / 1000.0
-    k = RT / (sigma * sigma)
+    k = RT / np.power(sigma, 2)
 
-    dx = centers[1] - centers[0]
+    if dx is None:
+        dx = centers[1] - centers[0]
     dx2 = dx / 2.0
-
+    
+    # assumes if true for one then true for all
+    if len(xi.shape) == 1:
+        xi = xi[:, np.newaxis]
+        la = la[:, np.newaxis]
+        centers = centers[:, np.newaxis]
+        
     traj_list = []
     index_list = np.array([])
-    for center in centers:
-        indices = np.where(np.logical_and(la >= center - dx2, la < center + dx2))
+    for center in tqdm(centers):
+        indices = np.where(np.logical_and((la >= center - dx2).all(axis=-1), 
+                              (la < center + dx2).all(axis=-1)))
         index_list = np.append(index_list, indices[0])
         traj_list += [xi[indices]]
 
-    meta_f = np.zeros(shape=(len(centers), 3))
-    meta_f[:, 1] = centers
-    meta_f[:, 2] = k
+    meta_f = np.zeros(shape=(3, *centers.shape))
+    meta_f[1] = centers
+    meta_f[2] = k
+
+    meta_f = meta_f.transpose((1,0,2))
 
     return traj_list, index_list.astype(np.int32), meta_f
 
 
 def pmf_from_weights(
-    grid: np.ndarray, cv: np.ndarray, weights: np.ndarray, equil_temp: float = 300.0
+    grid: np.ndarray,
+    cv: np.ndarray,
+    weights: np.ndarray,
+    equil_temp: float = 300.0,
+    dx: np.ndarray = None,
 ) -> Tuple[np.ndarray, np.ndarray]:
-    """Get 1D Potential of Mean Force (PMF) from statistical weigths obtained by MBAR
+    """Get Potential of Mean Force (PMF) from statistical weigths obtained by MBAR
+       Note: for higher dimensional PMFs, they need to be reshaped, 
+       this function returns a flattened version
 
     Args:
-        grid: centroids of grid along cv
-        cv: trajectory of cv
+        grid: centroids of grid along cv, 
+              shape=(N, d) for N centroids of d-dimension
+        cv: trajectory of cv shape=(#frames, d)
         weights: boltzmann weights of frames in trajectory
         equil_temp: Temperature of simulation
 
     Returns:
-        pmf: Potential of mean force (PMF) in kJ/mol 
+        pmf: Potential of mean force (PMF) in kJ/mol
         rho: probability density
     """
     RT = R_in_SI * equil_temp / 1000.0
 
-    dx = grid[1] - grid[0]
+    if dx is None:
+        dx = grid[1] - grid[0]
     dx2 = dx / 2.0
 
-    rho = np.zeros(len(grid), dtype=float)
-    for ii, x in enumerate(grid):
-        W_x = weights[np.where(np.logical_and(cv >= x - dx2, cv < x + dx2))]
-        rho[ii] = W_x.sum()
+    if len(grid.shape) == 1:
+        cv = cv[:, np.newaxis]
+        grid = grid[:, np.newaxis]
 
-    rho /= rho.sum() * dx
+    rho = np.zeros(shape=(len(grid),), dtype=float)
+    for ii, center in enumerate(grid):
+        indices = np.where(np.logical_and((cv >= center - dx2).all(axis=-1),
+                              (cv < center + dx2).all(axis=-1)))
+        rho[ii] = weights[indices].sum()
+
+
+    rho /= rho.sum() * np.prod(dx)
     pmf = -RT * np.log(rho, out=np.full_like(rho, np.NaN), where=(rho != 0))
+    pmf = np.ma.masked_array(pmf, mask=np.isnan(pmf))
 
     return pmf, rho
-
-
-def fes_from_weights(
-    x: np.ndarray, 
-    y: np.ndarray, 
-    xi_x: np.ndarray, 
-    xi_y: np.ndarray, 
-    weights: np.ndarray, 
-    equil_temp: float=300.0
-) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
-    """Get 2D Free Energy Surface (FES) from statistical weigths obtained by MBAR
-
-    Args:
-        x: grid centroids along cv0
-        y: grid centroids along cv1
-        xi_x: trajectory of cv0
-        xi_y: trajectory of cv1
-        weights: boltzmann weights of frames in trajectory
-        equil_temp: equilibrium temperature of simulation
-
-    Returns:
-        xx: grid of shape (len(x), len(y)) for x
-        yy: grid of shape (len(x), len(y)) for y
-        fes: free energy surface in kJ/mol
-    """
-    RT = R_in_SI * equil_temp / 1000.0
-
-    dx = x[1] - x[0]
-    dx2 = dx / 2.0
-    
-    dy = y[1] - y[0]
-    dy2 = dy / 2.0
-    
-    yy, xx = np.meshgrid(y, x)
-    
-    rho = np.zeros_like(xx, dtype=float).flatten()
-    for i, xy in enumerate(zip(xx.flatten(), yy.flatten())):
-        ind_x  = np.where(np.logical_and(
-            xi_x >= xy[0] - dx2, xi_x < xy[0] + dx2
-        ))
-        ind_xy = np.where(np.logical_and(
-            xi_y[ind_x] >= xy[1] - dy2, xi_y[ind_x] < xy[1] + dy2
-        ))
-        rho[i] = weights[ind_xy].sum()
-
-    rho /= rho.sum() * dx
-    fes = -RT * np.log(rho, out=np.full_like(rho, np.NaN), where=(rho != 0))
-    return xx, yy, fes.reshape(xx.shape)
-
-
