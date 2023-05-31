@@ -126,7 +126,7 @@ def build_boltzmann(
     Args:
         traj_list: list of trajectories
         meta_f: definition of simulation with force constants and cv grid
-        dU_list: optional, additional potential that enters boltzmann factor (GaMD, confinement, reweighting, ...)
+        dU_list: optional, additional potential in a.u. that enters boltzmann factor (GaMD, confinement, reweighting, ...)
         equil_temp: equilibrium temperature of the simulation
         periodicity: list with upper and lower bound for periodic CVs such as angles or PBC boxes
         constraints: list of dictionaries for harmonic constraints, that were the same everywhere but necessary to constrain simulation
@@ -145,8 +145,10 @@ def build_boltzmann(
         period = upper_bound - lower_bound
 
     all_frames, num_frames, frames_per_traj = join_frames(traj_list)
+
     # adding an extra axis to 1D sims, for compatibility with x-D eABF
-    if len(all_frames.shape) == 1:
+    add_axis = True if len(all_frames.shape) == 1 else False
+    if add_axis:
         all_frames = all_frames[:, np.newaxis]
         if periodicity:
             if type(lower_bound) == float:
@@ -158,7 +160,9 @@ def build_boltzmann(
         all_dU, dU_num, dU_per_traj = join_frames(dU_list)
         all_dU *= atomic_to_kJmol  # kJ/mol
         if (dU_num != num_frames) or (frames_per_traj != dU_per_traj).all():
-            raise ValueError(" >>> Error: GaMD frames have to match eABF frames!")
+            raise ValueError(" >>> Error: Frames of external potential have to match eABF frames!")
+        if add_axis:
+            all_dU = all_dU[:, np.newaxis]
 
     if constraints:
         for const_dict in constraints:
@@ -187,21 +191,16 @@ def build_boltzmann(
             for ii in range(diffs.shape[1]):
                 diffs[diffs[:,ii] > upper_bound[ii], ii] -= period[ii]
                 diffs[diffs[:,ii] < lower_bound[ii], ii] += period[ii]
+
+        exp_U.append(
+            np.exp(
+                -beta * 0.5 * (line[2] * np.power(diffs, 2)).sum(axis=1),
+                dtype=np.float64,
+            )
+        )    
+        
         if dU_list:
-            exp_U.append(
-                np.exp(
-                    -beta
-                    * (all_dU + 0.5 * (line[2] * np.power(diffs, 2)).sum(axis=1)),
-                    dtype=np.float64,
-                )
-            )
-        else:
-            exp_U.append(
-                np.exp(
-                    -beta * 0.5 * (line[2] * np.power(diffs, 2)).sum(axis=1),
-                    dtype=np.float64,
-                )
-            )
+            exp_U[-1] *= np.exp(-beta * all_dU.sum(axis=1))
             
         if constraints:
             exp_U[-1] *= np.exp(-beta * const_energy, dtype=np.float64)

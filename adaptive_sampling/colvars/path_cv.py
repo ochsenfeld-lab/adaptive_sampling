@@ -112,7 +112,7 @@ class PathCV:
         """
         z = convert_coordinate_system(
             coords, self.active, coord_system=self.coordinates, ndim=self.ndim
-        ).to(self.device)
+        ).to(self.device, non_blocking=True)
         rmsds = self._get_distance_to_path(z)
         
         la = self._calc_1overlambda()
@@ -166,7 +166,7 @@ class PathCV:
         """
         z = convert_coordinate_system(
             coords, self.active, coord_system=self.coordinates, ndim=self.ndim
-        ).to(self.device)
+        ).to(self.device, non_blocking=True)
         dists = self._get_distance_to_path(z)
         idx_nodemin = self._get_closest_nodes(z, dists, regulize=False)
         
@@ -273,6 +273,10 @@ class PathCV:
             self.weights = torch.zeros_like(self.weights, device=self.device, requires_grad=False)
             self.avg_dists = [torch.zeros_like(self.avg_dists[0], device=self.device, requires_grad=False) for _ in range(self.nnodes)]
        
+        # avoid performance drop due to buildup of large graphs in long simulations
+        self.weights = self.weights.detach()
+        self.avg_dists = [avg_dist.detach() for avg_dist in self.avg_dists]
+
         # update path all `self.update_interval` steps
         self.n_updates += 1
         if self.n_updates == self.update_interval:
