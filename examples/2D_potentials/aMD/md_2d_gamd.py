@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 import time
 import sys
-from adaptive_sampling.sampling_tools.gamd import GaMD
+from adaptive_sampling.sampling_tools.amd import aMD
 from adaptive_sampling.interface.interfaceMD_2D import *
 from adaptive_sampling.units import *
 
@@ -29,13 +29,13 @@ the_md = MD(
     target_temp_in=target_temp,
     seed_in=seed,
 )
-the_abm = GaMD(
+the_abm = aMD(
     0.0001,
     1000,
     10000,
     the_md,
     ats,
-    gamd_bound="aMD",
+    amd_method="aMD",
     output_freq=1000,
     f_conf=100,
     equil_temp=300.0,

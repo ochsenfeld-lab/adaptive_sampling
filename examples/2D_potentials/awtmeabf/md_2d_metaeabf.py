@@ -1,15 +1,14 @@
 #!/usr/bin/env python
-import time
-import sys
-from adaptive_sampling.sampling_tools.amd import aMD
+from adaptive_sampling.sampling_tools.awtmeabf import aWTMeABF
 from adaptive_sampling.interface.interfaceMD_2D import *
-from adaptive_sampling.units import *
+
+bohr2angs = 0.52917721092e0
 
 ################# Imput Section ####################
 
 # MD
 seed = 42
-nsteps = 1100000  # number of MD steps
+nsteps = 110000  # number of MD steps
 dt = 5.0e0  # stepsize in fs
 target_temp = 300.0  # Kelvin
 mass = 10.0  # a.u.
@@ -29,17 +28,22 @@ the_md = MD(
     target_temp_in=target_temp,
     seed_in=seed,
 )
-the_abm = aMD(
-    3.5,
+the_abm = aWTMeABF(
+    2.0,
+    20.0,
+    2.0,
+    4.0,
+    12,
     1000,
-    10000,
+    1000,
     the_md,
     ats,
-    amd_method="gamd_lower",
+    hill_drop_freq=100,
+    do_wtm=True,
+    amd_method="aMD",
     output_freq=1000,
     f_conf=100,
     equil_temp=300.0,
-    confine=True,
 )
 # the_abm.restart()
 
@@ -67,7 +71,6 @@ print(
 )
 
 while step_count < nsteps:
-    start_loop = time.perf_counter()
     the_md.step += 1
     step_count += 1
 
