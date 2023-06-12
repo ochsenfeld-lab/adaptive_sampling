@@ -148,7 +148,7 @@ class MD:
         )[0]
         self.forces = self.forces.detach().numpy()
 
-        return (self.epot, self.forces)
+        return (float(self.epot), self.forces)
 
     # -----------------------------------------------------------------------------------------------------
     def calc_etvp(self):
