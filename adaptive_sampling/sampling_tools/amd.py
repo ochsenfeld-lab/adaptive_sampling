@@ -32,6 +32,7 @@ class aMD(EnhancedSampling):
         kinetice: calculate necessary data to obtain kinetics of reaction
         f_conf: force constant for confinement of system to the range of interest in CV space
         output_freq: frequency in steps for writing outputs
+        samd_c0: c0 constant for SaMD 
     """
 
     def __init__(
@@ -42,6 +43,7 @@ class aMD(EnhancedSampling):
         *args,
         amd_method: str = "gamd_lower",
         confine: bool = True,
+        samd_c0: float = 0.0001,
         **kwargs,
     ):
         super().__init__(*args, **kwargs)
@@ -66,7 +68,7 @@ class aMD(EnhancedSampling):
         self.k1 = 0.0
         self.k = 0.0
         self.E = 0.0
-        self.c0 = 0.0001
+        self.c0 = samd_c0
         self.c = 1/self.c0 - 1
 
         self.amd_pot = 0.0
