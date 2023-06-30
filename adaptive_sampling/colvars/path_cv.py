@@ -110,9 +110,13 @@ class PathCV:
         Returns:
             path_cv: progress anlong path in range [0,1]
         """
-        z = convert_coordinate_system(
-            coords, self.active, coord_system=self.coordinates, ndim=self.ndim
-        ).to(self.device, non_blocking=True)
+        if self.path[0].shape == coords.shape:
+            z = torch.clone(coords).to(self.device, non_blocking=True)
+        else:
+            z = convert_coordinate_system(
+                coords, self.active, coord_system=self.coordinates, ndim=self.ndim
+            ).to(self.device, non_blocking=True)
+
         rmsds = self._get_distance_to_path(z)
         
         la = self._calc_1overlambda()
@@ -164,9 +168,13 @@ class PathCV:
         Returns:
             path_cv: progress anlong path in range [0,1]
         """
-        z = convert_coordinate_system(
-            coords, self.active, coord_system=self.coordinates, ndim=self.ndim
-        ).to(self.device, non_blocking=True)
+        if self.path[0].shape == coords.shape:
+            z = torch.clone(coords).to(self.device, non_blocking=True)
+        else:
+            z = convert_coordinate_system(
+                coords, self.active, coord_system=self.coordinates, ndim=self.ndim
+            ).to(self.device, non_blocking=True)
+       
         dists = self._get_distance_to_path(z)
         idx_nodemin = self._get_closest_nodes(z, dists, regulize=False)
         

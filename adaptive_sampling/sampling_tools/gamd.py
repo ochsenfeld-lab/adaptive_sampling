@@ -254,18 +254,18 @@ class GaMD(EnhancedSampling):
             raise OSError(f" >>> fatal error: restart file {filename}.npz not found!")
 
         self.histogram = data["hist"]
-        self.pmf = data["pmf"]
-        self.gamd_c1 = data["c1"]
-        self.gamd_m2 = data["m2"]
+        self.pmf       = data["pmf"]
+        self.gamd_c1   = data["c1"]
+        self.gamd_m2   = data["m2"]
         self.gamd_corr = data["corr"]
         self.pot_count = data["pot_count"]
-        self.pot_var = data["pot_var"]
-        self.pot_std = data["pot_std"]
-        self.pot_m2 = data["pot_m2"]
-        self.pot_avg = data["pot_avg"]
-        self.pot_min = data["pot_min"]
-        self.pot_max = data["pot_max"]
-        self.k0 = data["k0"]
+        self.pot_var   = data["pot_var"]
+        self.pot_std   = data["pot_std"]
+        self.pot_m2    = data["pot_m2"]
+        self.pot_avg   = data["pot_avg"]
+        self.pot_min   = data["pot_min"]
+        self.pot_max   = data["pot_max"]
+        self.k0        = data["k0"]
 
         if self.verbose:
             print(f" >>> Info: Adaptive sampling restartet from {filename}!")

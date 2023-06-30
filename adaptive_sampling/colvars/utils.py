@@ -372,9 +372,29 @@ def get_internal_coordinate(
         ) 
 
     elif cv[0].lower() == "min_distance":
+        # returns minimum distance of distances in list
         dists = []
         for x in cv[1]:
             dists.append(torch.linalg.norm(z[x[0]] - z[x[1]]))
+        xi = min(dists)
+
+    elif cv[0].lower() == "min_max_distance":
+        # returns minimum distance of cv[1]-cv[3] for index in cv[1] with maximal distance to Ref
+        # e.g.: ['min_max_distance', [idx0, idx1, ...], Ref, [idx2, idx3, ...]]
+        # developed for proton transfer in glycal mechanism of Pseudouridine synthase 
+ 
+        dists_ref = []
+        for x in cv[1]:
+            dists_ref.append(torch.linalg.norm(z[x] - z[cv[2]]))
+        
+        # get idx that is furthest away from ref
+        idx_new = dists_ref.index(max(dists))
+
+        # use other one for distance
+        dists = []
+        for x in cv[3]:
+            dists.append(torch.linalg.norm(z[x] - z[cv[1][idx_new]]))
+
         xi = min(dists)
 
     else:

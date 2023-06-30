@@ -241,7 +241,7 @@ class GaWTMeABF(WTMeABF, GaMD, EnhancedSampling):
             m2=self.m2_force,
             ext_hist=self.ext_hist,
             ext_momenta=self.ext_momenta,
-            ext_coors=self.ext_coords,
+            ext_coords=self.ext_coords,
             czar_corr=self.correction_czar,
             abf_force=self.abf_forces,
             center=self.center,
@@ -257,9 +257,9 @@ class GaWTMeABF(WTMeABF, GaMD, EnhancedSampling):
             pot_min=self.pot_min,
             pot_max=self.pot_max,
             k0=self.k0,
-        )
+        )   
 
-    def restart(self, filename: str="restart_gaabf", restart_ext_sys: bool=True):
+    def restart(self, filename: str="restart_gaabf", restart_ext_sys: bool=False):
         """restart from restart file
 
         Args:
@@ -270,29 +270,29 @@ class GaWTMeABF(WTMeABF, GaMD, EnhancedSampling):
         except:
             raise OSError(f" >>> fatal error: restart file {filename}.npz not found!")
 
-        self.histogram = data["hist"]
-        self.bias = data["force"]
-        self.var_force = data["var"]
-        self.m2_force = data["m2"]
-        self.ext_hist = data["ext_hist"]
+        self.histogram       = data["hist"]
+        self.bias            = data["force"]
+        self.var_force       = data["var"]
+        self.m2_force        = data["m2"]
+        self.ext_hist        = data["ext_hist"]
         self.correction_czar = data["czar_corr"]
-        self.abf_forces = data["abf_force"]
-        self.center = data["center"].tolist()
-        self.metapot = data["self.metapot"]
-        self.gamd_c1 = data["c1"]
-        self.gamd_m2 = data["m2"]
-        self.gamd_corr = data["corr"]
-        self.pot_count = data["pot_count"]
-        self.pot_var = data["pot_var"]
-        self.pot_std = data["pot_std"]
-        self.pot_m2 = data["pot_m2"]
-        self.pot_avg = data["pot_avg"]
-        self.pot_min = data["pot_min"]
-        self.pot_max = data["pot_max"]
-        self.k0 = data["k0"]
+        self.abf_forces      = data["abf_force"]
+        self.center          = data["center"].tolist()
+        self.metapot         = data["metapot"]
+        self.gamd_c1         = data["gamd_c1"]
+        self.gamd_m2         = data["gamd_m2"]
+        self.gamd_corr       = data["corr"]
+        self.pot_count       = data["pot_count"]
+        self.pot_var         = data["pot_var"]
+        self.pot_std         = data["pot_std"]
+        self.pot_m2          = data["pot_m2"]
+        self.pot_avg         = data["pot_avg"]
+        self.pot_min         = data["pot_min"]
+        self.pot_max         = data["pot_max"]
+        self.k0              = data["k0"]
         if restart_ext_sys:
             self.ext_momenta = data["ext_momenta"]
-            self.ext_coords = data["ext_coords"]
+            self.ext_coords  = data["ext_coords"]
         
         if self.verbose:
             print(f" >>> Info: Adaptive sampling restartet from {filename}!")

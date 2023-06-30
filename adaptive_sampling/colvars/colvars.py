@@ -517,13 +517,13 @@ class CV:
             self.type = "distance"
         elif cv.lower() == "path":
             xi = self.path(atoms, method="path")
-            self.type = None
+            self.type = "2d" if self.pathcv.ndim == 2 else None 
         elif cv.lower() == "gpath":
             xi = self.path(atoms, method="gpath")
-            self.type = None
+            self.type = "2d" if self.pathcv.ndim == 2 else None 
         elif cv.lower() == "path_z":
             xi = self.path_z(atoms)
-            self.type = None
+            self.type = "2d" if self.pathcv.ndim == 2 else None 
         else:
             print(" >>> Error in CV: Unknown Collective Variable")
             sys.exit(1)

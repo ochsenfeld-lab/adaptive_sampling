@@ -460,8 +460,11 @@ def pmf_reweighting(
     la: List[np.ndarray], 
     ext_sigmas: List[float], 
     grid_new: np.ndarray, 
-    cv_new: List[np.ndarray], 
+    cv_new: List[np.ndarray],
+    U_conf: List[np.ndarray]=None, 
     equil_temp: float=300.0,
+    read_weights: bool=False,
+    filename: str="weights.npy",
     **kwargs,
 ) -> Tuple[np.ndarray, np.ndarray]:
     """Get PMF along new CV from multiple simulations with different CVs,
@@ -473,6 +476,7 @@ def pmf_reweighting(
         ext_sigmas: list of thermal coupling width of cv and la
         grid_new: grid for PMF along new CV
         cv_new: trajectory of new CV
+        U_conf: Optional adiational potential for calculation of Boltzmann factors
         equil_temp: equilibrium temperature 
 
     Returns:
@@ -495,7 +499,7 @@ def pmf_reweighting(
             ext_sigma, 
             equil_temp=equil_temp,
         )
-        
+
         all_trajs.append(traj_list)
         all_metafs.append(meta_f)
         all_idx.append(indices+frames_start)
@@ -505,17 +509,37 @@ def pmf_reweighting(
     all_indices = [item for sublist in all_idx for item in sublist]
     all_metafs  = np.concatenate(all_metafs)
     
+    all_dU = None
+    if U_conf != None:
+
+        all_dU = []
+        for (ext_sigma, grid_i, dU_i, la_i) in zip(ext_sigmas, grid, U_conf, la):
+            dU, _, _ = get_windows(
+                grid_i,
+                dU_i, 
+                la_i, 
+                ext_sigma, 
+                equil_temp=equil_temp,
+            )
+            all_dU.append(dU)
+        all_dU = [item for sublist in all_dU for item in sublist]
+
     exp_U, frames_per_traj = build_boltzmann(
         all_trajs, 
         all_metafs, 
+        dU_list=all_dU,
         equil_temp=equil_temp,
     )
     
-    weights = run_mbar(
-        exp_U,
-        frames_per_traj, 
-        **kwargs,
-    )
+    if read_weights:
+        weights = np.load(filename)
+    else:
+        weights = run_mbar(
+            exp_U,
+            frames_per_traj, 
+            **kwargs,
+        )
+        np.save(filename, weights)
     
     cv_new = np.hstack(cv_new)[all_indices]
     pmf, rho = pmf_from_weights(

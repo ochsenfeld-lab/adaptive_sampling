@@ -283,11 +283,9 @@ class EnhancedSampling(ABC):
             m_xi_inv: coordinate dependent mass of collective variabl
         """
         if self.ncoords == 1:
-            return np.dot(
-                delta_xi[0], (1.0 / np.repeat(self.the_md.mass, 3)) * delta_xi[0]
-            )
-        else:
-            return 0.0
+            if self.cv_type[0] == "2d":
+                return np.dot(delta_xi[0], (1.0 / np.repeat(self.the_md.mass, 2)) * delta_xi[0])
+            return np.dot(delta_xi[0], (1.0 / np.repeat(self.the_md.mass, 3)) * delta_xi[0])
 
     def write_output(self, data: dict, filename="free_energy.dat"):
         """write results to output file
