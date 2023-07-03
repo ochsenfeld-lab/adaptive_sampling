@@ -490,6 +490,9 @@ def pmf_reweighting(
     all_idx    = []
     frames_start = 0
     
+    if not len(grid) == len(cv) and len(cv) == len(la) and len(la) == len(ext_sigmas):
+        raise ValueError(" ERROR: Dimensions of input lists have to match!")
+
     for (ext_sigma, grid_i, cv_i, la_i) in zip(ext_sigmas, grid, cv, la):
         
         traj_list, indices, meta_f = get_windows(

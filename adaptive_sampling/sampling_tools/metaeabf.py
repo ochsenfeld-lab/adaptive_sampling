@@ -352,6 +352,19 @@ class WTMeABF(eABF, WTM, EnhancedSampling):
             metapot=new_metapot,
         )                           
 
+    def reinit(self):
+        """Reinit WTM-eABF and start building new bias potential
+        """
+        self.histogram = np.zeros_like(self.histogram)
+        self.bias = np.zeros_like(self.bias)
+        self.m2_force = np.zeros_like(self.m2_force)
+        self.ext_hist = np.zeros_like(self.ext_hist)
+        self.correction_czar = np.zeros_like(self.correction_czar)
+        self.abf_forces = np.zeros_like(self.abf_forces)
+        self.center = []
+        self.metapot = np.zeros_like(self.metapot)
+        self.reinit_ext_system(self.traj[-1])
+
     def write_restart(self, filename: str="restart_wtmeabf"):
         """write restart file
 
