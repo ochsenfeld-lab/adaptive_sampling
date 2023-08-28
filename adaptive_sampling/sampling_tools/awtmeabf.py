@@ -1,14 +1,14 @@
 import numpy as np
 from .enhanced_sampling import EnhancedSampling
 from .metaeabf import WTMeABF
-from .gamd import GaMD
+from .amd import aMD
 from .utils import welford_var, diff, cond_avg
 from ..processing_tools.thermodynamic_integration import integrate
 from ..units import *
 
 
-class GaWTMeABF(WTMeABF, GaMD, EnhancedSampling):
-    """Gaussian-accelerated Well-Tempered Metadynamics extended-system Adaptive Biasing Force Method
+class aWTMeABF(WTMeABF, aMD, EnhancedSampling):
+    """Accelerated Well-Tempered Metadynamics extended-system Adaptive Biasing Force Method
 
     see: Chen et. al., J. Chem. Theory Comput. (2021); https://doi.org/10.1021/acs.jctc.1c00103
 
@@ -26,9 +26,9 @@ class GaWTMeABF(WTMeABF, GaMD, EnhancedSampling):
         seed_in: random seed for Langevin dynamics of extended-system
         hill_height: height of Gaussian hills in kJ/mol
         hill_std: standard deviation of Gaussian hills in units of the CV (can be Bohr, Degree, or None)
-        gamd_sigma0: upper limit of standard deviation of boost potential
-        gamd_init_step: initial steps where no bias is applied to estimate min, max and var of potential energy
-        gamd_equil_steps: equilibration steps, min, max and var of potential energy is still updated
+        amd_parameter: upper limit of standard deviation of boost potential (sigma_0 for GaMD)
+        init_step: initial steps where no bias is applied to estimate min, max and var of potential energy
+        equil_steps: equilibration steps, min, max and var of potential energy is still updated
                           force constant of coupling is calculated from previous steps
         md: Object of the MD Inteface
         cv_def: definition of the Collective Variable (CV) (see adaptive_sampling.colvars)
@@ -38,8 +38,10 @@ class GaWTMeABF(WTMeABF, GaMD, EnhancedSampling):
         well_tempered_temp: effective temperature for WTM, if None, hills are not scaled down (normal metadynamics)
         force_from_grid: forces are accumulated on grid for performance,
                          if False, forces are calculated from sum of Gaussians in every step
-        gamd_bound: "lower": use lower bound for GaMD boost
-                    "upper: use upper bound for GaMD boost
+        amd_method: "amd": use accelerated MD
+                    "gamd_lower": use lower bound for GaMD boost
+                    "gamd_upper: use upper bound for GaMD boost
+                    "samd": use sigmoid accelerated MD
         equil_temp: equillibrium temperature of MD
         verbose: print verbose information
         kinetice: calculate necessary data to obtain kinetics of reaction
@@ -56,36 +58,36 @@ class GaWTMeABF(WTMeABF, GaMD, EnhancedSampling):
         self, 
         write_output: bool = True, 
         write_traj: bool = True, 
-        output_file: str = 'gawtmeabf.out',
+        output_file: str = 'awtmeabf.out',
         traj_file: str = 'CV_traj.dat', 
-        restart_file: str = 'restart_gawtmeabf',
+        restart_file: str = 'restart_awtmeabf',
         **kwargs):
 
         md_state = self.the_md.get_sampling_data()
         epot = md_state.epot
         if self.qm_boost:
             epot = md_state.epot - md_state.mm_epot
-            self.gamd_forces = np.copy(md_state.qm_force)
+            self.amd_forces = np.copy(md_state.qm_force)
         else:
             epot = md_state.epot
-            self.gamd_forces = np.copy(md_state.forces)
+            self.amd_forces = np.copy(md_state.forces)
 
         (xi, delta_xi) = self.get_cv(**kwargs)
 
         self._propagate()
         bias_force = self._extended_dynamics(xi, delta_xi)
 
-        if md_state.step < self.gamd_init_steps:
+        if md_state.step < self.init_steps:
             self._update_pot_distribution(epot)
 
         else:
-            if md_state.step == self.gamd_init_steps:
+            if md_state.step == self.init_steps:
                 self._calc_E_k0()
 
-            # apply gamd boost potential
-            bias_force -= self._apply_boost(epot)
+            # apply amd boost potential
+            bias_force += self._apply_boost(epot)
 
-            if md_state.step < self.gamd_equil_steps:
+            if md_state.step < self.equil_steps:
                 self._update_pot_distribution(epot)
                 self._calc_E_k0()
 
@@ -136,18 +138,18 @@ class GaWTMeABF(WTMeABF, GaMD, EnhancedSampling):
                 dx = diff(self.ext_coords[i], self.grid[i][bink[i]], self.cv_type[i])
                 self.correction_czar[i][bink[1], bink[0]] += self.ext_k[i] * dx
 
-            # GaMD
-            if md_state.step >= self.gamd_equil_steps:
+            # aMD
+            if md_state.step >= self.equil_steps:
 
                 (
-                    self.gamd_c1[bink[1], bink[0]],
-                    self.gamd_m2[bink[1], bink[0]],
-                    self.gamd_c2[bink[1], bink[0]],
+                    self.amd_c1[bink[1], bink[0]],
+                    self.amd_m2[bink[1], bink[0]],
+                    self.amd_c2[bink[1], bink[0]],
                 ) = welford_var(
                     self.histogram[bink[1], bink[0]],
-                    self.gamd_c1[bink[1], bink[0]],
-                    self.gamd_m2[bink[1], bink[0]],
-                    self.gamd_pot,
+                    self.amd_c1[bink[1], bink[0]],
+                    self.amd_m2[bink[1], bink[0]],
+                    self.amd_pot,
                 )
 
         self._up_momenta()
@@ -155,7 +157,7 @@ class GaWTMeABF(WTMeABF, GaMD, EnhancedSampling):
         self.traj = np.append(self.traj, [xi], axis=0)
         self.ext_traj = np.append(self.ext_traj, [self.ext_coords], axis=0)
         self.temp.append(md_state.temp)
-        self.gamd_pot_traj.append(self.gamd_pot)
+        self.amd_pot_traj.append(self.amd_pot)
         self.epot.append(md_state.epot)
 
         # correction for kinetics
@@ -175,7 +177,7 @@ class GaWTMeABF(WTMeABF, GaMD, EnhancedSampling):
                     output[f"abf force {i}"] = self.abf_forces[i]
                     output[f"czar force {i}"] = self.czar_force[i]
                 output[f"metapot"] = self.metapot
-                output[f"GaMD corr"] = self.gamd_corr
+                output[f"aMD corr"] = self.amd_corr
 
                 self.write_output(output, filename=output_file)
                 self.write_restart(filename=restart_file)
@@ -191,7 +193,7 @@ class GaWTMeABF(WTMeABF, GaMD, EnhancedSampling):
         )
         avg_force = cond_avg(self.correction_czar, self.histogram)
 
-        self.gamd_corr = -self.gamd_c1 - self.gamd_c2 / (
+        self.amd_corr = -self.amd_c1 - self.amd_c2 / (
             2.0 * kB_in_atomic * self.equil_temp
         )
 
@@ -206,7 +208,7 @@ class GaWTMeABF(WTMeABF, GaMD, EnhancedSampling):
                 equil_temp=self.equil_temp,
                 method=method,
             )
-            self.pmf += self.gamd_corr
+            self.pmf += self.amd_corr
             self.pmf *= atomic_to_kJmol
             self.pmf -= self.pmf.min()
 
@@ -229,7 +231,6 @@ class GaWTMeABF(WTMeABF, GaMD, EnhancedSampling):
 
     def write_restart(self, filename: str = "restart_gaabf"):
         """write restart file
-
         Args:
             filename: name of restart file
         """
@@ -246,9 +247,9 @@ class GaWTMeABF(WTMeABF, GaMD, EnhancedSampling):
             abf_force=self.abf_forces,
             center=self.center,
             metapot=self.metapot,
-            gamd_c1=self.gamd_c1,
-            gamd_m2=self.gamd_m2,
-            corr=self.gamd_corr,
+            amd_c1=self.amd_c1,
+            amd_m2=self.amd_m2,
+            corr=self.amd_corr,
             pot_count=self.pot_count,
             pot_var=self.pot_var,
             pot_std=self.pot_std,
@@ -261,7 +262,6 @@ class GaWTMeABF(WTMeABF, GaMD, EnhancedSampling):
 
     def restart(self, filename: str="restart_gaabf", restart_ext_sys: bool=False):
         """restart from restart file
-
         Args:
             filename: name of restart file
         """
@@ -279,9 +279,9 @@ class GaWTMeABF(WTMeABF, GaMD, EnhancedSampling):
         self.abf_forces      = data["abf_force"]
         self.center          = data["center"].tolist()
         self.metapot         = data["metapot"]
-        self.gamd_c1         = data["gamd_c1"]
-        self.gamd_m2         = data["gamd_m2"]
-        self.gamd_corr       = data["corr"]
+        self.amd_c1          = data["amd_c1"]
+        self.amd_m2          = data["amd_m2"]
+        self.amd_corr        = data["corr"]
         self.pot_count       = data["pot_count"]
         self.pot_var         = data["pot_var"]
         self.pot_std         = data["pot_std"]
@@ -293,16 +293,15 @@ class GaWTMeABF(WTMeABF, GaMD, EnhancedSampling):
         if restart_ext_sys:
             self.ext_momenta = data["ext_momenta"]
             self.ext_coords  = data["ext_coords"]
-        
+
         if self.verbose:
             print(f" >>> Info: Adaptive sampling restartet from {filename}!")
-
 
     def write_traj(self, filename: str = 'CV_traj.dat'):
         """save trajectory for post-processing"""
 
         data = self._write_ext_traj()
-        data[f"E_gamd [H]"] = self.gamd_pot_traj
+        data[f"E_amd [H]"] = self.amd_pot_traj
         data["Epot [H]"] = self.epot
         data["T [K]"] = self.temp
 
@@ -313,4 +312,4 @@ class GaWTMeABF(WTMeABF, GaMD, EnhancedSampling):
         self.ext_traj = np.array([self.ext_traj[-1]])
         self.epot = [self.epot[-1]]
         self.temp = [self.temp[-1]]
-        self.gamd_pot_traj = [self.gamd_pot_traj[-1]]
+        self.amd_pot_traj = [self.amd_pot_traj[-1]]

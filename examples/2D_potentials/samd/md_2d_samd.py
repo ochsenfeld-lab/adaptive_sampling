@@ -1,14 +1,15 @@
 #!/usr/bin/env python
-from adaptive_sampling.sampling_tools.gawtmeabf import GaWTMeABF
+import time
+import sys
+from adaptive_sampling.sampling_tools.amd import aMD
 from adaptive_sampling.interface.interfaceMD_2D import *
-
-bohr2angs = 0.52917721092e0
+from adaptive_sampling.units import *
 
 ################# Imput Section ####################
 
 # MD
 seed = 42
-nsteps = 210000  # number of MD steps
+nsteps = 1100000  # number of MD steps
 dt = 5.0e0  # stepsize in fs
 target_temp = 300.0  # Kelvin
 mass = 10.0  # a.u.
@@ -28,22 +29,17 @@ the_md = MD(
     target_temp_in=target_temp,
     seed_in=seed,
 )
-the_abm = GaWTMeABF(
-    2.0,
-    20.0,
-    2.0,
-    4.0,
-    0.0001,
+the_abm = aMD(
+    3.5,
     1000,
     10000,
     the_md,
     ats,
-    hill_drop_freq=100,
-    do_wtm=True,
-    gamd_bound="upper",
+    amd_method="samd",
     output_freq=1000,
     f_conf=100,
     equil_temp=300.0,
+    confine=True,
 )
 # the_abm.restart()
 
@@ -71,6 +67,7 @@ print(
 )
 
 while step_count < nsteps:
+    start_loop = time.perf_counter()
     the_md.step += 1
     step_count += 1
 

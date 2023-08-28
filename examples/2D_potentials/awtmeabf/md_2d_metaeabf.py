@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-from adaptive_sampling.sampling_tools.gawtmeabf import GaWTMeABF
+from adaptive_sampling.sampling_tools.awtmeabf import aWTMeABF
 from adaptive_sampling.interface.interfaceMD_2D import *
 
 bohr2angs = 0.52917721092e0
@@ -28,7 +28,7 @@ the_md = MD(
     target_temp_in=target_temp,
     seed_in=seed,
 )
-the_abm = GaWTMeABF(
+the_abm = aWTMeABF(
     2.0,
     20.0,
     2.0,
@@ -40,7 +40,7 @@ the_abm = GaWTMeABF(
     ats,
     hill_drop_freq=100,
     do_wtm=True,
-    gamd_bound="aMD",
+    amd_method="aMD",
     output_freq=1000,
     f_conf=100,
     equil_temp=300.0,
