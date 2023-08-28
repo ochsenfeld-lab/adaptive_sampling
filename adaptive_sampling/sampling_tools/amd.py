@@ -235,7 +235,7 @@ class aMD(EnhancedSampling):
             ) * self.amd_forces
         
         elif self.amd_method.lower() == "samd":
-            self.amd_pot = self.amd_pot = self.pot_max - epot - 1/self.k * np.log((self.c + np.exp(self.k * (self.pot_max - self.pot_min))) 
+            self.amd_pot = self.pot_max - epot - 1/self.k * np.log((self.c + np.exp(self.k * (self.pot_max - self.pot_min))) 
                     / (self.c + np.exp(self.k * (epot - self.pot_min))))
             boost_force = (1.0/(np.exp(-self.k * (epot - self.pot_min) + np.log((1/self.c0) - 1)) + 1) - 1) * self.amd_forces
 
