@@ -649,3 +649,4 @@ class PathCV:
             for coords in self.path:
                 dcd.write(BOHR_to_ANGSTROM * coords.view(int(torch.numel(coords)/3),3).detach().numpy())
             dcd.close()
+

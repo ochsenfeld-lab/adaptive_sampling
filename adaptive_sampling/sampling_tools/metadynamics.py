@@ -470,7 +470,6 @@ class WTM(EnhancedSampling):
         if self.verbose:
             print(f" >>> Info: Adaptive sampling restartet from `{filename}.npz`!")
 
-
     def _update_metapot_from_centers(self):
         """recalculate metadynamics potential and bias force from stored centers"""
         if self.ncoords > 1:
@@ -501,7 +500,6 @@ class WTM(EnhancedSampling):
 
                 self._smooth_boundary_grid(xi, w)
         
-
     def write_traj(self):
         """save trajectory for post-processing"""
         data = {

@@ -141,7 +141,8 @@ class MD:
             ).sum()
 
         else:
-            raise ValueError(" >>> Invalid Potential!")
+            return (0.0, np.zeros(2))
+            #raise ValueError(" >>> Invalid Potential!")
                 
         self.forces = torch.autograd.grad(
             self.epot, coords, allow_unused=True

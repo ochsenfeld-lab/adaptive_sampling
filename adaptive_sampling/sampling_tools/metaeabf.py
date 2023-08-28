@@ -47,13 +47,19 @@ class WTMeABF(eABF, WTM, EnhancedSampling):
         self, 
         write_output: bool = True, 
         write_traj: bool = True, 
+        stabilize: bool = False,
         output_file: str = 'wtmeabf.out',
         traj_file: str = 'CV_traj.dat', 
         restart_file: str = 'restart_wtmeabf',
-        **kwargs):
+        **kwargs
+    ):
 
         md_state = self.the_md.get_sampling_data()
         (xi, delta_xi) = self.get_cv(**kwargs)
+
+        if stabilize and len(self.traj)>0:
+            self.stabilizer(xi, **kwargs)
+
         self._propagate()
 
         mtd_forces = self.get_wtm_force(self.ext_coords)

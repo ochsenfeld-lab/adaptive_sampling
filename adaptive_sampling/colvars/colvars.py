@@ -228,10 +228,10 @@ class CV:
 
         Args:
             cv_dev (list):
-                list of distances, angle or torsions with prefactors: [[fac0, [ind00, ind01]],
-                                                                       [fac1, [ind10, ind11, ind12]],
-                                                                       [fac2, [ind20, ind21, ind22, ind23]],
-                                                                       ...]
+                list of CVs with prefactors: [[type0, fac0, [ind00, ind01]],
+                                              [type1, fac1, [ind10, ind11, ind12]],
+                                               ...]
+                type can be 'distance', 'angle', 'torsion' or 'coordination_number'
 
         Returns:
             cv (float): linear combination of distances/angles/dihedrals
@@ -243,23 +243,29 @@ class CV:
 
         for cv in cv_def:
 
-            if len(cv[1]) == 2:
-                x = self.distance(cv[1])
+            if cv[0].lower() == 'distance':
+                x = self.distance(cv[2])
 
-            elif len(cv[1]) == 3:
-                x = self.angle(cv[1])
+            elif cv[0].lower() == 'distance_min':
+                x = self.distance_min(cv[2])
 
-            elif len(cv[1]) == 4:
-                x = self.torsion(cv[1])
+            elif cv[0].lower() == 'angle':
+                x = self.angle(cv[2])
+
+            elif cv[0].lower() == 'torsion':
+                x = self.torsion(cv[2])
+
+            elif cv[0].lower() == 'coordination_number':
+                x = self.coordination_number(cv[2])
 
             else:
                 raise ValueError(
-                    "CV ERROR: Invalid number of centers in definition of linear combination!"
+                    "CV ERROR: Invalid CV in definition of linear combination!"
                 )
 
-            self.lc_contribs.append(cv[0] * x)
+            self.lc_contribs.append(cv[1] * x)
             if self.requires_grad:
-                gradient += cv[0] * self.gradient
+                gradient += cv[1] * self.gradient
 
         if self.requires_grad:
             self.gradient = gradient
@@ -302,6 +308,45 @@ class CV:
             d = norm / r_0
 
         self.cv = (1.0 - torch.pow(d, 6)) / (1.0 - torch.pow(d, 12))
+
+        # get forces
+        if self.requires_grad:
+            self.gradient = torch.autograd.grad(
+                self.cv, self.coords, allow_unused=True
+            )[0]
+            self.gradient = self.gradient.detach().numpy()
+
+        return float(self.cv)
+
+    def coordination_number(self, cv_def: list) -> float:
+        """Coordination Number
+
+        Args:
+            cv_def (list): 
+                [[idx0, idxA], [idx1, idxA], ..., r_eq, exp_nom, exp_denom]
+                with indices of cordinated atoms ind0, ind1, ..., 
+                distance r_0 in Angstrom (bonds smaller than r_0 are coordinated), 
+                and exponent of the nominator and denominator exp_nom and exp_denom
+        """
+        exp_denom = int(cv_def[-1])
+        exp_nom = int(cv_def[-2])
+        r_0 = float(cv_def[-3]) / BOHR_to_ANGSTROM
+
+        self.cv = 0.0
+        for atoms in cv_def[:-3]:
+            p1 = self._get_com(atoms[0])
+            p2 = self._get_com(atoms[1])
+            r12 = torch.linalg.norm(p2 - p1)
+
+            # for numerical stability
+            if abs(r12-r_0) < 1.e-6:
+                r = r12 / (r_0 * 1.000001)
+            else:
+                r = r12 / r_0
+
+            nom   = 1. - torch.pow(r, exp_nom)
+            denom = 1. - torch.pow(r, exp_denom)     
+            self.cv += nom / denom
 
         # get forces
         if self.requires_grad:
@@ -425,7 +470,7 @@ class CV:
 
         return float(self.cv)
 
-    def path(self, cv_dev: list, method: str="gpath") -> float:
+    def path(self, cv_def: dict, method: str="gpath") -> float:
         """Adaptive path collective variable
 
         Args:
@@ -433,7 +478,7 @@ class CV:
         """
         if not hasattr(self, 'pathcv'):
             from .path_cv import PathCV
-            self.pathcv = PathCV(**cv_dev)
+            self.pathcv = PathCV(**cv_def)
         
         self.update_coords()
 
@@ -461,6 +506,68 @@ class CV:
         
         self.cv = pathcv.path_z
         self.gradient = pathcv.grad_z
+        return float(self.cv)
+
+    def cec(self, pt_def: dict) -> float:
+        """ Modified Center of Excess Charge for Proton Transfer
+
+        Args: 
+            pt_def: definition of proton transfer coordinate,
+                must contain `cv_def`, which specifies indices of contributing atoms
+        """
+        if not hasattr(self, 'pt_cv'):
+            from .proton_transfer import PT
+            pt_cv = PT(
+                r_sw   = pt_def.get("r_sw", 1.4),
+                d_sw   = pt_def.get("d_sw", 0.05),
+                n_pair = pt_def.get("n_pair", 15), 
+                requires_grad=self.requires_grad,
+            )
+            
+        self.update_coords()
+        self.cv = pt_cv.cec(
+            self.coords, 
+            pt_def["proton_idx"],
+            pt_def["heavy_idx"],
+            pt_def["heavy_weights"],
+            pt_def["ref_idx"],
+            pair_def=pt_def.get("pair_def", []),
+            modified=pt_def.get("modified", True),
+        )
+        if self.requires_grad:
+            self.gradient = pt_cv.gradient
+
+        return float(self.cv)
+        
+    def gmcec(self, pt_def: dict) -> float:
+        """ Generalized Modified Center of Excess Charge for Proton Transfer
+
+        Args: 
+            pt_def: dict with definition of proton transfer coordinate,
+                must contain `proton_idx`, `heavy_idx`, `heavy_weights` and `ref_idx` 
+        """
+        if not hasattr(self, 'pt_cv'):
+            from .proton_transfer import PT
+            pt_cv = PT(
+                r_sw   = pt_def.get("r_sw", 1.4),
+                d_sw   = pt_def.get("d_sw", 0.05),
+                n_pair = pt_def.get("n_pair", 15), 
+                requires_grad = self.requires_grad,
+            )
+        
+        self.update_coords()
+        self.cv = pt_cv.gmcec(
+            self.coords, 
+            pt_def["proton_idx"],
+            pt_def["heavy_idx"],
+            pt_def["heavy_weights"],
+            pt_def["ref_idx"],
+            pair_def=pt_def.get("pair_def", []),
+            mapping=pt_def.get("mapping", "default"),
+        )
+        if self.requires_grad:
+            self.gradient = pt_cv.gradient
+
         return float(self.cv)
 
     def get_cv(self, cv: str, atoms: list, **kwargs) -> Tuple[float, np.ndarray]:
@@ -512,6 +619,9 @@ class CV:
         elif cv.lower() == "distorted_distance":
             xi = self.distorted_distance(atoms, **kwargs)
             self.type = None
+        elif cv.lower() == "coordination_number":
+            xi = self.coordination_number(atoms)
+            self.type = None
         elif cv.lower() == "rmsd":
             xi = self.rmsd(atoms)
             self.type = "distance"
@@ -524,6 +634,12 @@ class CV:
         elif cv.lower() == "path_z":
             xi = self.path_z(atoms)
             self.type = "2d" if self.pathcv.ndim == 2 else None 
+        elif cv.lower() == "cec" or cv.lower() == "mcec":
+            xi = self.cec(atoms)
+            self.type = "distance"
+        elif cv.lower() == "gmcec":
+            xi = self.gmcec(atoms)
+            self.type = "distance" if atoms.get("mapping", None) not in ["f_sw", "fraction"] else None
         else:
             print(" >>> Error in CV: Unknown Collective Variable")
             sys.exit(1)

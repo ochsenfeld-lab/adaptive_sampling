@@ -332,8 +332,9 @@ def get_internal_coordinate(
             Available:
                 ["distance",     [idx0, idx1]]
                 ["angle",        [idx0, idx1, idx2]]
-                ["dihedral",     [idx0, idx1, idx2, idx3]]
-                ["min_distance", [[idx0, idx1], [idx2, idx3], ...]]
+                ["torsion",     [idx0, idx1, idx2, idx3]]
+                ["min_distance", [[idx0, idx1], [idx2, idx3], ...]
+                ["coordination_number", [[idx0, idx1], [...], r_0, exp_nom, exp_denom]]]
         coords: Cartesian coordinates
         ndim: Number of dimensions of coords
     
@@ -357,7 +358,7 @@ def get_internal_coordinate(
 
         xi = torch.arccos(torch.dot(-q12_u, q23_u))  
                 
-    elif cv[0].lower() == "dihedral":
+    elif cv[0].lower() == "torsion":
         q12 = z[cv[1][1]] - z[cv[1][0]]
         q23 = z[cv[1][2]] - z[cv[1][1]]
         q34 = z[cv[1][3]] - z[cv[1][2]]
@@ -372,30 +373,52 @@ def get_internal_coordinate(
         ) 
 
     elif cv[0].lower() == "min_distance":
-        # returns minimum distance of distances in list
+        # returns minimum distance of list of distances
         dists = []
         for x in cv[1]:
             dists.append(torch.linalg.norm(z[x[0]] - z[x[1]]))
         xi = min(dists)
-
-    elif cv[0].lower() == "min_max_distance":
-        # returns minimum distance of cv[1]-cv[3] for index in cv[1] with maximal distance to Ref
-        # e.g.: ['min_max_distance', [idx0, idx1, ...], Ref, [idx2, idx3, ...]]
-        # developed for proton transfer in glycal mechanism of Pseudouridine synthase 
- 
-        dists_ref = []
-        for x in cv[1]:
-            dists_ref.append(torch.linalg.norm(z[x] - z[cv[2]]))
+    
+    elif cv[0].lower() == "coordination_number":
         
-        # get idx that is furthest away from ref
-        idx_new = dists_ref.index(max(dists))
+        cv_def    = cv[1]
+        exp_denom = int(cv_def[-1])
+        exp_nom   = int(cv_def[-2])
+        r_0       = float(cv_def[-3]) / BOHR_to_ANGSTROM
 
-        # use other one for distance
-        dists = []
-        for x in cv[3]:
-            dists.append(torch.linalg.norm(z[x] - z[cv[1][idx_new]]))
+        xi = 0.0
+        for atoms in cv_def[:-3]:
+            r12 = torch.linalg.norm(z[atoms[1]] - z[atoms[0]])
 
-        xi = min(dists)
+            # for numerical stability
+            if abs(r12-r_0) < 1.e-6:
+                r = r12 / (r_0 * 1.000001)
+            else:
+                r = r12 / r_0
+
+            nom   = 1. - torch.pow(r, exp_nom)
+            denom = 1. - torch.pow(r, exp_denom)     
+            xi += nom / denom
+
+    elif cv[0].lower() == "cec":
+        # Modified Center-of-Excess Charge (mCEC) for Proton Transfer (PT)
+        from .proton_transfer import PT
+        pt_def = cv[1]
+        pt_cv = PT(
+            r_sw   = pt_def.get("r_sw", 1.4),
+            d_sw   = pt_def.get("d_sw", 0.05),
+            n_pair = pt_def.get("n_pair", 15), 
+            requires_grad = True,
+        )
+        xi = pt_cv.gmcec(
+            coords, 
+            pt_def["proton_idx"],
+            pt_def["heavy_idx"],
+            pt_def["heavy_weights"],
+            pt_def["ref_idx"],
+            pair_def=pt_def.get("pair_def", []),
+            mapping=pt_def.get("mapping", "default"),
+        )
 
     else:
         raise ValueError(" >>> ERROR: wrong definition of internal coordinate!")

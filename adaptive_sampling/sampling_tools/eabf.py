@@ -79,10 +79,20 @@ class eABF(ABF, EnhancedSampling):
         # initialize extended system at target temp of MD simulation
         self.reinit_ext_system(xi)
 
-    def step_bias(self, write_output: bool = True, write_traj: bool = True, **kwargs):
+    def step_bias(
+        self, 
+        write_output: bool = True, 
+        write_traj: bool = True, 
+        stabilize: bool = False, 
+        **kwargs
+    ):
 
         md_state = self.the_md.get_sampling_data()
         (xi, delta_xi) = self.get_cv(**kwargs)
+
+        if stabilize and len(self.traj)>0:
+            self.stabilizer(xi, **kwargs)
+
         self._propagate()
 
         bias_force = self._extended_dynamics(xi, delta_xi)  # , self.ext_sigma)
@@ -330,8 +340,11 @@ class eABF(ABF, EnhancedSampling):
                 else:
                     raise Exception(f" >>> Fatal Error: Failed to sync bias with `{mw_file}.npz`.")
 
-    def reinit_ext_system(self, xi):
-        """initialize extended-system dynamics with random momenta"""
+    def reinit_ext_system(
+        self, 
+        xi: np.ndarray
+    ):
+        """Initialize extended-system dynamics with random momenta"""
         self.ext_coords = np.copy(xi)
         for i in range(self.ncoords):
             self.ext_momenta[i] = random.gauss(0.0, 1.0) * np.sqrt(
@@ -341,7 +354,26 @@ class eABF(ABF, EnhancedSampling):
             ttt /= self.ncoords
             self.ext_momenta *= np.sqrt(self.equil_temp / (ttt * atomic_to_K))
 
-    def _propagate(self, langevin: bool = True):
+    def stabilizer(
+        self, 
+        xi: np.ndarray, 
+        threshold: float=None
+    ):
+        """Stabilize extended dynamics in case of discontiouity in Collective Variable
+        """
+        if threshold == None:
+            threshold = self.ext_sigma
+
+        if abs(xi-self.traj[-1]) > threshold:
+            diff = self.ext_coords - self.traj[-1]
+            self.ext_coords = xi + diff
+            if self.verbose:
+                print(" >>> INFO: stabalizer reinitialized extended system!")
+
+    def _propagate(
+        self, 
+        langevin: bool = True
+    ):
         """Propagate momenta/coords of extended variable in time with Velocity Verlet
 
         Args:
@@ -366,7 +398,10 @@ class eABF(ABF, EnhancedSampling):
             self.ext_momenta -= 0.5e0 * self.the_md.dt * self.ext_forces
             self.ext_coords += self.the_md.dt * self.ext_momenta / self.ext_mass
 
-    def _up_momenta(self, langevin: bool = True):
+    def _up_momenta(
+        self, 
+        langevin: bool = True
+    ):
         """Update momenta of extended variables with Velocity Verlet
 
         Args:
