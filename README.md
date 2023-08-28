@@ -3,7 +3,7 @@ Adaptive Sampling
 
 This package implements various sampling algorithms for the calculation of free energy profiles of molecular transitions. 
 
-## Available sampling methods include:
+## Available Sampling Methods Include:
 *	Adaptive Biasing Force (ABF) method [1] 
 	
 * 	Extended-system ABF (eABF) [2]
@@ -14,7 +14,9 @@ This package implements various sampling algorithms for the calculation of free 
 	
 * 	(Well-Tempered) Metadynamics (WTM) [5] and WTM-eABF [6]
 
-* 	Gaussian accelerated MD (GaMD) [7] and GaWTM-eABF [8]
+* 	Accelerated MD (aMD), Gaussian accelerated MD (GaMD), Sigmoid Accelerated MD (SaMD) [7,8,9]
+
+*	Gaussian-accelerated WTM-eABF [10]
 
 ## Implemented Collective Variables:
 
@@ -24,7 +26,7 @@ This package implements various sampling algorithms for the calculation of free 
 
 *   Minimized Cartesian RMSD (Kabsch algorithm)
 
-*   Adaptive path collective variables (PCVs) [9,10]
+*   Adaptive path collective variables (PCVs) [11, 12]
 
 ## Install:
 To install adaptive_sampling type:
@@ -152,14 +154,16 @@ $ pdoc --html adaptive_sampling -o doc/
 4.  Hulm et al., J. Chem. Phys. (2022); <https://doi.org/10.1063/5.0095554>
 5.  Barducci et al., Phys. rev. lett. (2008); <https://doi.org/10.1103/PhysRevLett.100.020603>
 6.  Fu et al., J. Phys. Chem. Lett. (2018); <https://doi.org/10.1021/acs.jpclett.8b01994>
-7.  Miao et al., J. Chem. Theory Comput. (2015); <https://doi.org/10.1021/acs.jctc.5b00436>
-8.  Chen et al., J. Chem. Theory Comput. (2021); <https://doi.org/10.1021/acs.jctc.1c00103>
-9.  Branduardi, et al., J. Chem. Phys. (2007): <https://doi.org/10.1063/1.2432340>
-10. Leines et al., Phys. Ref. Lett. (2012): <https://doi.org/10.1103/PhysRevLett.109.020601>
+7.  Hamelberg et. al., J. Chem. Phys. (2004); <https://doi.org/10.1063/1.1755656>
+8.  Miao et al., J. Chem. Theory Comput. (2015); <https://doi.org/10.1021/acs.jctc.5b00436>
+9.  Zhao et. al., J. Phys. Chem. Lett. (2023); <https://doi.org/10.1021/acs.jpclett.2c03688>
+10.  Chen et al., J. Chem. Theory Comput. (2021); <https://doi.org/10.1021/acs.jctc.1c00103>
+11.  Branduardi, et al., J. Chem. Phys. (2007); <https://doi.org/10.1063/1.2432340>
+12.  Leines et al., Phys. Ref. Lett. (2012); <https://doi.org/10.1103/PhysRevLett.109.020601>
 ## This and Related Work:
 If you use this package in your work please cite:
-1.  Hulm et. al., J. Chem. Phys. (2022); <https://doi.org/10.1063/5.0095554>
+* 	Hulm et. al., J. Chem. Phys. (2022); <https://doi.org/10.1063/5.0095554>
 
 Other related references:
-2.  Dietschreit et al., J. Chem. Phys., 157, 084113 (2022).; <https://aip.scitation.org/doi/10.1063/5.0102075>
+*	Dietschreit et al., J. Chem. Phys., 157, 084113 (2022).; <https://aip.scitation.org/doi/10.1063/5.0102075>
 
