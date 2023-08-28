@@ -12,9 +12,19 @@ This package implements various sampling algorithms for the calculation of free 
 	
 	* Application of Multistate Bannett's Acceptance Ratio (MBAR) [3] to recover full statistical information in post-processing [4]
 	
-* 	Well-Tempered Metadynamics (WTM) [5] and WTM-eABF [6]
+* 	(Well-Tempered) Metadynamics (WTM) [5] and WTM-eABF [6]
 
-* 	Gaussian-accelerated MD (GaMD) [7] and GaWTM-eABF [8]
+* 	Gaussian accelerated MD (GaMD) [7] and GaWTM-eABF [8]
+
+## Implemented Collective Variables:
+
+*   Distances, angles and torsion angles as well as linear combinations thereof
+
+*   Coordination numbers 
+
+*   Minimized Cartesian RMSD (Kabsch algorithm)
+
+*   Adaptive path collective variables (PCVs) [9,10]
 
 ## Install:
 To install adaptive_sampling type:
@@ -136,15 +146,20 @@ $ pip install pdoc3
 $ pdoc --html adaptive_sampling -o doc/
 ```
 ## References:
-1.  Comer et. al., J. Phys. Chem. B (2015); <https://doi.org/10.1021/jp506633n> 
-2.  Lesage et. al., J. Phys. Chem. B (2017); <https://doi.org/10.1021/acs.jpcb.6b10055>
-3.  Shirts et. al., J. Chem. Phys. (2008); <https://doi.org/10.1063/1.2978177>
-4.  Hulm et. al., J. Chem. Phys. (2022); <https://doi.org/10.1063/5.0095554>
-5.  Barducci et. al., Phys. rev. lett. (2008); <https://doi.org/10.1103/PhysRevLett.100.020603>
-6.  Fu et. al., J. Phys. Chem. Lett. (2018); <https://doi.org/10.1021/acs.jpclett.8b01994>
-7.  Miao et. al., J. Chem. Theory Comput. (2015); <https://doi.org/10.1021/acs.jctc.5b00436>
-8.  Chen et. al., J. Chem. Theory Comput. (2021); <https://doi.org/10.1021/acs.jctc.1c00103>
-
+1.  Comer et al., J. Phys. Chem. B (2015); <https://doi.org/10.1021/jp506633n> 
+2.  Lesage et al., J. Phys. Chem. B (2017); <https://doi.org/10.1021/acs.jpcb.6b10055>
+3.  Shirts et al., J. Chem. Phys. (2008); <https://doi.org/10.1063/1.2978177>
+4.  Hulm et al., J. Chem. Phys. (2022); <https://doi.org/10.1063/5.0095554>
+5.  Barducci et al., Phys. rev. lett. (2008); <https://doi.org/10.1103/PhysRevLett.100.020603>
+6.  Fu et al., J. Phys. Chem. Lett. (2018); <https://doi.org/10.1021/acs.jpclett.8b01994>
+7.  Miao et al., J. Chem. Theory Comput. (2015); <https://doi.org/10.1021/acs.jctc.5b00436>
+8.  Chen et al., J. Chem. Theory Comput. (2021); <https://doi.org/10.1021/acs.jctc.1c00103>
+9.  Branduardi, et al., J. Chem. Phys. (2007): <https://doi.org/10.1063/1.2432340>
+10. Leines et al., Phys. Ref. Lett. (2012): <https://doi.org/10.1103/PhysRevLett.109.020601>
 ## This and Related Work:
+If you use this package in your work please cite:
 1.  Hulm et. al., J. Chem. Phys. (2022); <https://doi.org/10.1063/5.0095554>
+
+Other related references:
 2.  Dietschreit et al., J. Chem. Phys., 157, 084113 (2022).; <https://aip.scitation.org/doi/10.1063/5.0102075>
+
