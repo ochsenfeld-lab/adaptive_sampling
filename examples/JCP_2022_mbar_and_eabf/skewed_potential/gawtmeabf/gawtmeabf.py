@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 import numpy as np
-from adaptive_sampling.sampling_tools.gawtmeabf import GaWTMeABF
+from adaptive_sampling.sampling_tools.awtmeabf import aWTMeABF
 from adaptive_sampling.interface.interfaceMD_2D import *
 from adaptive_sampling.units import *
 
@@ -45,7 +45,7 @@ the_md = MD(
     target_temp_in=target_temp,
     seed_in=seed,
 )
-the_eabf = GaWTMeABF(
+the_eabf = aWTMeABF(
     ext_sigma,
     ext_mass,
     height,
@@ -60,7 +60,7 @@ the_eabf = GaWTMeABF(
     force_from_grid=True,
     friction=friction,
     seed_in=seed,
-    gamd_bound="lower",
+    amd_method="gamd_lower",
     output_freq=1000,
     f_conf=f_conf,
 )

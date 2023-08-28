@@ -45,7 +45,7 @@ the_abm = aWTMeABF(
     f_conf=100,
     equil_temp=300.0,
 )
-the_abm.restart(filename="restart_gawtmeabf")
+#the_abm.restart(filename="restart_gawtmeabf")
 
 the_md.calc_init()
 the_abm.step_bias()
