@@ -23,6 +23,7 @@ class EnhancedSampling(ABC):
         f_conf: force constant for confinement of system to the range of interest in CV space
         output_freq: frequency in steps for writing outputs
         multiple_walker: share bias with other simulations via buffer file
+        periodic: if True, no harmonic walls are applied at boundary of CV 
     """
 
     def __init__(
@@ -35,6 +36,7 @@ class EnhancedSampling(ABC):
         f_conf: float = 100,
         output_freq: int = 100,
         multiple_walker: bool = False,
+        periodic: bool = False,
         **kwargs,
     ):
 
@@ -44,6 +46,7 @@ class EnhancedSampling(ABC):
         self.equil_temp = equil_temp
         self.verbose = verbose
         self.shared = multiple_walker
+        self.periodic = periodic
 
         # definition of CVs
         self.ncoords = len(cv_def)
@@ -178,6 +181,8 @@ class EnhancedSampling(ABC):
             bias_force: confinement force
         """
         conf_force = np.zeros_like(self.the_md.get_sampling_data().forces.ravel())
+        if self.periodic:
+            return conf_force
 
         for i in range(self.ncoords):
             if xi[i] > (self.maxx[i] - margin[i]):
@@ -336,10 +341,11 @@ class EnhancedSampling(ABC):
 
         # convert units to degree and Angstrom
         for i in range(self.ncoords):
+            traj = np.copy(self.traj)
             if self.cv_type[i] == "angle":
-                self.traj[:, i] *= DEGREES_per_RADIAN
+                traj[:, i] *= DEGREES_per_RADIAN
             elif self.cv_type[i] == "distance":
-                self.traj[:, i] *= BOHR_to_ANGSTROM
+                traj[:, i] *= BOHR_to_ANGSTROM
 
         # write header
         if not os.path.isfile(filename) and step == 0:
@@ -369,7 +375,7 @@ class EnhancedSampling(ABC):
                         )
                     )  # time in fs
                     for i in range(len(self.traj[0])):
-                        traj_out.write("%14.6f\t" % (self.traj[-self.out_freq + n][i]))
+                        traj_out.write("%14.6f\t" % (traj[-self.out_freq + n][i]))
                     for val in data.values():
                         traj_out.write("%14.6f\t" % (val[-self.out_freq + n]))
                     if self.kinetics:

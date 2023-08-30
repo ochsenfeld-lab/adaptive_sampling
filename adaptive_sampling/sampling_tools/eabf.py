@@ -216,7 +216,7 @@ class eABF(ABF, EnhancedSampling):
             self.czar_force[1] = (
                 -kB_in_atomic * self.equil_temp * der_log_rho[0] + avg_force[1]
             )
-            if self.verbose:
+            if self.verbose and self.the_md.get_sampling_data().step == 1:
                 print(
                     " >>> Info: On-the-fly integration only available for 1D coordinates"
                 )
@@ -462,11 +462,11 @@ class eABF(ABF, EnhancedSampling):
             bias_force -= self.ext_k[i] * dxi * delta_xi[i]
 
             # harmonic walls for confinement to range of interest
-            if self.ext_coords[i] > (self.maxx[i] - margin[i]):
+            if self.ext_coords[i] > (self.maxx[i] - margin[i]) and not self.periodic:
                 r = diff(self.maxx[i] - margin[i], self.ext_coords[i], self.cv_type[i])
                 self.ext_forces[i] -= self.f_conf[i] * r
 
-            elif self.ext_coords[i] < (self.minx[i] + margin[i]):
+            elif self.ext_coords[i] < (self.minx[i] + margin[i]) and not self.periodic:
                 r = diff(self.minx[i] + margin[i], self.ext_coords[i], self.cv_type[i])
                 self.ext_forces[i] -= self.f_conf[i] * r
 

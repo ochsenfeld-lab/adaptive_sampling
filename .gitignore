@@ -130,3 +130,5 @@ dmypy.json
 *.npy
 *.out
 *.dat
+*.pth
+*.pt
