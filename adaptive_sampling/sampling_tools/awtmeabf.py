@@ -58,10 +58,25 @@ class aWTMeABF(WTMeABF, aMD, EnhancedSampling):
         self, 
         write_output: bool = True, 
         write_traj: bool = True, 
+        stabilize: bool = False,
         output_file: str = 'awtmeabf.out',
         traj_file: str = 'CV_traj.dat', 
         restart_file: str = 'restart_awtmeabf',
-        **kwargs):
+        **kwargs
+    ) -> np.ndarray:
+        """Apply accelerated WTM-eABF to MD simulations
+
+        Args:
+            write_output: if on-the-fly free energy estimate and restart files should be written
+            write_traj: if CV and extended system trajectory file should be written
+            stabilize: if stabilisation algorithm should be applied for discontinous CVs
+            output_file: name of the output file
+            traj_file: name of the trajectory file
+            restart_file: name of the restart file
+
+        Returns:
+            bias_force: Accelerated WTM-eABF biasing force of current step that has to be added to molecular forces
+        """
 
         md_state = self.the_md.get_sampling_data()
         epot = md_state.epot
@@ -73,6 +88,9 @@ class aWTMeABF(WTMeABF, aMD, EnhancedSampling):
             self.amd_forces = np.copy(md_state.forces)
 
         (xi, delta_xi) = self.get_cv(**kwargs)
+        
+        if stabilize and len(self.traj)>0:
+            self.stabilizer(xi, **kwargs)
 
         self._propagate()
         bias_force = self._extended_dynamics(xi, delta_xi)

@@ -329,8 +329,8 @@ class EnhancedSampling(ABC):
         """write trajectory of extended or normal ABF at output times
 
         Args:
-            extended: True for use extended system
-            additional_data: additional data that one might want to write
+            data: data to write
+            filename: name of trajectory file
         """
         step = self.the_md.get_sampling_data().step
 

@@ -52,7 +52,20 @@ class WTMeABF(eABF, WTM, EnhancedSampling):
         traj_file: str = 'CV_traj.dat', 
         restart_file: str = 'restart_wtmeabf',
         **kwargs
-    ):
+    ) -> np.ndarray:
+        """Apply WTM-eABF to MD simulation
+
+        Args:
+            write_output: if on-the-fly free energy estimate and restart files should be written
+            write_traj: if CV and extended system trajectory file should be written
+            stabilize: if stabilisation algorithm should be applied for discontinous CVs
+            output_file: name of the output file
+            traj_file: name of the trajectory file
+            restart_file: name of the restart file
+
+        Returns:
+            bias_force: WTM-eABF biasing force of current step that has to be added to molecular forces
+        """
 
         md_state = self.the_md.get_sampling_data()
         (xi, delta_xi) = self.get_cv(**kwargs)

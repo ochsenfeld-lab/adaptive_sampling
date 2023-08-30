@@ -14,7 +14,7 @@ This package implements various sampling algorithms for the calculation of free 
 	
 * 	(Well-Tempered) Metadynamics (WTM) [5] and WTM-eABF [6]
 
-* 	Accelerated MD (aMD), Gaussian accelerated MD (GaMD), Sigmoid Accelerated MD (SaMD) [7,8,9]
+* 	Accelerated MD (aMD), Gaussian accelerated MD (GaMD), Sigmoid Accelerated MD (SaMD) [7, 8, 9]
 
 *	Gaussian-accelerated WTM-eABF [10]
 
@@ -154,16 +154,16 @@ $ pdoc --html adaptive_sampling -o doc/
 4.  Hulm et al., J. Chem. Phys. (2022); <https://doi.org/10.1063/5.0095554>
 5.  Barducci et al., Phys. rev. lett. (2008); <https://doi.org/10.1103/PhysRevLett.100.020603>
 6.  Fu et al., J. Phys. Chem. Lett. (2018); <https://doi.org/10.1021/acs.jpclett.8b01994>
-7.  Hamelberg et. al., J. Chem. Phys. (2004); <https://doi.org/10.1063/1.1755656>
+7.  Hamelberg et al., J. Chem. Phys. (2004); <https://doi.org/10.1063/1.1755656>
 8.  Miao et al., J. Chem. Theory Comput. (2015); <https://doi.org/10.1021/acs.jctc.5b00436>
-9.  Zhao et. al., J. Phys. Chem. Lett. (2023); <https://doi.org/10.1021/acs.jpclett.2c03688>
+9.  Zhao et al., J. Phys. Chem. Lett. (2023); <https://doi.org/10.1021/acs.jpclett.2c03688>
 10.  Chen et al., J. Chem. Theory Comput. (2021); <https://doi.org/10.1021/acs.jctc.1c00103>
 11.  Branduardi, et al., J. Chem. Phys. (2007); <https://doi.org/10.1063/1.2432340>
 12.  Leines et al., Phys. Ref. Lett. (2012); <https://doi.org/10.1103/PhysRevLett.109.020601>
 ## This and Related Work:
 If you use this package in your work please cite:
-* 	Hulm et. al., J. Chem. Phys. (2022); <https://doi.org/10.1063/5.0095554>
+* 	Hulm et al., J. Chem. Phys., 157, 024110 (2022); <https://doi.org/10.1063/5.0095554>
 
 Other related references:
-*	Dietschreit et al., J. Chem. Phys., 157, 084113 (2022).; <https://aip.scitation.org/doi/10.1063/5.0102075>
+*	Dietschreit et al., J. Chem. Phys., 157, 084113 (2022); <https://aip.scitation.org/doi/10.1063/5.0102075>
 

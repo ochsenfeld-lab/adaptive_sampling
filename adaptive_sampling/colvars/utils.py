@@ -456,7 +456,7 @@ def cartesians_to_internals(
                 
         if i > 2:
             zmatrix[i, 2] = get_internal_coordinate(
-                ["dihedral", [i-3, i-2, i-1, i]], coords, ndim=ndim
+                ["torsion", [i-3, i-2, i-1, i]], coords, ndim=ndim
             )
     
     return zmatrix

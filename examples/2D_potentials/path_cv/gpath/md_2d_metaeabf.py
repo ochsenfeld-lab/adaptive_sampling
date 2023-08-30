@@ -24,6 +24,8 @@ dev = {
     "adaptive": True,
     "update_interval": 1000,
     "half_life": 5000,
+    "multiple_walkers": True,
+    "mw_file": "shared_path",
     "ndim": 2,
 }
 

@@ -1,3 +1,4 @@
+import time
 import math
 import torch
 
@@ -26,6 +27,8 @@ class PathCV:
         adaptive: if adaptive, path converges to average CV density perpendicular to path
         update_interval: number of steps between updates of adaptive path
         half_life: number of steps til weight of original path is half due to updates
+        multiple_walkers: multiple simulations contribute to adaptive path updates
+        mw_file: filename for shared path information (has to be the same for all contributing simulations)
         requires_z: if distance to path should be calculated and stored for confinement to path
         device: desired device of torch tensors 
         ndim: number of dimensions (2 for 2D test potentials, 3 else)
@@ -44,6 +47,8 @@ class PathCV:
         adaptive: bool=False,
         update_interval: int=100,
         half_life: float=-1, 
+        multiple_walkers: bool=False,
+        mw_file: str="../shared_path_data",
         requires_z: bool=False,
         device: str='cpu',
         ndim: int=3,
@@ -61,6 +66,8 @@ class PathCV:
         self.adaptive = adaptive
         self.update_interval = update_interval
         self.half_life = half_life
+        self.multiple_walkers = multiple_walkers
+        self.mw_file = mw_file
         self.requires_z = requires_z
         self.device = device
         self.ndim = ndim
@@ -237,6 +244,9 @@ class PathCV:
         # accumulate average distance from path for path update
         if self.adaptive:
 
+            if self.multiple_walkers and self.n_updates > 0:
+                self._shared_path_pre()
+
             w2 = -1. * dx
             w1 = 1. + dx
             if w1 > 1:
@@ -254,8 +264,13 @@ class PathCV:
                 self.weights[idx_nodemin[1]]   *= self.fade_factor 
                 self.weights[idx_nodemin[1]]   += w2
             
+            self.n_updates += 1
+
             self.update_path(z, q=None)
-        
+            
+            if self.multiple_walkers and self.n_updates > 0:
+                self._shared_path_post()
+
         return self.path_cv
 
     def update_path(self, z: torch.tensor, q: list=None):
@@ -268,6 +283,11 @@ class PathCV:
             q: coords of two neighbour nodes of z
         """
         if q != None:
+            self.n_updates += 1
+
+            if self.multiple_walkers and self.n_updates > 0:
+                self._shared_path_pre()
+
             s = self._project_coords_on_line(z, q)
             dist_ij = self.get_distance(self.path[0], self.path[1], metric=self.metric)
             for j, _ in enumerate(self.path[1:-1], start=1):
@@ -275,6 +295,9 @@ class PathCV:
                 self.avg_dists[j] += w * (z-s)
                 self.weights[j] *= self.fade_factor
                 self.weights[j] += w
+
+            if self.multiple_walkers and self.n_updates > 0:
+                self._shared_path_post()
 
         # don't count calls during init
         if self.n_updates < 0:
@@ -286,7 +309,6 @@ class PathCV:
         self.avg_dists = [avg_dist.detach() for avg_dist in self.avg_dists]
 
         # update path all `self.update_interval` steps
-        self.n_updates += 1
         if self.n_updates == self.update_interval:
             new_path = self.path.copy()
             for j in range(self.nnodes-2):
@@ -650,3 +672,54 @@ class PathCV:
                 dcd.write(BOHR_to_ANGSTROM * coords.view(int(torch.numel(coords)/3),3).detach().numpy())
             dcd.close()
 
+    def _shared_path_pre(self):
+        """Pre step for path updates from multiple walkers
+        """
+        if os.path.isfile(self.mw_file + ".pth"):
+            # try loading the mw_file 10 times (avoids errors if two walkers access the file simultaneously)
+            for i, fp in enumerate([self.mw_file for _ in range(10)]):
+                try:
+                    data = torch.load(fp + ".pth")
+                    break
+                except:
+                    if i == 9 and self.verbose:
+                        print(" >>> WARNING: Failed to read shared path buffer file!")
+                        break
+                    time.sleep(0.1)
+                    continue
+            self.n_updates = data["update_int"]
+            self.avg_dists = [data["avg_dist"][i].detach() for i in range(self.nnodes)]
+            self.weights   = data["weights"].detach()
+            self.path      = [data["path"][i].detach() for i in range(self.nnodes)]
+            
+    def _shared_path_post(self):
+        """Post step for path updates from multiple walkers
+        """
+        # reset accumulators after path update
+        if self.n_updates == self.update_interval:
+            n_updates = 0 
+            avg_dists = [torch.zeros_like(self.avg_dists[0], device=self.device, requires_grad=False) for _ in range(self.nnodes)]
+        else:
+            n_updates = self.n_updates
+            avg_dists = self.avg_dists.copy()
+
+        # write shared path information
+        for i, fp in enumerate([self.mw_file for _ in range(10)]):
+            try:
+                torch.save(
+                    {
+                        "update_int": n_updates, 
+                        "avg_dist": avg_dists, 
+                        "weights": self.weights,
+                        "path": self.path,
+                    },
+                    fp + ".pth",
+                )
+                break          
+            except:
+                if i == 9 and self.verbose:
+                    print(" >>> WARNING: Failed to write shared path buffer file!")
+                    break
+                time.sleep(0.1)
+                continue
+    

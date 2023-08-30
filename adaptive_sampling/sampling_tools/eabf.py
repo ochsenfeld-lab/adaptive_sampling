@@ -85,7 +85,17 @@ class eABF(ABF, EnhancedSampling):
         write_traj: bool = True, 
         stabilize: bool = False, 
         **kwargs
-    ):
+    ) -> np.ndarray:
+        """Apply eABF to MD simulation
+
+        Args:
+            write_output: if on-the-fly free energy estimate and restart files should be written
+            write_traj: if CV and extended system trajectory file should be written
+            stabilize: if stabilisation algorithm should be applied for discontinous CVs
+
+        Returns:
+            bias_force: Adaptive biasing force of current step that has to be added to molecular forces
+        """
 
         md_state = self.the_md.get_sampling_data()
         (xi, delta_xi) = self.get_cv(**kwargs)
@@ -360,6 +370,12 @@ class eABF(ABF, EnhancedSampling):
         threshold: float=None
     ):
         """Stabilize extended dynamics in case of discontiouity in Collective Variable
+
+        see: Hulm et al., J. Chem. Theory Comput. (2023), submitted
+
+        Args:
+            xi: current value of the CV
+            threshold: treshold for discontinuity in the CV (default: ext_sigma)
         """
         if threshold == None:
             threshold = self.ext_sigma
@@ -368,7 +384,7 @@ class eABF(ABF, EnhancedSampling):
             diff = self.ext_coords - self.traj[-1]
             self.ext_coords = xi + diff
             if self.verbose:
-                print(" >>> INFO: stabalizer reinitialized extended system!")
+                print(" >>> INFO: extended system corrected after discontinuity of CV!")
 
     def _propagate(
         self, 
