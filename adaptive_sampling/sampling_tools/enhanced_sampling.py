@@ -339,14 +339,6 @@ class EnhancedSampling(ABC):
         """
         step = self.the_md.get_sampling_data().step
 
-        # convert units to degree and Angstrom
-        for i in range(self.ncoords):
-            traj = np.copy(self.traj)
-            if self.cv_type[i] == "angle":
-                traj[:, i] *= DEGREES_per_RADIAN
-            elif self.cv_type[i] == "distance":
-                traj[:, i] *= BOHR_to_ANGSTROM
-
         # write header
         if not os.path.isfile(filename) and step == 0:
             # start new file in first step
@@ -375,9 +367,16 @@ class EnhancedSampling(ABC):
                         )
                     )  # time in fs
                     for i in range(len(self.traj[0])):
-                        traj_out.write("%14.6f\t" % (traj[-self.out_freq + n][i]))
+                        if self.cv_type[i] == "angle":
+                            traj_out.write("%14.6f\t" % (self.traj[-self.out_freq + n][i] * DEGREES_per_RADIAN))
+                        elif self.cv_type[i] == "distance":
+                            traj_out.write("%14.6f\t" % (self.traj[-self.out_freq + n][i] * BOHR_to_ANGSTROM))
+                        else:
+                            traj_out.write("%14.6f\t" % (self.traj[-self.out_freq + n][i]))
+
                     for val in data.values():
                         traj_out.write("%14.6f\t" % (val[-self.out_freq + n]))
+                        
                     if self.kinetics:
                         traj_out.write(
                             "%14.6f\t" % (self.mass_traj[-self.out_freq + n])

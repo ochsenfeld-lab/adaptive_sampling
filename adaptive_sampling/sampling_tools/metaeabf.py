@@ -48,10 +48,11 @@ class WTMeABF(eABF, WTM, EnhancedSampling):
         write_output: bool = True, 
         write_traj: bool = True, 
         stabilize: bool = False,
+        stabilizer_threshold: float = None,
         output_file: str = 'wtmeabf.out',
         traj_file: str = 'CV_traj.dat', 
         restart_file: str = 'restart_wtmeabf',
-        **kwargs
+        **kwargs,
     ) -> np.ndarray:
         """Apply WTM-eABF to MD simulation
 
@@ -59,6 +60,7 @@ class WTMeABF(eABF, WTM, EnhancedSampling):
             write_output: if on-the-fly free energy estimate and restart files should be written
             write_traj: if CV and extended system trajectory file should be written
             stabilize: if stabilisation algorithm should be applied for discontinous CVs
+            stabilizer_threshold: treshold for stabilisation of extended system
             output_file: name of the output file
             traj_file: name of the trajectory file
             restart_file: name of the restart file
@@ -71,7 +73,7 @@ class WTMeABF(eABF, WTM, EnhancedSampling):
         (xi, delta_xi) = self.get_cv(**kwargs)
 
         if stabilize and len(self.traj)>0:
-            self.stabilizer(xi, **kwargs)
+            self.stabilizer(xi, threshold=stabilizer_threshold)
 
         self._propagate()
 

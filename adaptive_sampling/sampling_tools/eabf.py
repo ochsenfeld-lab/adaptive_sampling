@@ -84,6 +84,7 @@ class eABF(ABF, EnhancedSampling):
         write_output: bool = True, 
         write_traj: bool = True, 
         stabilize: bool = False, 
+        stabilizer_threshold: float = None,
         **kwargs
     ) -> np.ndarray:
         """Apply eABF to MD simulation
@@ -92,8 +93,9 @@ class eABF(ABF, EnhancedSampling):
             write_output: if on-the-fly free energy estimate and restart files should be written
             write_traj: if CV and extended system trajectory file should be written
             stabilize: if stabilisation algorithm should be applied for discontinous CVs
+            stabilizer_threshold: treshold for stabilisation of extended system
 
-        Returns:
+       Returns:
             bias_force: Adaptive biasing force of current step that has to be added to molecular forces
         """
 
@@ -101,7 +103,7 @@ class eABF(ABF, EnhancedSampling):
         (xi, delta_xi) = self.get_cv(**kwargs)
 
         if stabilize and len(self.traj)>0:
-            self.stabilizer(xi, **kwargs)
+            self.stabilizer(xi, threshold=stabilizer_threshold)
 
         self._propagate()
 

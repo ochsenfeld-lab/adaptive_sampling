@@ -283,10 +283,11 @@ class PathCV:
             q: coords of two neighbour nodes of z
         """
         if q != None:
-            self.n_updates += 1
 
             if self.multiple_walkers and self.n_updates > 0:
                 self._shared_path_pre()
+
+            self.n_updates += 1
 
             s = self._project_coords_on_line(z, q)
             dist_ij = self.get_distance(self.path[0], self.path[1], metric=self.metric)
