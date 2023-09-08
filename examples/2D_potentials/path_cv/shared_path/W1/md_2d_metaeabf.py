@@ -12,9 +12,16 @@ target_temp = 300.0  # Kelvin
 mass = 10.0  # a.u.
 potential = "1"
 
+with open('../walkers', 'r') as w:
+    walkers = w.readlines()
+    for i, path in enumerate(walkers):
+        walkers[i] = path[:-1]
+
+print(walkers)
+
 # eABF
 dev = {
-    "guess_path": "../guess_path.xyz",
+    "guess_path": "../../guess_path.xyz",
     "metric": "RMSD",
     "coordinate_system": "Cartesian",
     "smooth_damping": 0.5,
@@ -24,6 +31,8 @@ dev = {
     "adaptive": True,
     "update_interval": 1000,
     "half_life": 5000,
+    "walkers": walkers,
+    "local_path_file": "local_path",
     "ndim": 2,
 }
 
@@ -31,12 +40,11 @@ tube = False
 
 ats = [["gpath", dev, 0.02, 0.98, 0.02]]
 
-conf = [["GPath_distance", dev, 0.0, 0.0, 0.0]]
-
 N_full = 100
 
 step_count = 0
 coords = [80.0, 1.0]
+
 the_md = MD(
     mass_in=mass,
     coords_in=coords,
@@ -45,6 +53,7 @@ the_md = MD(
     target_temp_in=target_temp,
     seed_in=seed,
 )
+
 the_abm = WTMeABF(
     0.05,
     40.0,
@@ -58,6 +67,7 @@ the_abm = WTMeABF(
     equil_temp=300.0,
     multiple_walker=False,
 )
+
 if tube:
     the_conf = Reference(
         the_md,

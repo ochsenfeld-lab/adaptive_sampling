@@ -147,7 +147,7 @@ def build_boltzmann(
     all_frames, num_frames, frames_per_traj = join_frames(traj_list)
 
     # adding an extra axis to 1D sims, for compatibility with x-D eABF
-    add_axis = True if len(all_frames.shape) == 1 else False
+    add_axis = True if periodicity and not hasattr(lower_bound, "__len__") else False
     if add_axis:
         all_frames = all_frames[:, np.newaxis]
         if periodicity:
@@ -186,7 +186,7 @@ def build_boltzmann(
         meta_f = tqdm(meta_f)
 
     for line in meta_f:
-        diffs = all_frames - line[1]
+        diffs = np.asarray(all_frames - line[1])
         if periodicity:
             for ii in range(diffs.shape[1]):
                 diffs[diffs[:,ii] > upper_bound[ii], ii] -= period[ii]
