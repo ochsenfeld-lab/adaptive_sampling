@@ -73,6 +73,8 @@ def czar(
     dx2 = (grid[1] - grid[0]) / 2.0
     grid_local = grid + dx2
 
+    # TODO: add periodicity to handle periodic simulations
+
     # get force constant from sigma
     k = RT / (sigma * sigma)
 

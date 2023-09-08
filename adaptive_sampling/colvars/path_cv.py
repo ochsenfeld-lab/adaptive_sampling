@@ -1,6 +1,7 @@
 import time
 import math
 import torch
+from typing import List, Union
 
 from .utils import *
 
@@ -27,8 +28,8 @@ class PathCV:
         adaptive: if adaptive, path converges to average CV density perpendicular to path
         update_interval: number of steps between updates of adaptive path
         half_life: number of steps til weight of original path is half due to updates
-        walkers: multiple simulations contribute to adaptive path updates
-        mw_file: filename for shared path information (has to be the same for all contributing simulations)
+        walkers: list of paths to `local_path_file` of multiple walkers contributing to path updates (if None: single walker)
+        local_path_file: filename to dump path information of local simulation to share path between multiple walkers
         requires_z: if distance to path should be calculated and stored for confinement to path
         device: desired device of torch tensors 
         ndim: number of dimensions (2 for 2D test potentials, 3 else)
@@ -37,7 +38,7 @@ class PathCV:
     def __init__(
         self, 
         guess_path: str=None, 
-        active: list=None, 
+        active: List[Union[int, list]]=None, 
         n_interpolate: int=0,
         smooth_damping: float=0.0,
         reparam_steps: int=1,
@@ -47,7 +48,7 @@ class PathCV:
         adaptive: bool=False,
         update_interval: int=100,
         half_life: float=-1, 
-        walkers: list=None,
+        walkers: List[str]=None,
         local_path_file: str="local_path_data",
         requires_z: bool=False,
         device: str='cpu',
@@ -303,6 +304,10 @@ class PathCV:
                 if self.weights[j+1] > 0:
                     new_path[j+1] += (self.avg_dists[j+1] / self.weights[j+1])
 
+            if self.walkers != None:
+                self._dump_update_data()
+                self._shared_path()
+
             self.path = PathCV.reparametrize_path(
                 new_path, 
                 smooth_damping=self.smooth_damping, 
@@ -315,10 +320,6 @@ class PathCV:
             # reset accumulators
             self.n_updates = 0 
             self.avg_dists = [torch.zeros_like(self.avg_dists[0], device=self.device, requires_grad=False) for _ in range(self.nnodes)]
-
-            if self.walkers != None:
-                self._dump_update_data()
-                self._shared_path()
 
     @staticmethod
     def reparametrize_path(
@@ -622,23 +623,24 @@ class PathCV:
             print(f" >>> INFO: Reduced coordinate system to {torch.numel(self.path[0])} {self.coordinates} coordinates.")
 
     def _shared_path(self):
-        """Pre step for path updates from multiple walkers
+        """Synchronizes path with multiple walkers by calculating weighted average of path nodes for walkers listed in `walkers`
         """
         if self.walkers==None:
             raise ValueError(" >>> ERROR: No other walkers specified for shared path!")
 
         global_path = [torch.zeros_like(node) for node in self.path]
         global_weights  = torch.zeros_like(self.weights)
-        n_walkers = 0
-
+        
+        n_success = 0
         for i, walker in enumerate(self.walkers):
             try:
                 data = torch.load(walker)
             except:
-                print(f" >>> WARNING: Failed to read {i}th walker of shared path update!")
+                if self.verbose:
+                    print(f" >>> WARNING: Failed to read {i}th walker of shared path update!")
                 continue
 
-            n_walkers += 1
+            n_success += 1
             for i, node in enumerate(data['path']):
                 global_path[i] += node * data['weights'][i]
             global_weights += data['weights']
@@ -650,18 +652,14 @@ class PathCV:
                 global_path[j] = torch.clone(self.path[j])
 
         if self.verbose:
-            print(f" >>> INFO: Synchronized path with {n_walkers} walkers.")
-
-        self.path = PathCV.reparametrize_path(
-            global_path, 
-            smooth_damping=self.smooth_damping, 
-            tol=self.reparam_tol, 
-            max_step=self.reparam_steps,
-            verbose=self.verbose,
-        )
-        self.boundary_nodes = self._get_boundary(self.path)
+            print(f" >>> INFO: Synchronized path with {n_success} walkers.")
 
     def _dump_update_data(self):
+            """Dumps data that is necessary to sync path with other walkers to `local_path_file`
+            """
+            if self.local_path_file[-4:] != '.pth':
+                self.local_path_file += '.pth'
+
             for i, file in enumerate([self.local_path_file for _ in range(10)]):
                 try:
                     torch.save(
@@ -669,12 +667,12 @@ class PathCV:
                             "weights": self.weights,
                             "path": self.path
                         },
-                        file + ".pth",
+                        file,
                     ) 
                     break
                 except:
                     if i == 9 and self.verbose:
-                        print(" >>> WARNING: Failed to access shared path buffer file!")
+                        print(f" >>> WARNING: Failed to dump multiple walker path data in `{file}`!")
                         break
                     time.sleep(0.1)
                     continue
