@@ -292,24 +292,25 @@ class PathCV:
             self.weights = torch.zeros_like(self.weights, device=self.device, requires_grad=False)
             self.avg_dists = [torch.zeros_like(self.avg_dists[0], device=self.device, requires_grad=False) for _ in range(self.nnodes)]
        
-        # avoid performance drop due to buildup of large graphs in long simulations
+        # avoid performance drop due to buildup of large torch graphs in long simulations
         self.weights = self.weights.detach()
         self.avg_dists = [avg_dist.detach() for avg_dist in self.avg_dists]
 
-        # update path all `self.update_interval` steps
+        # update path from accumulators all `self.update_interval` steps
         if self.n_updates == self.update_interval:
             
-            new_path = self.path.copy()
             for j in range(self.nnodes-2):
                 if self.weights[j+1] > 0:
-                    new_path[j+1] += (self.avg_dists[j+1] / self.weights[j+1])
-
+                    self.path[j+1] += (self.avg_dists[j+1] / self.weights[j+1])
+            
+            # calculate weighted path average from multiple walkers listed in `self.walkers`
             if self.walkers != None:
                 self._dump_update_data()
                 self._shared_path()
 
+            # smooth path and ensure equidistant nodes 
             self.path = PathCV.reparametrize_path(
-                new_path, 
+                self.path, 
                 smooth_damping=self.smooth_damping, 
                 tol=self.reparam_tol, 
                 max_step=self.reparam_steps,
@@ -623,7 +624,7 @@ class PathCV:
             print(f" >>> INFO: Reduced coordinate system to {torch.numel(self.path[0])} {self.coordinates} coordinates.")
 
     def _shared_path(self):
-        """Synchronizes path with multiple walkers by calculating weighted average of path nodes for walkers listed in `walkers`
+        """Synchronizes path with multiple walkers by calculating weighted average of path nodes for walkers listed in `self.walkers`
         """
         if self.walkers==None:
             raise ValueError(" >>> ERROR: No other walkers specified for shared path!")
@@ -633,6 +634,10 @@ class PathCV:
         
         n_success = 0
         for i, walker in enumerate(self.walkers):
+            
+            if walker[-1] == '\n':
+                walker = walker[:-1]
+
             try:
                 data = torch.load(walker)
             except:
@@ -655,7 +660,7 @@ class PathCV:
             print(f" >>> INFO: Synchronized path with {n_success} walkers.")
 
     def _dump_update_data(self):
-            """Dumps data that is necessary to sync path with other walkers to `local_path_file`
+            """Dumps data that is necessary to sync path with other walkers to `self.local_path_file`
             """
             if self.local_path_file[-4:] != '.pth':
                 self.local_path_file += '.pth'

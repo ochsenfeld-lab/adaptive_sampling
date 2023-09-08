@@ -14,8 +14,6 @@ potential = "1"
 
 with open('../walkers', 'r') as w:
     walkers = w.readlines()
-    for i, path in enumerate(walkers):
-        walkers[i] = path[:-1]
 
 print(walkers)
 
