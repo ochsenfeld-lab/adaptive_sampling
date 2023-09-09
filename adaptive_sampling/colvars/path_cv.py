@@ -73,7 +73,8 @@ class PathCV:
         self.device = device
         self.ndim = ndim
         self.verbose = verbose
-        
+        self.closest_prev = None
+
         # initialize path
         self.path, self.nnodes = read_path(
             self.guess_path, 
@@ -83,27 +84,32 @@ class PathCV:
         # if `.xyz` is given convert coordinate system 
         if self.guess_path[-3:] == 'xyz':
             self._reduce_path()
-
         self._interpolate(n_interpolate)
-        self.path = PathCV.reparametrize_path(
-            self.path, 
-            smooth_damping=self.smooth_damping, 
-            tol=self.reparam_tol, 
-            max_step=self.reparam_steps, 
-            verbose=self.verbose
-        )
-        self.boundary_nodes = self._get_boundary(self.path)
-        self.closest_prev = None
 
         # accumulators for path update
         if self.adaptive:
             self.n_updates = -4 # TODO: don't count calls during init
             self.weights = torch.zeros(self.nnodes, device=self.device, requires_grad=False)    
             self.avg_dists = [torch.zeros_like(self.path[0], device=self.device, requires_grad=False) for _ in range(self.nnodes)]
+
+            if self.walkers != None:
+                self._dump_update_data()
+                self.path = self._shared_path()
+
             if half_life < 0:
                 self.fade_factor = 1.0
             else:
                 self.fade_factor = math.exp(-math.log(2.) / float(self.half_life))
+
+        # smooth path and ensure quidistant nodes
+        self.path = PathCV.reparametrize_path(
+            self.path, 
+            smooth_damping=self.smooth_damping, 
+            tol=self.reparam_tol, 
+            max_step=self.reparam_steps, 
+            verbose=self.verbose,
+        )
+        self.boundary_nodes = self._get_boundary(self.path) # trailing nodes
 
         if self.verbose:
             print(f" >>> INFO: Initialization of PathCV with {self.nnodes} nodes finished.")
@@ -306,7 +312,7 @@ class PathCV:
             # calculate weighted path average from multiple walkers listed in `self.walkers`
             if self.walkers != None:
                 self._dump_update_data()
-                self._shared_path()
+                self.path = self._shared_path()
 
             # smooth path and ensure equidistant nodes 
             self.path = PathCV.reparametrize_path(
@@ -316,7 +322,9 @@ class PathCV:
                 max_step=self.reparam_steps,
                 verbose=self.verbose,
             )
-            self.boundary_nodes = self._get_boundary(self.path)
+
+            # trailing nodes
+            self.boundary_nodes = self._get_boundary(self.path) 
             
             # reset accumulators
             self.n_updates = 0 
@@ -623,8 +631,11 @@ class PathCV:
         if self.verbose:
             print(f" >>> INFO: Reduced coordinate system to {torch.numel(self.path[0])} {self.coordinates} coordinates.")
 
-    def _shared_path(self):
+    def _shared_path(self) -> List[torch.tensor]:
         """Synchronizes path with multiple walkers by calculating weighted average of path nodes for walkers listed in `self.walkers`
+
+        Returns:
+            global_path: average of path nodes from all walkers
         """
         if self.walkers==None:
             raise ValueError(" >>> ERROR: No other walkers specified for shared path!")
@@ -659,6 +670,8 @@ class PathCV:
         if self.verbose:
             print(f" >>> INFO: Synchronized path with {n_success} walkers.")
 
+        return global_path
+
     def _dump_update_data(self):
             """Dumps data that is necessary to sync path with other walkers to `self.local_path_file`
             """
@@ -676,6 +689,7 @@ class PathCV:
                     ) 
                     break
                 except:
+                    # catches errors if other walker accesses file at the same time
                     if i == 9 and self.verbose:
                         print(f" >>> WARNING: Failed to dump multiple walker path data in `{file}`!")
                         break
