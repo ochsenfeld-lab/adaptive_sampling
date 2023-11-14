@@ -23,7 +23,7 @@ class aMD(EnhancedSampling):
         cv_def: definition of the Collective Variable (CV) (see adaptive_sampling.colvars)
                 [["cv_type", [atom_indices], minimum, maximum, bin_width], [possible second dimension]]
         amd_method: "aMD": apply accelerated MD
-                    "GaMD_lower": use lower bound for GaMD boost
+                    "GaMD_lower": use lower bound for GaMD boost (default)
                     "GaMD_upper: use upper bound for GaMD boost
                     "SaMD: apply Sigmoid accelerated MD
         confine: if system should be confined to range of CV
@@ -228,22 +228,26 @@ class aMD(EnhancedSampling):
 
     def _apply_boost(self, epot):
         """Apply boost potential to forces"""
-        if self.amd_method.lower() == "amd":
-            self.amd_pot = np.square(self.E - epot) / (self.parameter + (self.E - epot))
-            boost_force = -(
-                ((epot - self.E) * (epot - 2.0 * self.parameter - self.E)) / np.square(epot - self.parameter - self.E)
-            ) * self.amd_forces
+        if epot < self.E:
+            if self.amd_method.lower() == "amd":
+                self.amd_pot = np.square(self.E - epot) / (self.parameter + (self.E - epot))
+                boost_force = -(
+                    ((epot - self.E) * (epot - 2.0 * self.parameter - self.E)) / np.square(epot - self.parameter - self.E)
+                ) * self.amd_forces
         
-        elif self.amd_method.lower() == "samd":
-            self.amd_pot = self.pot_max - epot - 1/self.k * np.log((self.c + np.exp(self.k * (self.pot_max - self.pot_min))) 
-                    / (self.c + np.exp(self.k * (epot - self.pot_min))))
-            boost_force = (1.0/(np.exp(-self.k * (epot - self.pot_min) + np.log((1/self.c0) - 1)) + 1) - 1) * self.amd_forces
+            elif self.amd_method.lower() == "samd":
+                self.amd_pot = self.pot_max - epot - 1/self.k * np.log((self.c + np.exp(self.k * (self.pot_max - self.pot_min))) 
+                       / (self.c + np.exp(self.k * (epot - self.pot_min))))
+                boost_force = (1.0/(np.exp(-self.k * (epot - self.pot_min) + np.log((1/self.c0) - 1)) + 1) - 1) * self.amd_forces
 
+            else:
+                prefac = self.k0 / (self.pot_max - self.pot_min)
+                self.amd_pot = 0.5 * prefac * np.power(self.E - epot, 2)
+                boost_force = -prefac * (self.E - epot) * self.amd_forces
         else:
-            prefac = self.k0 / (self.pot_max - self.pot_min)
-            self.amd_pot = 0.5 * prefac * np.power(self.E - epot, 2)
-            boost_force = -prefac * (self.E - epot) * self.amd_forces
-        
+            boost_force = 0.0
+            self.amd_pot = 0.0
+            
         return boost_force
     
     def write_restart(self, filename: str = "restart_amd"):

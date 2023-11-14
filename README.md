@@ -125,7 +125,7 @@ traj_list, indices, meta_f = mbar.get_windows(grid, cv, la, ext_sigma, equil_tem
 exp_U, frames_per_traj = mbar.build_boltzmann(
     traj_list, 
     meta_f, 
-    equil_temp=300.0
+    equil_temp=300.0,
 )
 
 weights = mbar.run_mbar(
@@ -166,4 +166,4 @@ If you use this package in your work please cite:
 
 Other related references:
 *	Dietschreit et al., J. Chem. Phys., 157, 084113 (2022); <https://aip.scitation.org/doi/10.1063/5.0102075>
-
+*   Hulm et al., J. Chem. Theory. Comput., *in press*; (2023)
