@@ -2,7 +2,6 @@ import time
 import math
 import torch
 from typing import List, Union
-from scipy.special import logsumexp, softmax
 
 from .utils import *
 

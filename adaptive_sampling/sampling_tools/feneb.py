@@ -29,6 +29,7 @@ class FENEB:
         idpp: bool=False,
         load_from_dcd: bool=True,
         top: str=None,
+        write_xyz: bool=False,
         verbose: bool=False,
     ):
         self.neb_k = neb_k
@@ -57,7 +58,7 @@ class FENEB:
         if old_path == None:
             initial = io.read(endpoints[0])
             final   = io.read(endpoints[1])
-            self.path = self.make_path([initial, final], idpp)
+            self.path = self.make_path([initial, final], idpp, write_xyz=write_xyz)
         else:
             self.path = np.load(old_path)
             self.path = [node for node in self.path]
@@ -192,25 +193,39 @@ class FENEB:
             scaling_factor = 0.0001 / BOHR_to_ANGSTROM
         return norm_max, scaling_factor
 
-    def make_path(self, endpoints: List[str], idpp: bool) -> List[np.ndarray]:
+    def make_path(self, endpoints: List[str], idpp: bool, write_xyz: bool=True) -> List[np.ndarray]:
         """Build initial path by linear interpolation between endpoints
 
         Args:
-            endpoints: path to xyz files for endpoints of NEB
+            endpoints: list of ase molecules that represent endpoints of path
             idpp: if True, get improved path guess from IDPP method
         """
         images = [endpoints[0]]
         images += [endpoints[0].copy() for _ in range(self.nimages)]
         images += [endpoints[1]]
 
+        if len(self.active) != len(images[0].get_positions()):
+            if self.verbose:
+                print(" >>> FENEB: Fixing atom positions that are not `active` in path interpolation")
+            from ase.constraints import FixAtoms
+            apply_constraint = True
+            c = FixAtoms(indices=np.delete(np.arange(len(images[0].get_positions())), self.active))
+            for img in images:
+                img.set_constraint(c)
+        else:
+            apply_constraint = False
+
         neb = NEB(images)
         if idpp:
-            neb.interpolate('idpp')
+            neb.interpolate('idpp', apply_constraint=apply_constraint)
         else:
-            neb.interpolate()
+            neb.interpolate(apply_constraint=apply_constraint)
         
-        images = [image.get_positions() for image in images]
-        return images
+        if write_xyz:
+            for i, image in enumerate(images):
+                io.write(f"{i}.xyz", image)
+
+        return [image.get_positions() for image in images]
 
     def calc_feg(self, startframe: int=0, move_nodes_to_mean: bool=True, dim: int=3) -> np.ndarray:
         """Get free energy gradient for Umbrella Integration
@@ -229,7 +244,7 @@ class FENEB:
 
         if move_nodes_to_mean:
             if self.verbose:
-                print('>>> FENEB: recentering path nodes on trajectory averages')
+                print(' >>> FENEB: recentering path nodes on trajectory averages')
             tmp = self.path.copy()
             self.path = []
             for i, node in enumerate(mean_coords):
@@ -238,7 +253,7 @@ class FENEB:
                 else:
                     self.path.append(tmp[i])
         elif self.verbose:
-            print('>>> FENEB: path nodes not recentered')
+            print(' >>> FENEB: path nodes not recentered')
 
         return self.feg
 
