@@ -486,7 +486,7 @@ class CV:
             self.cv = self.pathcv.calculate_gpath(self.coords)
         else:
             self.cv = self.pathcv.calculate_path(self.coords)
-
+       
         if self.requires_grad:
             self.gradient = torch.autograd.grad(
                 self.cv, self.coords, allow_unused=True
@@ -502,7 +502,7 @@ class CV:
             pathcv: PathCV object that contains path_z 
         """
         if not hasattr(pathcv, "path_z"):
-            raise ValueError(" >>> ERROR: `pathcv` has to `require_z`!")
+            raise ValueError(" >>> ERROR: `pathcv` has to `requires_z`!")
         
         self.cv = pathcv.path_z
         self.gradient = pathcv.grad_z
@@ -633,7 +633,7 @@ class CV:
             self.type = "2d" if self.pathcv.ndim == 2 else None 
         elif cv.lower() == "path_z":
             xi = self.path_z(atoms)
-            self.type = "2d" if self.pathcv.ndim == 2 else None 
+            self.type = "2d" if atoms.ndim == 2 else None 
         elif cv.lower() == "cec" or cv.lower() == "mcec":
             xi = self.cec(atoms)
             self.type = "distance"

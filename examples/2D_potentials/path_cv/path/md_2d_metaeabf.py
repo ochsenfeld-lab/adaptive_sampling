@@ -6,7 +6,7 @@ from adaptive_sampling.units import *
 ################# Imput Section ####################
 # MD
 seed = 42
-nsteps = 40000  # number of MD steps
+nsteps = 50000  # number of MD steps
 dt = 5.0e0  # stepsize in fs
 target_temp = 300.0  # Kelvin
 mass = 10.0  # a.u.
@@ -24,13 +24,13 @@ dev = {
     "adaptive": True,
     "update_interval": 1000,
     "half_life": 5000,
+    "requires_z": True,
 }
 
 tube = False
 
 ats = [["path", dev, 0.0, 1.0, 0.05]]
 
-conf = [["GPath_distance", dev, 0.0, 0.0, 0.0]]
 
 N_full = 100
 
@@ -53,11 +53,13 @@ the_abm = WTMeABF(
     ats,
     nfull=100,
     output_freq=10,
-    f_conf=1000.0,
+    f_conf=10.0,
     equil_temp=300.0,
     multiple_walker=False,
 )
 if tube:
+    the_abm.the_cv.pathcv.adaptive = False
+    conf = [["path_z", the_abm.the_cv.pathcv, 0.0, 0.0, 0.0]]
     the_conf = Reference(
         the_md,
         conf,
@@ -67,13 +69,16 @@ if tube:
         equil_temp=300.0,
         multiple_walker=False,
     )
+    the_abm.the_cv.pathcv.adaptive = dev["adaptive"]
 
 # the_abm.restart()
 
 the_md.calc_init()
 the_abm.step_bias()
 if tube:
+    the_abm.the_cv.pathcv.adaptive = False
     the_conf.step_bias()
+    the_abm.the_cv.pathcv.adaptive = dev["adaptive"]
 the_md.calc_etvp()
 
 
@@ -102,11 +107,11 @@ while step_count < nsteps:
     the_md.propagate(langevin=True)
     the_md.calc()
     
-    the_abm.the_cv.pathcv.adaptive = True
     the_md.forces += the_abm.step_bias()
     if tube:
         the_abm.the_cv.pathcv.adaptive = False
         the_md.forces += the_conf.step_bias()
+        the_abm.the_cv.pathcv.adaptive = dev["adaptive"]
 
     the_md.up_momenta(langevin=True)
     the_md.calc_etvp()
@@ -123,5 +128,5 @@ while step_count < nsteps:
             the_md.temp,
         )
     )
-    if not the_md.step % 1000 and dev["adaptive"]:
+    if not the_md.step % 4000 and dev["adaptive"]:
         the_abm.the_cv.pathcv.write_path(filename=f'path_{step_count}.npy')

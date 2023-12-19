@@ -2,6 +2,7 @@ import time
 import math
 import torch
 from typing import List, Union
+from scipy.special import logsumexp, softmax
 
 from .utils import *
 
@@ -131,34 +132,24 @@ class PathCV:
                 coords, self.active, coord_system=self.coordinates, ndim=self.ndim
             ).to(self.device, non_blocking=True)
 
-        rmsds = self._get_distance_to_path(z)
+        rmsds = torch.stack(
+            [self.get_distance(z, self.path[i], metric=self.metric) for i in range(self.nnodes)]
+        )
         
-        la = self._calc_1overlambda()
-        
-        term1 = 0.0
-        term2 = 0.0
-        for i, rmsd in enumerate(rmsds):
-            exp = torch.exp(-la * torch.square(rmsd))
-            term1 += float(i) * exp
-            term2 += exp
+        la = 1. / torch.min(rmsds)
+        sm = torch.softmax(-la * rmsds, dim=0)
+        self.path_cv = 1.0 / (self.nnodes - 1) * torch.sum(torch.arange(self.nnodes) * sm)
 
-        # avoids numerical inconsistency by never reaching absolute zero
-        if abs(term2) < 1.e-15:
-            term2 += 1.e-15
-
-        # position on path in range [0,1]
-        self.path_cv = (1. / (self.nnodes-1)) * (term1 / term2)
-        
         # distance from path
         if self.requires_z:
-            self.path_z = -1. / la * torch.log(term2)
+            self.path_z = -1. / la * torch.logsumexp(-la * rmsds, dim=0)
             self.grad_z = torch.autograd.grad(
                 self.path_z, coords, allow_unused=True, retain_graph=True,
             )[0]
             self.grad_z = self.grad_z.detach().numpy()
-
+            
         if self.adaptive:
-            min_idx = self._get_closest_nodes(z, rmsds)
+            min_idx = self._get_closest_nodes(z, rmsds.tolist())
             min_coords = []
             for idx in min_idx:
                 if idx == -1:

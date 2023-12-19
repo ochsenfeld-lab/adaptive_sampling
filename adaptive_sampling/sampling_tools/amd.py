@@ -227,27 +227,31 @@ class aMD(EnhancedSampling):
             raise ValueError(f" >>> Error: unknown aMD method {self.amd_method}!")
 
     def _apply_boost(self, epot):
-        """Apply boost potential to forces"""
+        """Apply boost potential to forces
+        """
+        if self.amd_method.lower() not in ["amd", "gamd_lower", "gamd_upper", "samd"]:
+            raise ValueError(f" >>> Error: unknown aMD method {self.amd_method}!")
+
         if epot < self.E:
             if self.amd_method.lower() == "amd":
                 self.amd_pot = np.square(self.E - epot) / (self.parameter + (self.E - epot))
                 boost_force = -(
                     ((epot - self.E) * (epot - 2.0 * self.parameter - self.E)) / np.square(epot - self.parameter - self.E)
                 ) * self.amd_forces
-        
-            elif self.amd_method.lower() == "samd":
-                self.amd_pot = self.pot_max - epot - 1/self.k * np.log((self.c + np.exp(self.k * (self.pot_max - self.pot_min))) 
-                       / (self.c + np.exp(self.k * (epot - self.pot_min))))
-                boost_force = (1.0/(np.exp(-self.k * (epot - self.pot_min) + np.log((1/self.c0) - 1)) + 1) - 1) * self.amd_forces
 
-            else:
+            elif self.amd_method.lower() in ["gamd_lower", "gamd_upper"]:
                 prefac = self.k0 / (self.pot_max - self.pot_min)
                 self.amd_pot = 0.5 * prefac * np.power(self.E - epot, 2)
                 boost_force = -prefac * (self.E - epot) * self.amd_forces
         else:
             boost_force = 0.0
             self.amd_pot = 0.0
-            
+
+        if self.amd_method.lower() == "samd":
+            self.amd_pot = self.pot_max - epot - 1/self.k * np.log((self.c + np.exp(self.k * (self.pot_max - self.pot_min))) 
+               / (self.c + np.exp(self.k * (epot - self.pot_min))))
+            boost_force = (1.0/(np.exp(-self.k * (epot - self.pot_min) + np.log((1/self.c0) - 1)) + 1) - 1) * self.amd_forces
+
         return boost_force
     
     def write_restart(self, filename: str = "restart_amd"):

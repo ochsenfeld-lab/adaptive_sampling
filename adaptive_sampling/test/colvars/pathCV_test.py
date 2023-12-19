@@ -130,11 +130,11 @@ def test_calculate_gpath(input, coords1, coords2, coords3, coords4, coords5):
     "input, coords1, coords2, coords3, coords4, coords5", [
         (
             "resources/path.xyz", 
-            torch.tensor([1.0, 1.0, 0.8, 0.0, 0.0, 0.0]),
-            torch.tensor([2.0, 1.1, 1.0, 0.0, 0.0, 0.0]),
-            torch.tensor([3.0, 0.9, 1.2, 0.0, 0.0, 0.0]),
-            torch.tensor([4.0, 1.1, 0.9, 0.0, 0.0, 0.0]),
-            torch.tensor([5.0, 0.9, 1.1, 0.0, 0.0, 0.0]),
+            torch.tensor([1.0, 0.1, 0.0, 0.0, 0.0, 0.0]),
+            torch.tensor([2.0, 0.0, 0.0, 0.0, 0.0, 0.0]),
+            torch.tensor([3.0, 0.0, 0.0, 0.0, 0.0, 0.0]),
+            torch.tensor([4.0, 0.0, 0.0, 0.0, 0.0, 0.0]),
+            torch.tensor([5.0, 0.0, 0.0, 0.0, 0.0, 0.0]),
         )
     ]
 )
@@ -145,18 +145,68 @@ def test_calculate_path(input, coords1, coords2, coords3, coords4, coords5):
     coords4 = coords4 / BOHR_to_ANGSTROM
     coords5 = coords5 / BOHR_to_ANGSTROM
 
-    cv = PathCV(guess_path=input, metric="kmsd", smooth_damping=0.0, coordinate_system="Cartesian")
+    cv = PathCV(guess_path=input, metric="rmsd", smooth_damping=0.0, coordinate_system="Cartesian", active=[0,1])
 
-    cv1 = cv.calculate_gpath(coords1)
-    cv2 = cv.calculate_gpath(coords2) 
-    cv3 = cv.calculate_gpath(coords3)
-    cv4 = cv.calculate_gpath(coords4)
-    cv5 = cv.calculate_gpath(coords5)
-    assert isclose(float(cv1), float(0.0), abs_tol=1e-5)
-    assert isclose(float(cv2), float(0.25), abs_tol=1e-5)
-    assert isclose(float(cv3), float(0.5), abs_tol=1e-5)
-    assert isclose(float(cv4), float(0.75), abs_tol=1e-5)
-    assert isclose(float(cv5), float(1.0), abs_tol=1e-5)
+    cv1 = cv.calculate_path(coords1)
+    cv2 = cv.calculate_path(coords2) 
+    cv3 = cv.calculate_path(coords3)
+    cv4 = cv.calculate_path(coords4)
+    cv5 = cv.calculate_path(coords5)
+    assert isclose(float(cv1), float(0.0), abs_tol=1e-2)
+    assert isclose(float(cv2), float(0.25), abs_tol=1e-1)
+    assert isclose(float(cv3), float(0.5), abs_tol=1e-2)
+    assert isclose(float(cv4), float(0.75), abs_tol=1e-1)
+    assert isclose(float(cv5), float(1.0), abs_tol=1e-2)
+
+@pytest.mark.parametrize(
+    "input, coords1, coords2, coords3, coords4, coords5", [
+        (
+            "resources/path.xyz", 
+            torch.tensor([1.0, 1.0, 0.0, 0.0, 0.0, 0.0]),
+            torch.tensor([2.0, 1.0, 0.0, 0.0, 0.0, 0.0]),
+            torch.tensor([3.0, 1.0, 0.0, 0.0, 0.0, 0.0]),
+            torch.tensor([4.0, 1.0, 0.0, 0.0, 0.0, 0.0]),
+            torch.tensor([5.0, 1.0, 0.0, 0.0, 0.0, 0.0]),
+        )
+    ]
+)
+def test_calculate_path_z(input, coords1, coords2, coords3, coords4, coords5):
+    coords1 = coords1 / BOHR_to_ANGSTROM
+    coords2 = coords2 / BOHR_to_ANGSTROM 
+    coords3 = coords3 / BOHR_to_ANGSTROM
+    coords4 = coords4 / BOHR_to_ANGSTROM
+    coords5 = coords5 / BOHR_to_ANGSTROM
+
+    coords1.requires_grad = True
+    coords2.requires_grad = True
+    coords3.requires_grad = True
+    coords4.requires_grad = True
+    coords5.requires_grad = True
+
+    cv = PathCV(
+        guess_path=input, 
+        metric="msd", 
+        smooth_damping=0.0, 
+        coordinate_system="Cartesian", 
+        active=[0,1],
+        requires_z=True,
+    )
+
+    cv.calculate_path(coords1)
+    cv1 = cv.path_z
+    cv.calculate_path(coords2) 
+    cv2 = cv.path_z
+    cv.calculate_path(coords3)
+    cv3 = cv.path_z
+    cv.calculate_path(coords4)
+    cv4 = cv.path_z
+    cv.calculate_path(coords5)
+    cv5 = cv.path_z
+    assert isclose(float(cv1), float(1.75), abs_tol=1e-2)
+    assert isclose(float(cv2), float(1.06), abs_tol=1e-2)
+    assert isclose(float(cv3), float(1.72), abs_tol=1e-2)
+    assert isclose(float(cv4), float(1.06), abs_tol=1e-2)
+    assert isclose(float(cv5), float(1.75), abs_tol=1e-2)
 
 @pytest.mark.parametrize(
     "input, coords1, coords2", [

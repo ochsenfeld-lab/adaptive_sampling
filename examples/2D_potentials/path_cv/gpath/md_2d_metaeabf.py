@@ -6,7 +6,7 @@ from adaptive_sampling.units import *
 ################# Imput Section ####################
 # MD
 seed = 42
-nsteps = 100000  # number of MD steps
+nsteps = 50000  # number of MD steps
 dt = 5.0e0  # stepsize in fs
 target_temp = 300.0  # Kelvin
 mass = 10.0  # a.u.
@@ -25,13 +25,12 @@ dev = {
     "update_interval": 1000,
     "half_life": 5000,
     "ndim": 2,
+    "requires_z": True,
 }
 
 tube = False
 
 ats = [["gpath", dev, 0.02, 0.98, 0.02]]
-
-conf = [["GPath_distance", dev, 0.0, 0.0, 0.0]]
 
 N_full = 100
 
@@ -59,6 +58,8 @@ the_abm = WTMeABF(
     multiple_walker=False,
 )
 if tube:
+    the_abm.the_cv.pathcv.adaptive = False
+    conf = [["path_z", the_abm.the_cv.pathcv, 0.0, 0.0, 0.0]]
     the_conf = Reference(
         the_md,
         conf,
@@ -68,13 +69,16 @@ if tube:
         equil_temp=300.0,
         multiple_walker=False,
     )
+    the_abm.the_cv.pathcv.adaptive = dev["adaptive"]
 
 # the_abm.restart()
 
 the_md.calc_init()
 the_abm.step_bias()
 if tube:
+    the_abm.the_cv.pathcv.adaptive = False
     the_conf.step_bias()
+    the_abm.the_cv.pathcv.adaptive = dev["adaptive"]
 the_md.calc_etvp()
 
 

@@ -6,6 +6,7 @@ from .awtmeabf import *
 from .metadynamics import *
 from .metaeabf import *
 from .reference import *
+from .feneb import *
 from .utils import *
 
 __all__ = [
@@ -16,5 +17,6 @@ __all__ = [
     "aWTMeABF",
     "WTM",
     "WTMeABF",
+    "FENEB",
     "Reference",
 ]
