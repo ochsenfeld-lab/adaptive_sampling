@@ -54,18 +54,18 @@ class FENEB:
                 print(f'INFO: Topology for dcd import: {self.top}')
         
         self.optstep = 0
-        
+
+        self.initial = io.read(endpoints[0]) # always get on ase.Atoms object for io operations
+        if self.active == None:
+            self.active = [i for i in range(len(self.initial.get_atomic_numbers()))]
+        self.natoms = len(self.initial.get_atomic_numbers())
+
         if old_path == None:
-            initial = io.read(endpoints[0])
-            final   = io.read(endpoints[1])
-            self.path = self.make_path([initial, final], idpp, write_xyz=write_xyz)
+            self.final   = io.read(endpoints[1])
+            self.path = self.make_path(idpp, write_xyz=write_xyz)
         else:
             self.path = np.load(old_path)
             self.path = [node for node in self.path]
-
-        if self.active == None:
-            self.active = [i for i in range(len(self.path[0]))]
-        self.grad_A = None
 
     def step(self, feg: np.ndarray=None, uncoupled_band_opt: bool=True) -> dict:
         """NEB optimisation step (Steepest Descent)
@@ -86,19 +86,22 @@ class FENEB:
             ])      
 
             # SD step along free energy gradient
-            feg_i = np.asarray([feg[i+1]]).flatten() 
+            feg_i = np.asarray([feg[i+1]]).flatten()             
+            force = feg_i - np.dot(feg_i, tau) * tau
             
-            if uncoupled_band_opt:
-                force = feg_i - np.dot(feg_i, tau) * tau
-            else:
-                spring_force = self.neb_k * np.dot(
-                    (self.path[i+2][self.active]-self.path[i+1][self.active])-
-                    (self.path[i+1][self.active]-self.path[i+0][self.active]), tau) * tau
-
-                force = feg_i - np.dot(feg_i, tau) * tau - spring_force
+            if not uncoupled_band_opt:
+                force -= self.neb_k * np.dot(
+                    (self.path[i+2][self.active].flatten()-self.path[i+1][self.active].flatten())-
+                    (self.path[i+1][self.active].flatten()-self.path[i+0][self.active].flatten()), tau) * tau
+                
+            force = force.reshape((self.natoms,3))
 
             force_norm_max, scaling_factor = self._get_scaling_factor(force)
-            self.path[i+1][self.active] -= scaling_factor * force / force_norm_max 
+            if force_norm_max > 0.0:
+                self.path[i+1][self.active] -= scaling_factor * force[self.active] / force_norm_max 
+            else:
+                if self.verbose:
+                    print(' >>> WARNING: Maximum norm of FENEB force is zero')
 
             confs_fes.append(force_norm_max)
             scaling_factors.append(scaling_factor)
@@ -145,13 +148,18 @@ class FENEB:
                 ])      
                 
                 fspring = self.neb_k * np.dot(
-                    (self.path[i+2][self.active]-self.path[i+1][self.active])-
-                    (self.path[i+1][self.active]-self.path[i+0][self.active]), tau) * tau
+                    (self.path[i+2][self.active].flatten()-self.path[i+1][self.active].flatten())-
+                    (self.path[i+1][self.active].flatten()-self.path[i+0][self.active].flatten()), tau) * tau
+                fspring = fspring.reshape((self.natoms,3))
 
                 conf, spring_scaling = self._get_scaling_factor(fspring)
-
-                tmp_path[i+1][self.active] += spring_scaling * fspring / conf_spring    
                 confs_spring.append(conf)
+
+                if conf > 0.0:
+                    tmp_path[i+1][self.active] += spring_scaling * fspring[self.active] / conf    
+                else:
+                    if self.verbose:
+                        print(' >>> WARNING: Maximum norm of FENEB force is zero')
 
             iter_spring += 1
             conf_spring = np.max(confs_spring)
@@ -184,7 +192,7 @@ class FENEB:
 
     @staticmethod
     def _get_scaling_factor(forces):
-        norm_max = np.max(np.linalg.norm(forces.flatten().reshape((int(len(forces)/3),1,3)), axis=2))
+        norm_max = np.max(np.linalg.norm(forces.reshape((int(len(forces.flatten())/3),1,3)), axis=2))
         if norm_max > 5.0:
             scaling_factor = 0.005 / BOHR_to_ANGSTROM
         elif norm_max > 2.5:
@@ -193,16 +201,16 @@ class FENEB:
             scaling_factor = 0.0001 / BOHR_to_ANGSTROM
         return norm_max, scaling_factor
 
-    def make_path(self, endpoints: List[str], idpp: bool, write_xyz: bool=True) -> List[np.ndarray]:
+    def make_path(self, idpp: bool, write_xyz: bool=True) -> List[np.ndarray]:
         """Build initial path by linear interpolation between endpoints
 
         Args:
             endpoints: list of ase molecules that represent endpoints of path
             idpp: if True, get improved path guess from IDPP method
         """
-        images = [endpoints[0]]
-        images += [endpoints[0].copy() for _ in range(self.nimages)]
-        images += [endpoints[1]]
+        images = [self.initial]
+        images += [self.initial.copy() for _ in range(self.nimages)]
+        images += [self.final]
 
         if len(self.active) != len(images[0].get_positions()):
             if self.verbose:
@@ -222,10 +230,9 @@ class FENEB:
             neb.interpolate(apply_constraint=apply_constraint)
         
         if write_xyz:
-            for i, image in enumerate(images):
-                io.write(f"{i}.xyz", image)
+            self.write_nodes_to_xyz()
 
-        return [image.get_positions() for image in images]
+        return [image.get_positions() / BOHR_to_ANGSTROM for image in images]
 
     def calc_feg(self, startframe: int=0, move_nodes_to_mean: bool=True, dim: int=3) -> np.ndarray:
         """Get free energy gradient for Umbrella Integration
@@ -234,12 +241,12 @@ class FENEB:
             move_nodes_to_mean: set nodes to mean coords of Umbrella
             dim: number of dimensions, set to 2 for 2D test potentials
         """
-        mean_coords = np.zeros_like(self.path.copy())
-        self.feg = np.zeros_like(self.path.copy())
+        mean_coords = np.zeros_like(self.path)
+        self.feg = np.zeros_like(self.path)
         for traj in self.data:
-            mean_coords[traj[0]][0][:dim] = np.mean(traj[1][startframe:], axis=0)
-            self.feg[traj[0]][0][:dim] = - self.fep_k * (
-                mean_coords[traj[0]][0][:dim] - self.path[traj[0]][0][:dim]
+            mean_coords[traj[0]][:,:dim] = np.mean(traj[1][startframe:], axis=0)
+            self.feg[traj[0]][:,:dim] = - self.fep_k * (
+                mean_coords[traj[0]][:,:dim] - self.path[traj[0]][:,:dim]
             )
 
         if move_nodes_to_mean:
@@ -294,6 +301,14 @@ class FENEB:
         self.data.sort(key=lambda x: x[0])
 
         return [xyz for xyz in self.data]
+
+    def write_nodes_to_xyz(self):
+        """ Saves one `.xyz` file for each path node
+        """
+        for i, coords in enumerate(self.path):     
+            self.initial.set_positions(coords * BOHR_to_ANGSTROM)
+            io.write(f"{i}.xyz", self.initial)
+
 
 def confine_md_to_node(
     coords: np.ndarray, 
