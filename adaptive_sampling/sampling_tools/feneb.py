@@ -41,7 +41,7 @@ class FENEB:
         nimages: int=10,
         conf_spring: float=0.1,
         maxiter_spring: int=1000,
-        active: List[int]=None,
+        active: List[int]=[],
         idpp: bool=False,
         load_from_dcd: bool=True,
         top: str=None,
@@ -79,12 +79,12 @@ class FENEB:
         self.optstep = 0
 
         self.initial = io.read(extremes[0]) # always store one ase.Atoms object for io operations
-        if self.active == None:
+        if len(self.active) == 0:
             self.active = [i for i in range(len(self.initial.get_atomic_numbers()))]
         self.natoms = len(self.initial.get_atomic_numbers())
 
         if path == None:
-            self.final   = io.read(extremes[1])
+            self.final = io.read(extremes[1])
             self.path = self.make_path(idpp)
             if write_xyz:
                 self.write_nodes_to_xyz()
@@ -92,8 +92,14 @@ class FENEB:
             self.path = np.load(path)
             self.path = [node for node in self.path]
 
-    def step(self, feg: np.ndarray=None, uncoupled_band_opt: bool=True) -> dict:
-        """NEB optimisation step (Steepest Descent)
+    def step(
+        self, 
+        feg: np.ndarray=None, 
+        active_relaxed: np.ndarray=None,
+        uncoupled_band_opt: bool=True, 
+        newton_raphson: bool=False,
+    ) -> dict:
+        """ NEB optimisation step (Steepest Descent)
 
         Args:
             feg: Cartesian free energy gradient in shape (N_nodes, M_atoms, 3)
@@ -111,35 +117,40 @@ class FENEB:
             ])      
 
             # SD step along free energy gradient
-            feg_i = np.asarray([feg[i+1]]).flatten()             
-            force = feg_i - np.dot(feg_i, tau) * tau
+            feg_i = np.asarray(feg[i+1])[self.active].flatten()             
+            neb_force = feg_i - np.dot(feg_i, tau) * tau
             
             if not uncoupled_band_opt:
-                force -= self.neb_k * np.dot(
-                    (self.path[i+2][self.active].flatten()-self.path[i+1][self.active].flatten())-
-                    (self.path[i+1][self.active].flatten()-self.path[i+0][self.active].flatten()), tau) * tau
-                
-            force = force.reshape((self.natoms,3))
+                neb_force -= self.neb_k * (
+                    np.linalg.norm(self.path[i+2][self.active]-self.path[i+1][self.active])-
+                    np.linalg.norm(self.path[i+1][self.active]-self.path[i+0][self.active])
+                ) * tau
 
+            neb_force = neb_force.reshape((len(self.active),3))            
+            force = np.zeros_like(self.path[i+1])
+            if active_relaxed is not None:
+                force[active_relaxed] = np.asarray(feg[i+1])[active_relaxed]
+            force[self.active] = neb_force
+            
             force_norm_max, scaling_factor = self._get_scaling_factor(force, convert_units=self.convert_units)
             if force_norm_max > 0.0:
-                self.path[i+1][self.active] -= scaling_factor * force[self.active] / force_norm_max 
+                self.path[i+1] -= scaling_factor * force / force_norm_max 
             else:
                 if self.verbose:
-                    print(' >>> WARNING: Maximum norm of FENEB force is zero')
+                    print(' >>> WARNING: Maximum norm of NEB force is zero')
 
             confs_fes.append(force_norm_max)
             scaling_factors.append(scaling_factor)
 
         if uncoupled_band_opt:
-            conf_spring, iter_spring = self.opt_node_spacing()
+            conf_spring, iter_spring = self.opt_node_spacing(newton_raphson=newton_raphson)
         else: 
             conf_spring, iter_spring = 0.0, 0.0
 
         if self.verbose:
             if uncoupled_band_opt:
                 print(
-                    f' >>> FENEB: Iter {self.optstep:3d}:\tMax(Forces) = {np.max(confs_fes):3.6f} (idx: {np.argmax(confs_fes)+1:3d}),\tMax(F_spring) = {np.max(conf_spring):3.6f} (Iters: {iter_spring:3d})'
+                    f' >>> FENEB: Iter {self.optstep:3d}:\tMax(Forces) = {np.max(confs_fes):3.6f} (idx: {np.argmax(confs_fes)+1:3d}),\tMax(F_spring) = {np.max(conf_spring):3.6f} (Iters: {iter_spring:4d})'
                 )
             else:
                 print(
@@ -154,9 +165,13 @@ class FENEB:
         }
         return results
 
-    def opt_node_spacing(self, outfreq: int=100):
-        """ full optimization of spring force """
-
+    def opt_node_spacing(self, outfreq: int=100, newton_raphson=False):
+        """ full optimization of spring force 
+        
+        Args:
+            outfreq: output is writen every outfreq step
+            newton_raphson: use newton_raphson algorithm instead of Steepest Descent (CAUTION: its bugy)
+        """
         conf_spring = 9999
         iter_spring = -1
 
@@ -173,21 +188,29 @@ class FENEB:
                     self.path[i][self.active],
                     self.path[i+1][self.active],
                     self.path[i+2][self.active],
-                ])      
+                ], newton_raphson=newton_raphson)      
                 
-                fspring = self.neb_k * np.dot(
-                    (self.path[i+2][self.active].flatten()-self.path[i+1][self.active].flatten())-
-                    (self.path[i+1][self.active].flatten()-self.path[i+0][self.active].flatten()), tau) * tau
-                fspring = fspring.reshape((self.natoms,3))
+                n_diff1 = np.linalg.norm(self.path[i+2][self.active]-self.path[i+1][self.active])
+                n_diff2 = np.linalg.norm(self.path[i+1][self.active]-self.path[i+0][self.active])
+                fspring = self.neb_k * (n_diff1 - n_diff2) * tau 
 
                 conf, spring_scaling = self._get_scaling_factor(fspring, convert_units=self.convert_units)
                 confs_spring.append(conf)
-
+                
                 if conf > 0.0:
-                    tmp_path[i+1][self.active] += spring_scaling * fspring[self.active] / conf    
+                    if newton_raphson:
+                        v = self.path[i+1][self.active] / n_diff1 + self.path[i+1][self.active] / n_diff2
+                        hessian = self.neb_k * (np.outer(v.flatten(), tau.flatten()))
+                        delta_R = np.matmul(np.linalg.pinv(hessian), fspring.T)
+                    else: 
+                        delta_R = spring_scaling * fspring / conf
+
+                    # move path node i+1
+                    tmp_path[i+1][self.active] += delta_R.reshape((len(self.active),3))
+
                 else:
                     if self.verbose:
-                        print(' >>> WARNING: Maximum norm of FENEB force is zero')
+                        print(' >>> WARNING: Norm of FENEB force is zero')
 
             iter_spring += 1
             conf_spring = np.max(confs_spring)
@@ -210,37 +233,56 @@ class FENEB:
         return conf_spring, iter_spring
 
     @staticmethod
-    def tangent_vector(image):
+    def tangent_vector(image, newton_raphson: bool=False):
         """ tanget vector to path """
+        if newton_raphson:
+            # avoids dependance of hessian on gradient of tau
+            tau = image[2] - image[0]
+            return tau / np.linalg.norm(tau)
+        
         x_prev = image[1] - image[0]
         x_prev /= np.linalg.norm(x_prev)
-
         x_next = image[2] - image[1]
         x_next /= np.linalg.norm(x_next)
-
         tau = x_prev + x_next
         tau /= np.linalg.norm(tau)    
         return tau.flatten()       
 
     @staticmethod
+    def _gradient_tangent(image):
+        """ Gradient of tangent vector (tau) """
+        diff1 = image[2] - image[1]
+        diff2 = image[0] - image[1]
+        n_diff1 = np.linalg.norm(diff1)
+        n_diff2 = np.linalg.norm(diff2)
+        vec1 = diff1 / n_diff1
+        vec2 = diff2 / n_diff2
+        d1 = np.divide(vec1, diff1, out=np.zeros_like(vec1), where=(diff1 != 0))
+        d2 = np.divide(vec2, diff2, out=np.zeros_like(vec2), where=(diff2 != 0))
+        grad = vec1 + vec2 
+        grad *= d1 + d2 - 1. / n_diff1 - 1. / n_diff2
+        grad /= np.linalg.norm(vec1 + vec2)
+        return grad
+
+    @staticmethod
     def _get_scaling_factor(forces, convert_units: bool=True):
         """ Get SD scaling based on heuristic criterion
         """
-        norm_max = np.max(np.linalg.norm(forces.reshape((int(len(forces.flatten())/3),1,3)), axis=2))
-
+        atom_fnorm_max = np.max(np.linalg.norm(forces.reshape((int(len(forces.flatten())/3),1,3)), axis=2))
+        
         if convert_units:
-            conversion = BOHR_to_ANGSTROM
+            unit_conversion = BOHR_to_ANGSTROM
         else: 
-            conversion = 1.0                            
+            unit_conversion = 1.0                            
 
-        if norm_max > 5.0:
-            scaling_factor = 0.005 / conversion
-        elif norm_max > 2.5:
-            scaling_factor = 0.002 / conversion
+        if atom_fnorm_max > 5.0:
+            scaling_factor = 0.005 / unit_conversion
+        elif atom_fnorm_max > 2.5:
+            scaling_factor = 0.002 / unit_conversion
         else:
-            scaling_factor = 0.0001 / conversion
+            scaling_factor = 0.0001 / unit_conversion
 
-        return norm_max, scaling_factor
+        return atom_fnorm_max, scaling_factor
 
     def make_path(self, idpp: bool) -> List[np.ndarray]:
         """Build initial path by linear interpolation between endpoints
@@ -309,32 +351,35 @@ class FENEB:
 
         return self.feg
 
-    def load_data(self, datapath: str, traj_filename: str) -> List[List[Union[int, np.ndarray]]]:
-        """Load data for subsequent FENEB step
+    def load_data(self, datapath: str, traj_filename: str) -> List[List[np.ndarray]]:
+        """Load data for subsequent FENEB step, uses the 'MDTraj' package as 'ASE' cannot read the DCD file format
 
         Assumes the following folder structur: 
-            <datapath/<ImageIDs>/<traj_filename>, where `ImageIDs` can be Integers in range(0, N_nodes)
+            <datapath>/<ImageIDs>/<traj_filename>, where 'ImageIDs' are Integers in range(0, N_images)
 
         Args:
-            datapath: path to data of current optimization step
+            datapath: path to simulation data of current optimization step
             traj_filename: filename of data file
 
         Returns:
-            data: list with [ImageID, xyz data] for all subfolders of `datapath` named `ImageID`
+            data: list of lists with xyz coordinates for trajectories corresponding to path nodes
         """
-
-        try:
-            import mdtraj as md
-        except ImportError as e:
-            print(f"Cannot import MDTraj: {e}")
+        if self.load_from_dcd:
+            try:
+                import mdtraj as md
+            except ImportError as e:
+                print(f"Cannot import MDTraj: {e}")
 
         self.data = []
-        for i in range(10):
+        for i in range(self.nimages):
             path = os.path.join(datapath, f"{i}/{traj_filename}")
             if os.path.isfile(path):
                 if self.load_from_dcd:
-                    # mdtraj loads data in nm!
-                    self.data.append([i, md.load(path, top=self.top).xyz * 10.0 / BOHR_to_ANGSTROM])
+                    # mdtraj stores data in nm!
+                    if self.convert_units:
+                        self.data.append([i, md.load(path, top=self.top).xyz * 10.0 / BOHR_to_ANGSTROM]) # coords in a.u.
+                    else:
+                        self.data.append([i, md.load(path, top=self.top).xyz * 10.0]) # coords in angstrom
                 else:
                     self.data.append([i, np.loadtxt(path)])
                 if self.verbose:
@@ -345,7 +390,6 @@ class FENEB:
     
         # Sort the simulations based on their image ID
         self.data.sort(key=lambda x: x[0])
-
         return [xyz for xyz in self.data]
 
     def write_nodes_to_xyz(self):
