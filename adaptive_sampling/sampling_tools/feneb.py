@@ -41,7 +41,7 @@ class FENEB:
         nimages: int=10,
         conf_spring: float=0.1,
         maxiter_spring: int=1000,
-        active: List[int]=[],
+        active: List[int]=None,
         idpp: bool=False,
         load_from_dcd: bool=True,
         top: str=None,
@@ -79,7 +79,7 @@ class FENEB:
         self.optstep = 0
 
         self.initial = io.read(extremes[0]) # always store one ase.Atoms object for io operations
-        if len(self.active) == 0:
+        if self.active is None:
             self.active = [i for i in range(len(self.initial.get_atomic_numbers()))]
         self.natoms = len(self.initial.get_atomic_numbers())
 
@@ -97,53 +97,62 @@ class FENEB:
         feg: np.ndarray=None, 
         active_relaxed: np.ndarray=None,
         uncoupled_band_opt: bool=True, 
-        newton_raphson: bool=False,
+        frozen_extremes: bool=True,
     ) -> dict:
         """ NEB optimisation step (Steepest Descent)
 
         Args:
             feg: Cartesian free energy gradient in shape (N_nodes, M_atoms, 3)
+            active_relaxed: list of atom indices which are fully optimized
             uncoupled_band_opt: full optimization of spring force
+            frozen_extremes: if False, band extremes are fully optimized
         """
         self.optstep += 1
         confs_fes, scaling_factors = [], []
-        for i, _ in enumerate(self.path[1:-1]):
+        for i, _ in enumerate(self.path):
             
-            # tanget vector to path
-            tau = self.tangent_vector([
-                self.path[i][self.active],
-                self.path[i+1][self.active],
-                self.path[i+2][self.active],
-            ])      
+            neb_force = np.asarray(feg[i])[self.active].flatten()
+            
+            if (0 < i < len(self.path)-1):
+            
+                # tanget vector to path
+                tau = self.tangent_vector([
+                    self.path[i-1][self.active],
+                    self.path[i][self.active],
+                    self.path[i+1][self.active],
+                ])  
 
-            # SD step along free energy gradient
-            feg_i = np.asarray(feg[i+1])[self.active].flatten()             
-            neb_force = feg_i - np.dot(feg_i, tau) * tau
+                # SD step along free energy gradient
+                neb_force = neb_force - np.dot(neb_force, tau) * tau
             
-            if not uncoupled_band_opt:
-                neb_force -= self.neb_k * (
-                    np.linalg.norm(self.path[i+2][self.active]-self.path[i+1][self.active])-
-                    np.linalg.norm(self.path[i+1][self.active]-self.path[i+0][self.active])
-                ) * tau
+                if not uncoupled_band_opt:
+                    neb_force -= self.neb_k * (
+                        np.linalg.norm(self.path[i+1][self.active]-self.path[i][self.active])-
+                        np.linalg.norm(self.path[i][self.active]-self.path[i-1][self.active])
+                    ) * tau
+            
+            elif frozen_extremes:
+                neb_force = np.zeros_like(neb_force)
 
             neb_force = neb_force.reshape((len(self.active),3))            
-            force = np.zeros_like(self.path[i+1])
+            force = np.zeros_like(self.path[i])
             if active_relaxed is not None:
-                force[active_relaxed] = np.asarray(feg[i+1])[active_relaxed]
+                if (0 < i < len(self.path)-1) or not frozen_extremes:
+                    force[active_relaxed] = np.asarray(feg[i])[active_relaxed]
             force[self.active] = neb_force
             
             force_norm_max, scaling_factor = self._get_scaling_factor(force, convert_units=self.convert_units)
             if force_norm_max > 0.0:
-                self.path[i+1] -= scaling_factor * force / force_norm_max 
+                self.path[i] -= scaling_factor * force / force_norm_max 
             else:
-                if self.verbose:
+                if self.verbose and not frozen_extremes:
                     print(' >>> WARNING: Maximum norm of NEB force is zero')
 
             confs_fes.append(force_norm_max)
             scaling_factors.append(scaling_factor)
 
         if uncoupled_band_opt:
-            conf_spring, iter_spring = self.opt_node_spacing(newton_raphson=newton_raphson)
+            conf_spring, iter_spring = self.opt_node_spacing(outfreq=100, newton_raphson=False)
         else: 
             conf_spring, iter_spring = 0.0, 0.0
 
@@ -320,11 +329,11 @@ class FENEB:
         else:
             return [image.get_positions() for image in images]
 
-    def calc_feg(self, startframe: int=0, move_nodes_to_mean: bool=True, dim: int=3) -> np.ndarray:
+    def calc_feg(self, startframe: int=0, move_nodes_to_mean: bool=True, active_relaxed: list=None, dim: int=3) -> np.ndarray:
         """Get free energy gradient for Umbrella Integration
 
         Args:
-            move_nodes_to_mean: set nodes to mean coords of Umbrella
+            move_nodes_to_mean: set nodes to mean coords of Umbrella Window
             dim: number of dimensions, set to 2 for 2D test potentials
         """
         mean_coords = np.zeros_like(self.path)
@@ -342,7 +351,11 @@ class FENEB:
             self.path = [tmp[0]]
             for i, node in enumerate(mean_coords[1:-1]):
                 if node.sum() != 0.0:
-                    self.path.append(node)
+                    if active_relaxed is not None:
+                        self.path.append(tmp[i+1])
+                        self.path[-1][active_relaxed] = node[active_relaxed]
+                    else:
+                        self.path.append(node)
                 else:
                     self.path.append(tmp[i+1])
             self.path.append(tmp[-1])
