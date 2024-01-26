@@ -115,7 +115,7 @@ class PathCV:
             print(f" >>> INFO: Initialization of PathCV with {self.nnodes} nodes finished.")
 
     def calculate_path(self, coords: torch.tensor) -> torch.tensor:
-        """calculate PathCV according to
+        """Calculates arithmetic PathCV according to
         Branduardi, et al., J. Chem. Phys. (2007): https://doi.org/10.1063/1.2432340
 
         Args:
@@ -148,17 +148,18 @@ class PathCV:
             self.grad_z = self.grad_z.detach().numpy()
             
         if self.adaptive:
-            min_idx = self._get_closest_nodes(z, rmsds.tolist())
-            min_coords = []
-            for idx in min_idx:
-                if idx == -1:
-                    min_coords.append(self.boundary_nodes[0])
-                elif idx == self.nnodes:
-                    min_coords.append(self.boundary_nodes[1])
-                else:
-                    min_coords.append(self.path[idx])
-
-            self.update_path(z, q=min_coords)
+            raise NotImplementedError(f" >>> ERROR: Adaptive path updates only implemented for gpath.")
+            #min_idx = self._get_closest_nodes(z, rmsds.tolist())
+            #min_coords = []
+            #for idx in min_idx:
+            #    if idx == -1:
+            #        min_coords.append(self.boundary_nodes[0])
+            #    elif idx == self.nnodes:
+            #        min_coords.append(self.boundary_nodes[1])
+            #    else:
+            #        min_coords.append(self.path[idx])
+            #
+            #self.update_path(z, q=min_coords)
 
         return self.path_cv
 

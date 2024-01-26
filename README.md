@@ -166,4 +166,5 @@ If you use this package in your work please cite:
 
 Other related references:
 *	Dietschreit et al., J. Chem. Phys., 157, 084113 (2022); <https://aip.scitation.org/doi/10.1063/5.0102075>
-*   Hulm et al., J. Chem. Theory. Comput., *in press*; (2023)
+*   Hulm et al., J. Chem. Theory. Comput., 19, 9202-9210 (2023); <https://doi.org/10.1021/acs.jctc.3c00938>
+*   Stan et. al., ACS Cent. Sci., **in press** (2024)
