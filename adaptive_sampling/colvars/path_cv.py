@@ -25,6 +25,7 @@ class PathCV:
             `Kabsch`: Root mean square deviation of optimally fitted coords
             `KMSD`: Mean square deviation of optimally fitted coords
             `distance`: Absolute distance 
+        reduce_path: if Cartesian input path should be tranlated into CV space
         adaptive: if adaptive, path converges to average CV density perpendicular to path
         update_interval: number of steps between updates of adaptive path
         half_life: number of steps til weight of original path is half due to updates
@@ -45,6 +46,7 @@ class PathCV:
         reparam_tol: float=0.01,
         coordinate_system: str="Cartesian",
         metric: str="RMSD",
+        reduce_path: bool=True,
         adaptive: bool=False,
         update_interval: int=100,
         half_life: float=-1, 
@@ -81,8 +83,8 @@ class PathCV:
             ndim=self.ndim,
         )
 
-        # if `.xyz` is given convert coordinate system 
-        if self.guess_path[-3:] == 'xyz':
+        # translates cartesian input path into CV space 
+        if reduce_path:
             self._reduce_path()
         self._interpolate(n_interpolate)
 

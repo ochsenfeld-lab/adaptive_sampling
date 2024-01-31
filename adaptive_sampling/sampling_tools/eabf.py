@@ -373,7 +373,7 @@ class eABF(ABF, EnhancedSampling):
     ):
         """Stabilize extended dynamics in case of discontiouity in Collective Variable
 
-        see: Hulm et al., J. Chem. Theory Comput. (2023), submitted
+        see: Hulm et al., J. Chem. Theory Comput. (2023)
 
         Args:
             xi: current value of the CV

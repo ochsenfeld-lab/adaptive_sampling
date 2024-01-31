@@ -169,7 +169,7 @@ class WTMeABF(eABF, WTM, EnhancedSampling):
         sync_interval: int=50,
         mw_file: str="../shared_bias",
         local_file: str="restart_wtmeabf_local",
-        n_trials: int=10,
+        n_trials: int=100,
     ):
         """syncs eABF bias with other walkers
 

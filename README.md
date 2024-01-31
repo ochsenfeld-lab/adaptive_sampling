@@ -18,6 +18,8 @@ This package implements various sampling algorithms for the calculation of free 
 
 *	Gaussian-accelerated WTM-eABF [10]
 
+*   Free-energy Nudged Elastic Band Method [11]
+
 ## Implemented Collective Variables:
 
 *   Distances, angles and torsion angles as well as linear combinations thereof
@@ -26,7 +28,7 @@ This package implements various sampling algorithms for the calculation of free 
 
 *   Minimized Cartesian RMSD (Kabsch algorithm)
 
-*   Adaptive path collective variables (PCVs) [11, 12]
+*   Adaptive path collective variables (PCVs) [12, 13]
 
 ## Install:
 To install adaptive_sampling type:
@@ -130,7 +132,7 @@ exp_U, frames_per_traj = mbar.build_boltzmann(
 
 weights = mbar.run_mbar(
     exp_U,
-    frames_per_traj 
+    frames_per_traj,
     max_iter=10000,
     conv=1.0e-7,
     conv_errvec=1.0,
@@ -158,13 +160,15 @@ $ pdoc --html adaptive_sampling -o doc/
 8.  Miao et al., J. Chem. Theory Comput. (2015); <https://doi.org/10.1021/acs.jctc.5b00436>
 9.  Zhao et al., J. Phys. Chem. Lett. (2023); <https://doi.org/10.1021/acs.jpclett.2c03688>
 10.  Chen et al., J. Chem. Theory Comput. (2021); <https://doi.org/10.1021/acs.jctc.1c00103>
-11.  Branduardi, et al., J. Chem. Phys. (2007); <https://doi.org/10.1063/1.2432340>
-12.  Leines et al., Phys. Ref. Lett. (2012); <https://doi.org/10.1103/PhysRevLett.109.020601>
+11.  Semelak et al., J. Chem. Theory Comput. (2023); <https://doi.org/10.1021/acs.jctc.3c00366>
+12.  Branduardi, et al., J. Chem. Phys. (2007); <https://doi.org/10.1063/1.2432340>
+13.  Leines et al., Phys. Ref. Lett. (2012); <https://doi.org/10.1103/PhysRevLett.109.020601>
+
 ## This and Related Work:
 If you use this package in your work please cite:
 * 	Hulm et al., J. Chem. Phys., 157, 024110 (2022); <https://doi.org/10.1063/5.0095554>
 
 Other related references:
-*	Dietschreit et al., J. Chem. Phys., 157, 084113 (2022); <https://aip.scitation.org/doi/10.1063/5.0102075>
-*   Hulm et al., J. Chem. Theory. Comput., 19, 9202-9210 (2023); <https://doi.org/10.1021/acs.jctc.3c00938>
-*   Stan et. al., ACS Cent. Sci., **in press** (2024)
+*	Dietschreit et al., J. Chem. Phys., (2022); <https://aip.scitation.org/doi/10.1063/5.0102075>
+*   Hulm et al., J. Chem. Theory. Comput., (2023); <https://doi.org/10.1021/acs.jctc.3c00938>
+*   Stan et. al., ACS Cent. Sci., (2024); <https://doi.org/10.1021/acscentsci.3c01403>
