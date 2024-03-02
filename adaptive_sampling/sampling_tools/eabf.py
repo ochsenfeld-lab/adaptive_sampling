@@ -1,4 +1,4 @@
-import random, os, itertools, time
+import random, os, time
 import numpy as np
 from typing import Union
 from .enhanced_sampling import EnhancedSampling

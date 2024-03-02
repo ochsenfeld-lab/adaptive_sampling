@@ -25,7 +25,7 @@ class PathCV:
             `Kabsch`: Root mean square deviation of optimally fitted coords
             `KMSD`: Mean square deviation of optimally fitted coords
             `distance`: Absolute distance 
-        reduce_path: if Cartesian input path should be tranlated into CV space
+        reduce_path: if Cartesian input path should be translated into CV space
         adaptive: if adaptive, path converges to average CV density perpendicular to path
         update_interval: number of steps between updates of adaptive path
         half_life: number of steps til weight of original path is half due to updates
