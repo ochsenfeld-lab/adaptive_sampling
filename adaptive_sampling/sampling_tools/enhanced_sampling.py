@@ -20,10 +20,10 @@ class EnhancedSampling(ABC):
         equil_temp: equillibrium temperature of MD
         verbose: print verbose information
         kinetice: calculate necessary data to obtain kinetics of reaction
-        f_conf: force constant for confinement of system to the range of interest in CV space
+        f_conf: force constant for confinment of CVs to the range of interest with harmonic walls
         output_freq: frequency in steps for writing outputs
         multiple_walker: share bias with other simulations via buffer file
-        periodic: if True, no harmonic walls are applied at boundary of CV 
+        periodicity: periodicity of CVs, [[lower_boundary0, upper_boundary0], ...] 
     """
 
     def __init__(
@@ -33,10 +33,10 @@ class EnhancedSampling(ABC):
         equil_temp: float = 300.0,
         verbose: bool = True,
         kinetics: bool = False,
-        f_conf: float = 100,
+        f_conf: float = 0.0,
         output_freq: int = 100,
         multiple_walker: bool = False,
-        periodic: bool = False,
+        periodicity: list = None,
         **kwargs,
     ):
 
@@ -46,7 +46,6 @@ class EnhancedSampling(ABC):
         self.equil_temp = equil_temp
         self.verbose = verbose
         self.shared = multiple_walker
-        self.periodic = periodic
 
         # definition of CVs
         self.ncoords = len(cv_def)
@@ -60,6 +59,12 @@ class EnhancedSampling(ABC):
         self.cv_type = ["" for _ in range(self.ncoords)]
         (xi, delta_xi) = self.get_cv(**kwargs)
 
+        # periodic boundary conditions
+        self.periodicity = periodicity if periodicity else [None for i in range(self.ncoords)]
+        for i in range(self.ncoords):
+            if self.cv_type[i] == "angle":
+                self.periodicity[i] = [-np.pi,np.pi]
+                
         # unit conversion
         self.minx, self.maxx, self.dx = self.unit_conversion_cv(
             self.minx, self.maxx, self.dx
@@ -181,16 +186,16 @@ class EnhancedSampling(ABC):
             bias_force: confinement force
         """
         conf_force = np.zeros_like(self.the_md.get_sampling_data().forces.ravel())
-        if self.periodic:
+        if self.f_conf == 0.0:
             return conf_force
-
+        
         for i in range(self.ncoords):
             if xi[i] > (self.maxx[i] - margin[i]):
-                r = diff(self.maxx[i] - margin[i], xi[i], self.cv_type[i])
+                r = diff(self.maxx[i] - margin[i], xi[i], self.periodicity[i])
                 conf_force -= self.f_conf[i] * r * delta_xi[i]
 
             elif xi[i] < (self.minx[i] + margin[i]):
-                r = diff(self.minx[i] + margin[i], xi[i], self.cv_type[i])
+                r = diff(self.minx[i] + margin[i], xi[i], self.periodicity[i])
                 conf_force -= self.f_conf[i] * r * delta_xi[i]
 
         return conf_force

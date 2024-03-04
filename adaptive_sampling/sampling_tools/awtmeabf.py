@@ -140,7 +140,7 @@ class aWTMeABF(WTMeABF, aMD, EnhancedSampling):
                             self.abf_forces[i][bink[1], bink[0]],
                             self.m2_force[i][bink[1], bink[0]],
                             self.ext_k[i]
-                            * diff(self.ext_coords[i], xi[i], self.cv_type[i]),
+                            * diff(self.ext_coords[i], xi[i], self.periodicity[i]),
                         )
                         self.ext_forces -= ramp * self.abf_forces[i][bink[1], bink[0]]
 
@@ -155,7 +155,7 @@ class aWTMeABF(WTMeABF, aMD, EnhancedSampling):
 
             # CZAR
             for i in range(self.ncoords):
-                dx = diff(self.ext_coords[i], self.grid[i][bink[i]], self.cv_type[i])
+                dx = diff(self.ext_coords[i], self.grid[i][bink[i]], self.periodicity[i])
                 self.correction_czar[i][bink[1], bink[0]] += self.ext_k[i] * dx
 
             # aMD

@@ -3,7 +3,7 @@ from typing import Union, Tuple
 
 
 def diff(
-    a: Union[np.ndarray, float], b: Union[np.ndarray, float], cv_type: str
+    a: Union[np.ndarray, float], b: Union[np.ndarray, float], periodicity: list,
 ) -> Union[np.ndarray, float]:
     """get difference of elements of numbers or arrays
     in range(-pi, pi) if cv_type='angle' else range(-inf, inf) 
@@ -11,30 +11,18 @@ def diff(
     Args:
         a: number or array
         b: number or array
+        periodicity: periodic boundary conditions [lower, upper]
 
     Returns:
         diff: element-wise difference (a-b)
     """
-    diff = a - b
-
-    # wrap to range(-pi,pi) for angle
-    if isinstance(diff, np.ndarray) and cv_type == "angle":
-
-        diff[diff > np.pi] -= 2 * np.pi
-        diff[diff < -np.pi] += 2 * np.pi
-
-    elif cv_type == "angle":
-
-        if diff < -np.pi:
-            diff += 2 * np.pi
-        elif diff > np.pi:
-            diff -= 2 * np.pi
-
-    return diff
+    diff_ab = a - b
+    diff_ab = correct_periodicity(diff_ab, periodicity)
+    return diff_ab
 
 
 def sum(
-    a: Union[np.ndarray, float], b: Union[np.ndarray, float], cv_type: str
+    a: Union[np.ndarray, float], b: Union[np.ndarray, float], periodicity: list,
 ) -> Union[np.ndarray, float]:
     """get sum of elements of numbers or arrays
     in range(-pi, pi) if cv_type='angle' else range(-inf, inf) 
@@ -42,26 +30,43 @@ def sum(
     Args:
         a: number or array
         b: number or array
+        periodicity: periodic boundary conditions [lower, upper]
 
     Returns:
         diff: element-wise difference (a-b)
     """
-    sum = a + b
+    sum_ab = a + b
+    sum_ab = correct_periodicity(sum_ab, periodicity)
+    return sum_ab
 
-    # wrap to range(-pi,pi) for angle
-    if isinstance(diff, np.ndarray) and cv_type == "angle":
 
-        sum[sum > np.pi] -= 2 * np.pi
-        sum[sum < -np.pi] += 2 * np.pi
+def correct_periodicity(x: Union[np.ndarray, float], periodicity: list,
+) -> Union[np.ndarray, float]:
+    """ Wrap x to periodic range
 
-    elif cv_type == "angle":
+    Args:
+        x: float or array to correct
+        periodicity: periodic boundary conditions [lower, upper], if None, returns x
+    
+    Returns:
+        x: x in periodic range
+    """
+    if not periodicity:
+        return x
+    
+    if len(periodicity) != 2:
+        raise ValueError('Invalid periodicity')
 
-        if sum < -np.pi:
-            sum += 2 * np.pi
-        elif sum > np.pi:
-            sum -= 2 * np.pi
-
-    return sum
+    period = periodicity[1] - periodicity[0]
+    if isinstance(x, np.ndarray):
+        x[x > periodicity[1]] -= period
+        x[x < periodicity[0]] += period
+    else:
+        if x > periodicity[1]:
+            x -= period
+        elif x < periodicity[0]:
+            x += period
+    return x
 
 
 def welford_var(
@@ -98,30 +103,30 @@ def combine_welford_stats(
     mean_b, 
     M2_b
 ) -> Tuple[float, float, float, float]:
-        """Combines running sample stats of welford's algorithm using Chan et al.'s algorithm.
+    """Combines running sample stats of welford's algorithm using Chan et al.'s algorithm.
         
-        args:
-            count_a, mean_a, M2_a: stats of frist subsample
-            count_a, mean_a, M2_a: stats of second subsample
+    args:
+        count_a, mean_a, M2_a: stats of frist subsample
+        count_a, mean_a, M2_a: stats of second subsample
     
-        returns:
-            mean, M2 and sample variance of combined samples
-        """
-        count = count_a + count_b
-        if count == 0:
-            return 0.0, 0.0, 0.0, 0.0
-        delta = mean_b - mean_a
-        mean = mean_a + delta * count_b / count
-        if count_b == 0:
-            M2 = M2_a           
-        else:
-            M2 = M2_a + M2_b + (delta * delta) * ((count_a / count_b) / count)
-        var = M2 / count if count > 2 else 0.0
-        return count, mean, M2, var
+    returns:
+        mean, M2 and sample variance of combined samples
+    """
+    count = count_a + count_b
+    if count == 0:
+        return 0.0, 0.0, 0.0, 0.0
+    delta = mean_b - mean_a
+    mean = mean_a + delta * count_b / count
+    if count_b == 0:
+        M2 = M2_a           
+    else:
+        M2 = M2_a + M2_b + (delta * delta) * ((count_a / count_b) / count)
+    var = M2 / count if count > 2 else 0.0
+    return count, mean, M2, var
 
 
 def cond_avg(a: np.ndarray, hist: np.ndarray) -> np.ndarray:
-    """get hist conditioned average of a, elements with 0 counts set to 0,
+    """get hist conditioned average of a, elements with 0 counts set to 0
 
     Args:
         a: input array

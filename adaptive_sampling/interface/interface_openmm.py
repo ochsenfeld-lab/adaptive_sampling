@@ -1,4 +1,4 @@
-from ..units import atomic_to_kJmol, BOHR_to_ANGSTROM, kB_in_atomic
+from ..units import atomic_to_kJmol, BOHR_to_ANGSTROM, BOHR_to_NANOMETER, kB_in_atomic
 from openmm import *
 from openmm.app import *
 from openmm import unit
@@ -7,16 +7,27 @@ import numpy as np
 from .sampling_data import SamplingData
 
 class AdaptiveSamplingOpenMM():
+    """Performes biased simulations with OpenMM
+
+    Args:
+        positions: atomic positions from OpenMM
+        topology: molecular topology from OpenMM
+        system: system object from OpenMM
+        dt: MD timestep in fs
+        equil_temp: equilibrium temperature for langevin dynamics
+        langevin_damping: friction factor for langevin dynamics
+        cv_atoms: indices of atoms that are involfed in Collective Variable
+        platform: OpenMM Platform type. 'CPU', 'CUDA' of 'OpenCL'
+    """
     def __init__(
         self, 
         positions: object,
         topology: object,
         system: object,
-        dt: float = 1.0,
+        dt: float = 2.0,
         equil_temp: float=300.0,
         langevin_damping: float=1.0,
-        langevin_timestep: float=2.0,
-        cv_atoms: list=None,
+        cv_atoms: list=[],
         platform: str='CPU',
     ):
         self.topology = topology
@@ -31,13 +42,12 @@ class AdaptiveSamplingOpenMM():
         self.epot = None
         self.temp = None
         self.dt = dt 
-        self.units_coversion_force = atomic_to_kJmol / (10.0 / BOHR_to_ANGSTROM)
 
         # Prepare OpenMM simulation object
         self.integrator = LangevinIntegrator(
             equil_temp * unit.kelvin, 
             langevin_damping / unit.picoseconds, 
-            langevin_timestep * unit.femtosecond,
+            dt * unit.femtosecond,
         )
 
         self.natoms = len(self.coords)
@@ -46,17 +56,17 @@ class AdaptiveSamplingOpenMM():
             self.mass.append(float(system.getParticleMass(i)._value))
         self.mass = np.asarray(self.mass)
 
-        self.cv_atoms = cv_atoms
-        if self.cv_atoms == None:
+        self.cv_atoms = np.sort(cv_atoms)
+        if not len(self.cv_atoms):
             self.cv_atoms = [i for i in range(self.natoms)]
 
         # create bias force on cv_atoms
-        self.bias_force = CustomExternalForce("-fx*x-fy*y-fz*z")
+        self.bias_force = CustomExternalForce("fx*x+fy*y+fz*z")
         self.bias_force.addPerParticleParameter("fx")
         self.bias_force.addPerParticleParameter("fy")
         self.bias_force.addPerParticleParameter("fz")  
         for i in self.cv_atoms:
-            self.bias_force.addParticle(i, [0.0,0.0,0.0])  
+            self.bias_force.addParticle(i, [0.0, 0.0, 0.0])  
         self.system.addForce(self.bias_force)
 
         # create OpenMM simulation object
@@ -72,6 +82,11 @@ class AdaptiveSamplingOpenMM():
         self.simulation.step(0)
         self.get_state()
     
+    def restart(self, checkpoint: str):
+        """ Restart from OpenMM checkpoint file
+        """
+        self.simulation.loadCheckpoint(checkpoint)
+
     def set_sampling_algorithm(self, sampling_algorithm: object):
         """ Set sampling algorithm for MD
         """
@@ -94,11 +109,11 @@ class AdaptiveSamplingOpenMM():
             # update bias force
             bias_force = self.the_bias.step_bias(**kwargs).reshape((self.natoms,3))
             for i, idx in enumerate(self.cv_atoms):
-                bias_force[idx] *= self.units_coversion_force
+                bias_force[idx] *= atomic_to_kJmol / BOHR_to_NANOMETER
                 self.bias_force.setParticleParameters(
                     i, 
                     idx, 
-                    bias_force[idx] * (unit.kilojoule/(unit.nanometer*unit.mole)),
+                    bias_force[idx] * (unit.kilojoules / (unit.nanometer*unit.mole)),
                 )
             self.bias_force.updateParametersInContext(self.simulation.context)
             
@@ -117,8 +132,8 @@ class AdaptiveSamplingOpenMM():
         )
         self.ekin = state.getKineticEnergy()._value / atomic_to_kJmol
         self.epot = state.getPotentialEnergy()._value / atomic_to_kJmol
-        self.coords = np.asarray(state.getPositions()._value).flatten() * 10.0 / BOHR_to_ANGSTROM 
-        self.forces = np.asarray(state.getForces()._value).flatten() / self.units_coversion_force
+        self.coords = np.asarray(state.getPositions()._value).flatten() / BOHR_to_NANOMETER 
+        self.forces = np.asarray(state.getForces()._value).flatten() / atomic_to_kJmol * BOHR_to_ANGSTROM
         self.temp = self._get_temp()
 
     def _get_temp(self):

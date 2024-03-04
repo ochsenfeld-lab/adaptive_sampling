@@ -96,7 +96,7 @@ class WTMeABF(eABF, WTM, EnhancedSampling):
                 )
 
                 # apply bias force on extended variable
-                force_sample[i] = self.ext_k[i] * diff(self.ext_coords[i], xi[i], self.cv_type[i])
+                force_sample[i] = self.ext_k[i] * diff(self.ext_coords[i], xi[i], self.periodicity[i])
                 (
                     self.abf_forces[i][bin_la[1], bin_la[0]],
                     self.m2_force[i][bin_la[1], bin_la[0]],
@@ -118,7 +118,7 @@ class WTMeABF(eABF, WTM, EnhancedSampling):
 
             for i in range(self.ncoords):
                 force_sample[self.ncoords+i] = self.ext_k[i] * diff(
-                    self.ext_coords[i], self.grid[i][bink[i]], self.cv_type[i]
+                    self.ext_coords[i], self.grid[i][bink[i]], self.periodicity[i]
                 )
                 self.correction_czar[i][bink[1], bink[0]] += force_sample[self.ncoords+i]
 

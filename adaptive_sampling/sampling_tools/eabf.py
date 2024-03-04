@@ -1,9 +1,9 @@
-import random, os, time
+import random, os, itertools, time
 import numpy as np
 from typing import Union
 from .enhanced_sampling import EnhancedSampling
 from .abf import ABF
-from .utils import welford_var, combine_welford_stats, diff, cond_avg
+from .utils import diff, correct_periodicity, welford_var, combine_welford_stats, cond_avg
 from ..processing_tools.thermodynamic_integration import integrate
 from ..units import *
 
@@ -125,7 +125,7 @@ class eABF(ABF, EnhancedSampling):
                 )
 
                 # apply bias force on extended system
-                force_sample[i] = self.ext_k[i] * diff(self.ext_coords[i], xi[i], self.cv_type[i])
+                force_sample[i] = self.ext_k[i] * diff(self.ext_coords[i], xi[i], self.periodicity[i])
                 (
                     self.bias[i][bin_la[1], bin_la[0]],
                     self.m2_force[i][bin_la[1], bin_la[0]],
@@ -146,7 +146,7 @@ class eABF(ABF, EnhancedSampling):
 
             for i in range(self.ncoords):
                 force_sample[self.ncoords+i] = self.ext_k[i] * diff(
-                    self.ext_coords[i], self.grid[i][bink[i]], self.cv_type[i]
+                    self.ext_coords[i], self.grid[i][bink[i]], self.periodicity[i]
                 )
                 self.correction_czar[i][bink[1], bink[0]] += force_sample[self.ncoords+i]
 
@@ -383,8 +383,8 @@ class eABF(ABF, EnhancedSampling):
             threshold = self.ext_sigma
 
         if abs(xi-self.traj[-1]) > threshold:
-            diff = self.ext_coords - self.traj[-1]
-            self.ext_coords = xi + diff
+            delta = self.ext_coords - self.traj[-1]
+            self.ext_coords = xi + delta
             if self.verbose:
                 print(" >>> INFO: extended system corrected after discontinuity of CV!")
 
@@ -408,10 +408,9 @@ class eABF(ABF, EnhancedSampling):
 
             self.ext_momenta += np.sqrt(self.ext_mass) * rand_push * self.ext_rand_gauss
             self.ext_momenta -= 0.5e0 * self.the_md.dt * self.ext_forces
-            self.ext_coords += (
-                prefac * self.the_md.dt * self.ext_momenta / self.ext_mass
-            )
-
+            self.ext_coords  += prefac * self.the_md.dt * self.ext_momenta / self.ext_mass
+            for i in range(self.ncoords):
+                self.ext_coords[i] = correct_periodicity(self.ext_coords[i], self.periodicity[i])
         else:
             self.ext_momenta -= 0.5e0 * self.the_md.dt * self.ext_forces
             self.ext_coords += self.the_md.dt * self.ext_momenta / self.ext_mass
@@ -458,19 +457,19 @@ class eABF(ABF, EnhancedSampling):
 
         for i in range(self.ncoords):
             # harmonic coupling of extended coordinate to reaction coordinate
-
-            dxi = diff(self.ext_coords[i], xi[i], self.cv_type[i])
+            dxi = diff(self.ext_coords[i], xi[i], self.periodicity[i])
             self.ext_forces[i] = self.ext_k[i] * dxi
             bias_force -= self.ext_k[i] * dxi * delta_xi[i]
 
             # harmonic walls for confinement to range of interest
-            if self.ext_coords[i] > (self.maxx[i] - margin[i]) and not self.periodic:
-                r = diff(self.maxx[i] - margin[i], self.ext_coords[i], self.cv_type[i])
-                self.ext_forces[i] -= self.f_conf[i] * r
+            if self.f_conf[i] > 0:
+                if self.ext_coords[i] > (self.maxx[i] - margin[i]) and self.periodicity[i]:
+                    r = diff(self.maxx[i] - margin[i], self.ext_coords[i], self.periodicity[i])
+                    self.ext_forces[i] -= self.f_conf[i] * r
 
-            elif self.ext_coords[i] < (self.minx[i] + margin[i]) and not self.periodic:
-                r = diff(self.minx[i] + margin[i], self.ext_coords[i], self.cv_type[i])
-                self.ext_forces[i] -= self.f_conf[i] * r
+                elif self.ext_coords[i] < (self.minx[i] + margin[i]) and self.periodicity[i]:
+                    r = diff(self.minx[i] + margin[i], self.ext_coords[i], self.periodicity[i])
+                    self.ext_forces[i] -= self.f_conf[i] * r
 
         return bias_force
 

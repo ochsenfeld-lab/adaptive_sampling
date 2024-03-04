@@ -279,7 +279,7 @@ class WTM(EnhancedSampling):
                     else:
                         w = self.hill_height
 
-                    dx = diff(self.grid[0], xi[0], self.cv_type[0])
+                    dx = diff(self.grid[0], xi[0], self.periodicity[0])
                     epot = w * np.exp(-(dx * dx) / (2.0 * self.hill_var[0]))
                     self.metapot[0] += epot
                     self.bias[0][0] -= epot * dx / self.hill_var[0]
@@ -315,7 +315,7 @@ class WTM(EnhancedSampling):
 
         if self.ncoords == 1:
 
-            dx = diff(xi[0], np.asarray(self.center), self.cv_type[0])
+            dx = diff(xi[0], np.asarray(self.center), self.periodicity[0])
             ind = np.ma.indices((len(self.center),))[0]
             ind = np.ma.masked_array(ind)
             ind[abs(dx) > 3 * self.hill_std[0]] = np.ma.masked
@@ -357,17 +357,17 @@ class WTM(EnhancedSampling):
             dx_list = []
             w_list = []
 
-            if diff(self.maxx[0], chi1[0], self.cv_type[0]) <= xi[0] <= self.maxx[0]:
-                center_out = self.maxx[0] + diff(self.maxx[0], xi[0], self.cv_type[0])
-                dx_list.append(diff(self.grid[0], center_out, self.cv_type[0]))
+            if diff(self.maxx[0], chi1[0], self.periodicity[0]) <= xi[0] <= self.maxx[0]:
+                center_out = self.maxx[0] + diff(self.maxx[0], xi[0], self.periodicity[0])
+                dx_list.append(diff(self.grid[0], center_out, self.periodicity[0]))
                 w_list.append(w)
             else:
                 # TODO: scale height of hills to ensure flat potential at boundary
                 pass
 
-            if self.minx[0] <= xi[0] <= sum(self.minx[0], chi1[0], self.cv_type[0]):
-                center_out = self.minx[0] - diff(xi[0], self.minx[0], self.cv_type[0])
-                dx_list.append(diff(self.grid[0], center_out, self.cv_type[0]))
+            if self.minx[0] <= xi[0] <= sum(self.minx[0], chi1[0], self.periodicity[0]):
+                center_out = self.minx[0] - diff(xi[0], self.minx[0], self.periodicity[0])
+                dx_list.append(diff(self.grid[0], center_out, self.periodicity[0]))
                 w_list.append(w)
             else:
                 # TODO: scale height of hills to ensure flat potential at boundary
@@ -393,9 +393,9 @@ class WTM(EnhancedSampling):
         chi1 = 3.0 * self.hill_std
 
         if self.ncoords == 1:
-            if diff(self.maxx[0], chi1[0], self.cv_type[0]) <= center <= self.maxx[0]:
-                center_out = self.maxx[0] + diff(self.maxx[0], center, self.cv_type[0])
-                val = diff(xi[0], center_out, self.cv_type[0])
+            if diff(self.maxx[0], chi1[0], self.periodicity[0]) <= center <= self.maxx[0]:
+                center_out = self.maxx[0] + diff(self.maxx[0], center, self.periodicity[0])
+                val = diff(xi[0], center_out, self.periodicity[0])
                 epot = w * np.exp(-(val * val) / (2.0 * self.hill_var[0]))
                 local_pot += epot
                 bias_force[0] -= epot * val / self.hill_var[0]
@@ -403,9 +403,9 @@ class WTM(EnhancedSampling):
                 # TODO: scale height of hills to ensure flat potential at boundary
                 pass
 
-            if self.minx[0] <= center <= sum(self.minx[0], chi1[0], self.cv_type[0]):
-                center_out = self.minx[0] - diff(center, self.minx[0], self.cv_type[0])
-                val = diff(xi[0], center_out, self.cv_type[0])
+            if self.minx[0] <= center <= sum(self.minx[0], chi1[0], self.periodicity[0]):
+                center_out = self.minx[0] - diff(center, self.minx[0], self.periodicity[0])
+                val = diff(xi[0], center_out, self.periodicity[0])
                 epot = w * np.exp(-(val * val) / (2.0 * self.hill_var[0]))
                 local_pot += epot
                 bias_force[0] -= epot * val / self.hill_var[0]
@@ -493,7 +493,7 @@ class WTM(EnhancedSampling):
                 else:
                     w = self.hill_height
 
-                dx = diff(self.grid[0], xi[0], self.cv_type[0])
+                dx = diff(self.grid[0], xi[0], self.periodicity[0])
                 epot = w * np.exp(-(dx * dx) / (2.0 * self.hill_var[0]))
                 self.metapot[0] += epot
                 self.bias[0][0] -= epot * dx / self.hill_var[0]
