@@ -149,7 +149,7 @@ def build_boltzmann(
     # adding an extra axis to 1D sims, for compatibility with x-D eABF
     add_axis = True if periodicity and not hasattr(lower_bound, "__len__") else False
     if add_axis:
-        all_frames = all_frames[:, np.newaxis]
+        #all_frames = all_frames[:, np.newaxis]
         if periodicity:
             if type(lower_bound) == float:
                 lower_bound = np.array([lower_bound])

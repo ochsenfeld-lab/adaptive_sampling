@@ -364,13 +364,12 @@ def get_internal_coordinate(
         q34 = z[cv[1][3]] - z[cv[1][2]]
 
         q23_u = q23 / torch.linalg.norm(q23)
-
         n1 = -q12 - torch.dot(-q12, q23_u) * q23_u
         n2 = q34 - torch.dot(q34, q23_u) * q23_u
-
+        
         xi = torch.atan2(
             torch.dot(torch.cross(q23_u, n1), n2), torch.dot(n1, n2)
-        ) 
+        )
 
     elif cv[0].lower() == "min_distance":
         # returns minimum distance of list of distances

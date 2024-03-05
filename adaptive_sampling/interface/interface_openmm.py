@@ -1,17 +1,16 @@
 from ..units import atomic_to_kJmol, BOHR_to_ANGSTROM, BOHR_to_NANOMETER, kB_in_atomic
-from openmm import *
-from openmm.app import *
+import openmm 
 from openmm import unit
 import numpy as np
 
 from .sampling_data import SamplingData
 
 class AdaptiveSamplingOpenMM():
-    """Performes biased simulations with OpenMM
+    """ Perform enhanced sampling with OpenMM
 
     Args:
-        positions: atomic positions from OpenMM
-        topology: molecular topology from OpenMM
+        positions: atomic positions from OpenMM (given as `Quantity` object)
+        topology: molecular topology object from OpenMM
         system: system object from OpenMM
         dt: MD timestep in fs
         equil_temp: equilibrium temperature for langevin dynamics
@@ -27,28 +26,21 @@ class AdaptiveSamplingOpenMM():
         dt: float = 2.0,
         equil_temp: float=300.0,
         langevin_damping: float=1.0,
-        cv_atoms: list=[],
+        cv_atoms: list=None,
         platform: str='CPU',
     ):
-        self.topology = topology
-        self.system = system
+        self.topology = topology # OpenMM topology object
+        self.system = system     # OpenMM system object
 
         # MD stuff
-        self.equil_temp = equil_temp
-        self.step = 0
         self.coords = np.asarray(positions._value)
         self.forces = np.zeros_like(self.coords)
-        self.ekin = None
-        self.epot = None
-        self.temp = None
-        self.dt = dt 
-
-        # Prepare OpenMM simulation object
-        self.integrator = LangevinIntegrator(
-            equil_temp * unit.kelvin, 
-            langevin_damping / unit.picoseconds, 
-            dt * unit.femtosecond,
-        )
+        self.equil_temp = equil_temp
+        self.ekin = None        # kinetic energy
+        self.epot = None        # potential energy
+        self.temp = None        # temperature
+        self.dt   = dt          # timestep
+        self.step = 0           # current md step
 
         self.natoms = len(self.coords)
         self.mass = []
@@ -57,11 +49,18 @@ class AdaptiveSamplingOpenMM():
         self.mass = np.asarray(self.mass)
 
         self.cv_atoms = np.sort(cv_atoms)
-        if not len(self.cv_atoms):
+        if not self.cv_atoms:
             self.cv_atoms = [i for i in range(self.natoms)]
 
-        # create bias force on cv_atoms
-        self.bias_force = CustomExternalForce("fx*x+fy*y+fz*z")
+        # Setup OpenMM Integrator object
+        self.integrator = openmm.LangevinIntegrator(
+            equil_temp * unit.kelvin, 
+            langevin_damping / unit.picoseconds, 
+            dt * unit.femtosecond,
+        )
+
+        # Create bias force on cv_atoms
+        self.bias_force = openmm.CustomExternalForce("fx*x+fy*y+fz*z")
         self.bias_force.addPerParticleParameter("fx")
         self.bias_force.addPerParticleParameter("fy")
         self.bias_force.addPerParticleParameter("fz")  
@@ -70,8 +69,8 @@ class AdaptiveSamplingOpenMM():
         self.system.addForce(self.bias_force)
 
         # create OpenMM simulation object
-        self.platform = Platform.getPlatformByName(platform)
-        self.simulation = Simulation(
+        self.platform = openmm.Platform.getPlatformByName(platform)
+        self.simulation = openmm.app.simulation.Simulation(
             self.topology, 
             self.system, 
             self.integrator, 
@@ -89,6 +88,9 @@ class AdaptiveSamplingOpenMM():
 
     def set_sampling_algorithm(self, sampling_algorithm: object):
         """ Set sampling algorithm for MD
+
+        Args:
+            sampling_algorithm: sampling algorithm from `adaptive_sampling.sampling_tools`
         """
         self.the_bias = sampling_algorithm
     
@@ -104,20 +106,24 @@ class AdaptiveSamplingOpenMM():
             nsteps: number of MD steps
             update_bias_freq: frequency of updates of bias force
         """
-        for i in range(nsteps):
-            
+        for i in range(int(nsteps/update_bias_freq)):
+
             # update bias force
-            bias_force = self.the_bias.step_bias(**kwargs).reshape((self.natoms,3))
-            for i, idx in enumerate(self.cv_atoms):
-                bias_force[idx] *= atomic_to_kJmol / BOHR_to_NANOMETER
-                self.bias_force.setParticleParameters(
-                    i, 
-                    idx, 
-                    bias_force[idx] * (unit.kilojoules / (unit.nanometer*unit.mole)),
-                )
-            self.bias_force.updateParametersInContext(self.simulation.context)
-            
-            # run MD
+            if hasattr(self, 'the_bias'):
+                bias_force = self.the_bias.step_bias(**kwargs).reshape((self.natoms,3))
+                for i, idx in enumerate(self.cv_atoms):
+                    bias_force[idx] *= atomic_to_kJmol / BOHR_to_NANOMETER
+                    self.bias_force.setParticleParameters(
+                        i, 
+                        idx, 
+                        bias_force[idx] * (unit.kilojoules / (unit.nanometer*unit.mole)),
+                    )
+                self.bias_force.updateParametersInContext(self.simulation.context)
+            else:
+                import logging
+                logging.warning(' >>> AdaptiveSamplingOpenMM: No sampling algorithm specified!')
+
+            # run MD for update_bias_freq steps
             self.simulation.step(update_bias_freq)
             self.step += update_bias_freq
             self.get_state()
