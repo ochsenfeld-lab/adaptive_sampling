@@ -26,7 +26,7 @@ class AdaptiveSamplingOpenMM():
         dt: float = 2.0,
         equil_temp: float=300.0,
         langevin_damping: float=1.0,
-        cv_atoms: list=None,
+        cv_atoms: list=[],
         platform: str='CPU',
     ):
         self.topology = topology # OpenMM topology object
@@ -48,8 +48,10 @@ class AdaptiveSamplingOpenMM():
             self.mass.append(float(system.getParticleMass(i)._value))
         self.mass = np.asarray(self.mass)
 
-        self.cv_atoms = np.sort(cv_atoms)
-        if not self.cv_atoms:
+        # list of atoms that participate in CV
+        if len(cv_atoms):
+            self.cv_atoms = np.sort(cv_atoms)
+        else:
             self.cv_atoms = [i for i in range(self.natoms)]
 
         # Setup OpenMM Integrator object
