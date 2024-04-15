@@ -2,7 +2,7 @@ Adaptive Sampling
 =================
 
 This package implements various sampling algorithms for the calculation of free energy profiles of molecular transitions. 
-
+Ich schrieb was rein
 ## Available Sampling Methods Include:
 *	Adaptive Biasing Force (ABF) method [1] 
 	
