@@ -5,7 +5,6 @@ from typing import Tuple
 from abc import ABC, abstractmethod
 
 from ..interface.sampling_data import MDInterface
-from ..colvars.colvars import CV
 from .utils import diff
 from ..units import *
 
@@ -39,6 +38,7 @@ class EnhancedSampling(ABC):
         periodicity: list = None,
         **kwargs,
     ):
+        from ..colvars import CV
 
         self.the_md = md
         self.the_cv = CV(self.the_md, requires_grad=True)
@@ -60,16 +60,13 @@ class EnhancedSampling(ABC):
         (xi, delta_xi) = self.get_cv(**kwargs)
 
         # periodic boundary conditions
-        self.periodicity = periodicity if periodicity else [None for i in range(self.ncoords)]
-        for i in range(self.ncoords):
-            if self.cv_type[i] == "angle":
-                self.periodicity[i] = [-np.pi,np.pi]
-                
+        self.periodicity = periodicity if periodicity else [None for _ in range(self.ncoords)]
+
         # unit conversion
         self.minx, self.maxx, self.dx = self.unit_conversion_cv(
             self.minx, self.maxx, self.dx
         )
-        self.f_conf = self.unit_conversion_force(self.f_conf)
+        self.f_conf, = self.unit_conversion_force(self.f_conf)
 
         # store trajectories of CVs and temperature and epot between outputs
         md_state = self.the_md.get_sampling_data()
@@ -229,9 +226,9 @@ class EnhancedSampling(ABC):
         """
         for i in range(self.ncoords):
             for arg in args:
-                if self.the_cv.type == "angle":
+                if self.cv_type[i] == "angle":
                     arg[i] /= DEGREES_per_RADIAN
-                elif self.the_cv.type == "distance":
+                elif self.cv_type[i] == "distance":
                     arg[i] /= BOHR_to_ANGSTROM
         return args
 

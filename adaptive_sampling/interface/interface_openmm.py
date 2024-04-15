@@ -27,20 +27,25 @@ class AdaptiveSamplingOpenMM():
         equil_temp: float=300.0,
         langevin_damping: float=1.0,
         cv_atoms: list=[],
+        calc_energy: bool=True,
         platform: str='CPU',
     ):
         self.topology = topology # OpenMM topology object
         self.system = system     # OpenMM system object
 
         # MD stuff
+        self.calcEnergy = calc_energy # if OpenMM should return the Energy, this may slow down the simulation
         self.coords = np.asarray(positions._value)
         self.forces = np.zeros_like(self.coords)
-        self.equil_temp = equil_temp
         self.ekin = None        # kinetic energy
         self.epot = None        # potential energy
         self.temp = None        # temperature
-        self.dt   = dt          # timestep
         self.step = 0           # current md step
+
+        self.equil_temp       = equil_temp if hasattr(equil_temp, 'unit') else equil_temp * unit.kelvin
+        self.langevin_damping = langevin_damping if hasattr(langevin_damping, 'unit') else langevin_damping / unit.picosecond 
+        self.dt               = dt if not hasattr(dt, 'unit') else dt._value          # dt without unit for sampling algorithms
+        dt_with_unit          = dt if hasattr(dt, 'unit') else dt * unit.femtosecond  # dt with unit for openmm integrator
 
         self.natoms = len(self.coords)
         self.mass = []
@@ -56,9 +61,9 @@ class AdaptiveSamplingOpenMM():
 
         # Setup OpenMM Integrator object
         self.integrator = openmm.LangevinIntegrator(
-            equil_temp * unit.kelvin, 
-            langevin_damping / unit.picoseconds, 
-            dt * unit.femtosecond,
+            self.equil_temp, 
+            self.langevin_damping, 
+            dt_with_unit,
         )
 
         # Create bias force on cv_atoms
@@ -127,7 +132,7 @@ class AdaptiveSamplingOpenMM():
 
             # run MD for update_bias_freq steps
             self.simulation.step(update_bias_freq)
-            self.step += update_bias_freq
+            self.step += 1 #update_bias_freq
             self.get_state()
     
     def get_state(self):
@@ -136,18 +141,23 @@ class AdaptiveSamplingOpenMM():
         state = self.simulation.context.getState(
             getPositions=True,
             getForces=True,
-            getEnergy=True,
+            getEnergy=self.calcEnergy,
         )
-        self.ekin = state.getKineticEnergy()._value / atomic_to_kJmol
-        self.epot = state.getPotentialEnergy()._value / atomic_to_kJmol
+        if self.calcEnergy:
+            self.ekin = state.getKineticEnergy()._value / atomic_to_kJmol
+            self.epot = state.getPotentialEnergy()._value / atomic_to_kJmol
+            self.temp = self._get_temperature()
+        else:
+            self.ekin = 0.0
+            self.epot = 0.0
+            self.temp = 0.0
         self.coords = np.asarray(state.getPositions()._value).flatten() / BOHR_to_NANOMETER 
         self.forces = np.asarray(state.getForces()._value).flatten() / atomic_to_kJmol * BOHR_to_ANGSTROM
-        self.temp = self._get_temp()
 
-    def _get_temp(self):
+    def _get_temperature(self) -> float:
         return self.ekin*2.e0/(3.e0*self.natoms*kB_in_atomic)
     
-    def get_sampling_data(self):
+    def get_sampling_data(self) -> object:
         """interface to adaptive_sampling"""
         return SamplingData(
             self.mass,

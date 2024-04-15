@@ -93,6 +93,7 @@ class FENEB:
         active_relaxed: list=None,
         uncoupled_band_opt: bool=True, 
         frozen_extremes: bool=True,
+        potential_energy: list=None,
     ) -> dict:
         """ NEB optimisation step (Steepest Descent)
 
@@ -101,6 +102,7 @@ class FENEB:
             active_relaxed: list of surrounding atom indices where full optimization is performed
             uncoupled_band_opt: full optimization of spring force
             frozen_extremes: if False, band extremes are fully optimized
+            potential_energy: list of potential energies of images for improved tangent estimate
         """
         self.optstep += 1
         confs_fes, scaling_factors = [], []
@@ -109,13 +111,24 @@ class FENEB:
             feg_i = np.asarray(feg[i])[self.active].flatten()
             
             if (0 < i < len(self.path)-1):
-            
+                
                 # tanget vector to path
-                tau = self.tangent_vector([
-                    self.path[i-1][self.active],
-                    self.path[i][self.active],
-                    self.path[i+1][self.active],
-                ])  
+                if potential_energy is not None:
+                    tau = self.tangent_vector_improved([
+                        self.path[i-1][self.active],
+                        self.path[i][self.active],
+                        self.path[i+1][self.active],
+                    ], [
+                        potential_energy[i-1] if i>1 else None, 
+                        potential_energy[i],
+                        potential_energy[i+1] if i<(len(self.path)-2) else None,
+                    ])  
+                else:
+                    tau = self.tangent_vector([
+                        self.path[i-1][self.active],
+                        self.path[i][self.active],
+                        self.path[i+1][self.active],
+                    ])
 
                 # free energy gradient orthogonal to path
                 neb_force = feg_i - np.dot(feg_i, tau) * tau
@@ -149,12 +162,24 @@ class FENEB:
             scaling_factors.append(scaling_factor)
 
         if uncoupled_band_opt:
-            conf_spring, iter_spring = self.opt_node_spacing(outfreq=100, newton_raphson=False)
+            conf_spring, iter_spring = self.opt_node_spacing(outfreq=100, potential_energy=potential_energy)
         else: 
             conf_spring, iter_spring = 0.0, 0.0
 
         if self.verbose:
-            if uncoupled_band_opt:
+            if potential_energy is not None and uncoupled_band_opt:
+                DeltaE = potential_energy.max() - potential_energy.min()
+                DeltaE *= atomic_to_kJmol
+                print(
+                    f' >>> FENEB: Iter {self.optstep:3d}:\tBarrier = {DeltaE:3.6f},\tMax(Forces) = {np.max(confs_fes):3.6f} (idx: {np.argmax(confs_fes)+1:3d}),\tMax(F_spring) = {np.max(conf_spring):3.6f} (Iters: {iter_spring:4d})'
+                )
+            elif potential_energy is not None:
+                DeltaE = potential_energy.max() - potential_energy.min()
+                DeltaE *= atomic_to_kJmol
+                print(
+                    f' >>> FENEB: Iter {self.optstep:3d}:\tBarrier = {DeltaE:3.6f},\tMax(Forces) = {np.max(confs_fes):3.6f} (idx: {np.argmax(confs_fes)+1:3d})'
+                )
+            elif uncoupled_band_opt:
                 print(
                     f' >>> FENEB: Iter {self.optstep:3d}:\tMax(Forces) = {np.max(confs_fes):3.6f} (idx: {np.argmax(confs_fes)+1:3d}),\tMax(F_spring) = {np.max(conf_spring):3.6f} (Iters: {iter_spring:4d})'
                 )
@@ -171,12 +196,12 @@ class FENEB:
         }
         return results
 
-    def opt_node_spacing(self, outfreq: int=100, newton_raphson=False):
+    def opt_node_spacing(self, outfreq: int=100, potential_energy: list=None):
         """ full optimization of spring force 
         
         Args:
             outfreq: output is writen every outfreq step
-            newton_raphson: use newton_raphson algorithm instead of Steepest Descent (CAUTION: its bugy)
+            potential_energy: list of potential energies of images for improved tangent estimate
         """
         conf_spring = 9999
         iter_spring = -1
@@ -190,26 +215,32 @@ class FENEB:
             confs_spring = []
             for i, _ in enumerate(self.path[1:-1]):
                 
-                tau = self.tangent_vector([
-                    self.path[i][self.active],
-                    self.path[i+1][self.active],
-                    self.path[i+2][self.active],
-                ], newton_raphson=newton_raphson)      
+                if potential_energy is not None:
+                    tau = self.tangent_vector_improved([
+                        self.path[i][self.active],
+                        self.path[i+1][self.active],
+                        self.path[i+2][self.active],
+                    ], [
+                        potential_energy[i],
+                        potential_energy[i+1],
+                        potential_energy[i+2],
+                    ])                 
+                else:
+                    tau = self.tangent_vector([
+                        self.path[i][self.active],
+                        self.path[i+1][self.active],
+                        self.path[i+2][self.active],
+                    ])      
                 
                 n_diff1 = np.linalg.norm(self.path[i+2][self.active]-self.path[i+1][self.active])
                 n_diff2 = np.linalg.norm(self.path[i+1][self.active]-self.path[i+0][self.active])
                 fspring = self.neb_k * (n_diff1 - n_diff2) * tau 
-
+                
                 conf, spring_scaling = self._get_scaling_factor(fspring, convert_units=self.convert_units)
                 confs_spring.append(conf)
                 
                 if conf > 0.0:
-                    if newton_raphson:
-                        v = self.path[i+1][self.active] / n_diff1 + self.path[i+1][self.active] / n_diff2
-                        hessian = self.neb_k * (np.outer(v.flatten(), tau.flatten()))
-                        delta_R = np.matmul(np.linalg.pinv(hessian), fspring.T)
-                    else: 
-                        delta_R = spring_scaling * fspring / conf
+                    delta_R = spring_scaling * fspring / conf
 
                     # move path node i+1
                     tmp_path[i+1][self.active] += delta_R.reshape((len(self.active),3))
@@ -239,13 +270,8 @@ class FENEB:
         return conf_spring, iter_spring
 
     @staticmethod
-    def tangent_vector(image, newton_raphson: bool=False):
+    def tangent_vector(image: list) -> np.ndarray:
         """ tanget vector to path """
-        if newton_raphson:
-            # avoids dependance of hessian on gradient of tau
-            tau = image[2] - image[0]
-            return tau / np.linalg.norm(tau)
-        
         x_prev = image[1] - image[0]
         x_prev /= np.linalg.norm(x_prev)
         x_next = image[2] - image[1]
@@ -254,6 +280,44 @@ class FENEB:
         tau /= np.linalg.norm(tau)    
         return tau.flatten()       
 
+    @staticmethod
+    def tangent_vector_improved(image: list, potentials: list) -> np.ndarray:
+        """ improved tangent estimate 
+        
+        See: Henkelmann, et al. JCP (2000): <https://doi.org/10.1063/1.1323224>
+        """
+        tau_plus  = image[2]-image[1]
+        tau_minus = image[1]-image[0]
+
+        if potentials[0] == None:
+            tau = tau_plus
+        elif potentials[2] == None:
+            tau = tau_minus
+        elif potentials[2] > potentials[1] > potentials[0]:
+            tau = tau_plus
+        elif potentials[2] < potentials[1] < potentials[0]:
+            tau = tau_minus
+        elif (potentials[2] > potentials[1] < potentials[0]) or (
+              potentials[2] < potentials[1] > potentials[0]):
+            DeltaV_max = np.max([
+                np.abs(potentials[2]-potentials[1]),
+                np.abs(potentials[0]-potentials[1]),
+            ])
+            DeltaV_min = np.min([
+                np.abs(potentials[2]-potentials[1]),
+                np.abs(potentials[0]-potentials[1]),
+            ]) 
+            if potentials[2] > potentials[0]:
+                tau = tau_plus*DeltaV_max + tau_minus*DeltaV_min
+            else:
+                tau = tau_plus*DeltaV_min + tau_minus*DeltaV_max
+        else:
+            # defaults to normal tangent estimate
+            return FENEB.tangent_vector(image)
+        
+        tau /= np.linalg.norm(tau)
+        return tau.flatten()
+        
     @staticmethod
     def _gradient_tangent(image):
         """ Gradient of tangent vector (tau) """
@@ -418,7 +482,7 @@ def confine_md_to_node(
     reference_coords: np.ndarray, 
     k: float,
     convert_units: bool=True,
-) -> (float, np.ndarray):
+) -> tuple[float, np.ndarray]:
     """Harmonic confinement of `coords` to `reference_coords`
 
     Args:

@@ -16,7 +16,7 @@ class WTM(EnhancedSampling):
 
     Args:
         hill_height: height of Gaussian hills in kJ/mol
-        hill_std: standard deviation of Gaussian hills in units of the CV (can be Bohr, Degree, or None)
+        hill_std: standard deviation of Gaussian hills in units of the CVs (can be Bohr, Degree, or None)
         hill_drop_freq: frequency of hill creation in steps
         well_tempered_temp: effective temperature for WTM, if None, hills are not scaled down (normal metadynamics)
         force_from_grid: forces are accumulated on grid for performance (recommended),

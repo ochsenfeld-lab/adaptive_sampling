@@ -136,34 +136,34 @@ def build_boltzmann(
         exp_U: num_trajs**num_frames array of Boltzmann factors
         frames_per_traj: Number of frames per trajectory
     """
+    from ..sampling_tools.utils import correct_periodicity
+
     RT = R_in_SI * equil_temp / 1000.0
     beta = 1.0 / RT
-    
-    if periodicity:
-        lower_bound = periodicity[0]
-        upper_bound = periodicity[1]
-        period = upper_bound - lower_bound
 
     all_frames, num_frames, frames_per_traj = join_frames(traj_list)
 
     # adding an extra axis to 1D sims, for compatibility with x-D eABF
-    add_axis = True if periodicity and not hasattr(lower_bound, "__len__") else False
-    if add_axis:
-        #all_frames = all_frames[:, np.newaxis]
-        if periodicity:
-            if type(lower_bound) == float:
-                lower_bound = np.array([lower_bound])
-                upper_bound = np.array([upper_bound])
-                period = np.array([period])
+    if len(all_frames.shape) == 1:
+        all_frames = all_frames[:, np.newaxis]
+    
+    # Reshape periodicity to list with len(ndims) 
+    ndims = len(all_frames[0])
+    if not periodicity:
+        periodicity = [None for _ in range(ndims)]
+    elif not hasattr(periodicity[0], "__len__"):
+        periodicity = [periodicity]
 
+    # additional bias potentials
     if dU_list is not None:
         all_dU, dU_num, dU_per_traj = join_frames(dU_list)
         all_dU *= atomic_to_kJmol  # kJ/mol
         if (dU_num != num_frames) or (frames_per_traj != dU_per_traj).all():
-            raise ValueError(" >>> Error: Frames of external potential have to match eABF frames!")
-        if add_axis:
+            raise ValueError(" >>> Error: Frames of external potential have to match CV frames!")
+        if len(all_dU.shape) == 1:
             all_dU = all_dU[:, np.newaxis]
 
+    # additional constraints
     if constraints:
         for const_dict in constraints:
             const_frames, _ , _ = join_frames(const_dict['traj_list'])
@@ -178,19 +178,17 @@ def build_boltzmann(
                 const_energy += 0.5 * const_dict['k'] * np.power(diffs, 2)
             else:
                 const_energy = 0.5 * const_dict['k'] * np.power(diffs, 2)
-            
-    exp_U = []
 
+    # build boltzmann factors  
     if progress_bar:
         from tqdm import tqdm
         meta_f = tqdm(meta_f)
 
+    exp_U = []
     for line in meta_f:
         diffs = np.asarray(all_frames - line[1])
-        if periodicity:
-            for ii in range(diffs.shape[1]):
-                diffs[diffs[:,ii] > upper_bound[ii], ii] -= period[ii]
-                diffs[diffs[:,ii] < lower_bound[ii], ii] += period[ii]
+        for ii, bounds in enumerate(periodicity):
+            diffs[:,ii] = correct_periodicity(diffs[:,ii], bounds)
 
         exp_U.append(
             np.exp(
@@ -205,7 +203,7 @@ def build_boltzmann(
         if constraints:
             exp_U[-1] *= np.exp(-beta * const_energy, dtype=np.float64)
 
-    exp_U = np.asarray(exp_U, dtype=np.float64)   # this is a num_trajs x num_frames list
+    exp_U = np.asarray(exp_U, dtype=np.float64) # this is a num_trajs x num_frames list
     return exp_U, frames_per_traj
 
 
@@ -258,7 +256,7 @@ def get_windows(
     meta_f = np.zeros(shape=(3, *centers.shape))
     meta_f[1] = centers
     meta_f[2] = k
-
+    
     meta_f = meta_f.transpose((1,0,2))
 
     return traj_list, index_list.astype(np.int32), meta_f
@@ -295,13 +293,12 @@ def pmf_from_weights(
     if len(grid.shape) == 1:
         cv = cv[:, np.newaxis]
         grid = grid[:, np.newaxis]
-
+    
     rho = np.zeros(shape=(len(grid),), dtype=float)
     for ii, center in enumerate(grid):
         indices = np.where(np.logical_and((cv >= center - dx2).all(axis=-1),
                               (cv < center + dx2).all(axis=-1)))
         rho[ii] = weights[indices].sum()
-
 
     rho /= rho.sum() * np.prod(dx)
     pmf = -RT * np.log(rho, out=np.full_like(rho, np.NaN), where=(rho != 0))

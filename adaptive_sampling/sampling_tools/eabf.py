@@ -44,8 +44,8 @@ class eABF(ABF, EnhancedSampling):
     ):
         super().__init__(*args, **kwargs)
 
-        ext_sigma = [ext_sigma] if not hasattr(ext_sigma, "__len__") else ext_sigma
-        ext_mass = [ext_mass] if not hasattr(ext_mass, "__len__") else ext_mass
+        ext_sigma = [ext_sigma for _ in range(self.ncoords)] if not hasattr(ext_sigma, "__len__") else ext_sigma
+        ext_mass = [ext_mass for _ in range(self.ncoords)] if not hasattr(ext_mass, "__len__") else ext_mass
 
         (xi, _) = self.get_cv()
 
@@ -54,6 +54,7 @@ class eABF(ABF, EnhancedSampling):
         self.ext_k = (kB_in_atomic * self.equil_temp) / (
             self.ext_sigma * self.ext_sigma
         )
+
         self.ext_mass = np.asarray(ext_mass)
         self.ext_hist = np.zeros_like(self.histogram)
         self.ext_forces = np.zeros(self.ncoords)
@@ -382,11 +383,12 @@ class eABF(ABF, EnhancedSampling):
         if threshold == None:
             threshold = self.ext_sigma
 
-        if abs(xi-self.traj[-1]) > threshold:
-            delta = self.ext_coords - self.traj[-1]
-            self.ext_coords = xi + delta
-            if self.verbose:
-                print(" >>> INFO: extended system corrected after discontinuity of CV!")
+        for i in range(self.ncoords):
+            if abs(xi[i]-self.traj[-1][i]) > threshold[i]:
+                delta = diff(self.ext_coords[i], self.traj[-1][i], self.periodicity[i])
+                self.ext_coords[i] = xi[i] + delta
+                if self.verbose:
+                    print(f" >>> INFO: extended system corrected after discontinuity of CV{i}!")
 
     def _propagate(
         self, 
@@ -409,11 +411,13 @@ class eABF(ABF, EnhancedSampling):
             self.ext_momenta += np.sqrt(self.ext_mass) * rand_push * self.ext_rand_gauss
             self.ext_momenta -= 0.5e0 * self.the_md.dt * self.ext_forces
             self.ext_coords  += prefac * self.the_md.dt * self.ext_momenta / self.ext_mass
-            for i in range(self.ncoords):
-                self.ext_coords[i] = correct_periodicity(self.ext_coords[i], self.periodicity[i])
+
         else:
             self.ext_momenta -= 0.5e0 * self.the_md.dt * self.ext_forces
             self.ext_coords += self.the_md.dt * self.ext_momenta / self.ext_mass
+        
+        for i in range(self.ncoords):
+            self.ext_coords[i] = correct_periodicity(self.ext_coords[i], self.periodicity[i])
 
     def _up_momenta(
         self, 
@@ -460,9 +464,9 @@ class eABF(ABF, EnhancedSampling):
             dxi = diff(self.ext_coords[i], xi[i], self.periodicity[i])
             self.ext_forces[i] = self.ext_k[i] * dxi
             bias_force -= self.ext_k[i] * dxi * delta_xi[i]
-
+            
             # harmonic walls for confinement to range of interest
-            if self.f_conf[i] > 0:
+            if self.f_conf[i] > 0.0:
                 if self.ext_coords[i] > (self.maxx[i] - margin[i]) and self.periodicity[i]:
                     r = diff(self.maxx[i] - margin[i], self.ext_coords[i], self.periodicity[i])
                     self.ext_forces[i] -= self.f_conf[i] * r

@@ -5,8 +5,7 @@ from typing import Union, Tuple
 def diff(
     a: Union[np.ndarray, float], b: Union[np.ndarray, float], periodicity: list,
 ) -> Union[np.ndarray, float]:
-    """get difference of elements of numbers or arrays
-    in range(-pi, pi) if cv_type='angle' else range(-inf, inf) 
+    """get (periodic) difference of elements of numbers or arrays
 
     Args:
         a: number or array
@@ -24,8 +23,7 @@ def diff(
 def sum(
     a: Union[np.ndarray, float], b: Union[np.ndarray, float], periodicity: list,
 ) -> Union[np.ndarray, float]:
-    """get sum of elements of numbers or arrays
-    in range(-pi, pi) if cv_type='angle' else range(-inf, inf) 
+    """get (periodic) sum of elements of numbers or arrays
 
     Args:
         a: number or array
@@ -46,10 +44,11 @@ def correct_periodicity(x: Union[np.ndarray, float], periodicity: list,
 
     Args:
         x: float or array to correct
-        periodicity: periodic boundary conditions [lower, upper], if None, returns x
+        periodicity: periodic boundary conditions ([lower, upper]), 
+                     if None, returns x
     
     Returns:
-        x: x in periodic range
+        x: x in periodic range defined by periodicity
     """
     if not periodicity:
         return x

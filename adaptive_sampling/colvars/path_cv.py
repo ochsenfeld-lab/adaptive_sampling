@@ -181,7 +181,7 @@ class PathCV:
             z = convert_coordinate_system(
                 coords, self.active, coord_system=self.coordinates, ndim=self.ndim
             ).to(self.device, non_blocking=True)
-       
+        
         dists = self._get_distance_to_path(z)
         idx_nodemin = self._get_closest_nodes(z, dists, regulize=False)
         

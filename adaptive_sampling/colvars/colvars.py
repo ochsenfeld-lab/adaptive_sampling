@@ -213,7 +213,7 @@ class CV:
         n2 = q34 - torch.dot(q34, q23_u) * q23_u
 
         self.cv = torch.atan2(torch.dot(torch.cross(q23_u, n1), n2), torch.dot(n1, n2))
-
+        
         # get forces
         if self.requires_grad:
             self.gradient = torch.autograd.grad(

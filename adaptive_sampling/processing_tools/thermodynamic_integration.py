@@ -49,10 +49,11 @@ def integrate(
 
 def czar(
     grid: np.ndarray,
-    xi: np.ndarray,
+    cv: np.ndarray,
     la: np.ndarray,
     sigma: float,
     equil_temp: float = 300.0,
+    periodicity: list = None,
 ) -> np.ndarray:
     """Corrected z-averaged Restrained (CZAR)
 
@@ -60,20 +61,22 @@ def czar(
 
     Args:
         grid: grid for reaction coordinate
-        xi: trajectory of reaction coordinate
+        cv: trajectory of reaction coordinate
         la: trajectory of fictitious particle
         sigma: thermal width of coupling of la to xi
         equil_temp: Temperature of the simulation
+        periodicity: periodic boundary conditions [lower, upper], boundary has to be at bin edge
 
     Returns:
         mean_force: thermodynamic force (gradient of PMF)
     """
+    from ..sampling_tools.utils import diff 
+
     RT = R_in_SI * equil_temp / 1000.0
 
+    # assumes that periodic boundary can only be at bin edges
     dx2 = (grid[1] - grid[0]) / 2.0
-    grid_local = grid + dx2
-
-    # TODO: add periodicity to handle periodic simulations
+    grid_local = grid + dx2 
 
     # get force constant from sigma
     k = RT / (sigma * sigma)
@@ -81,11 +84,11 @@ def czar(
     hist = np.zeros(len(grid), dtype=float)
     f_corr = np.zeros(len(grid), dtype=float)
     for i, x in enumerate(grid_local):
-        la_x = la[np.where(np.logical_and(xi >= x - dx2, xi < x + dx2))]
+        la_x = la[np.where(np.logical_and(cv >= x - dx2, cv < x + dx2))]
         hist[i] = len(la_x)
         if hist[i] > 0:
-            la_avg = np.average(la_x)
-            f_corr[i] = k * (la_avg - x)
+            diff_la_x = diff(la_x, x, periodicity)            
+            f_corr[i] = k * np.average(diff_la_x)
 
     log_hist = np.log(hist, out=np.zeros_like(hist), where=(hist != 0))
 

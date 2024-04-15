@@ -134,7 +134,7 @@ weights = mbar.run_mbar(
     exp_U,
     frames_per_traj,
     max_iter=10000,
-    conv=1.0e-7,
+    conv=1.0e-4,
     conv_errvec=1.0,
     outfreq=100,
     device='cpu',

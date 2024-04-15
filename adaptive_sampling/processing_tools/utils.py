@@ -93,6 +93,7 @@ def join_frames(traj_list: List[np.array]) -> Tuple[np.ndarray, float, np.ndarra
     num_frames = 0
     frames_per_traj = []
     all_frames = traj_list[0]
+
     for ii, traj in enumerate(traj_list):
         frames_per_traj.append(len(traj))
         num_frames += frames_per_traj[ii]

@@ -2,7 +2,7 @@ import os
 import itertools
 import torch
 from adaptive_sampling.units import BOHR_to_ANGSTROM
-
+from adaptive_sampling.sampling_tools.utils import diff, sum
 
 def read_xyz(
     xyz_name: str
@@ -89,16 +89,16 @@ def read_path(
     return traj, len(traj)
 
 
-def get_rmsd(V: torch.tensor, W: torch.tensor):
+def get_rmsd(V: torch.tensor, W: torch.tensor, periodicity: list=None):
     """root-mean-square deviation"""
-    diff = V - W
-    return torch.sqrt(torch.sum(diff * diff) / len(V))
+    d = diff(V, W, periodicity)
+    return torch.sqrt(torch.sum(d * d) / len(V))
 
 
-def get_msd(V: torch.tensor, W: torch.tensor):
+def get_msd(V: torch.tensor, W: torch.tensor, periodicity: list=None):
     """mean-square deviation"""
-    diff = V - W
-    return torch.sum(diff * diff) / len(V)
+    d = diff(V, W, periodicity)
+    return torch.sum(d * d) / len(V)
 
 
 def kabsch_rmsd(
