@@ -18,5 +18,9 @@ def test_distance_calc():
 
 
 OPES1 = OPES()
-
-OPES1.compression_check(1,1,1)
+OPES1.compression_check(1.,1.,1.)
+OPES1.show_kernel_lists()
+OPES1.compression_check(1.,2.,1.)
+OPES1.show_kernel_lists()
+OPES1.compression_check(1.8,2.5,1.)
+OPES1.show_kernel_lists()
