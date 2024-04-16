@@ -136,12 +136,42 @@ def cond_avg(a: np.ndarray, hist: np.ndarray) -> np.ndarray:
     """
     return np.divide(a, hist, out=np.zeros_like(a), where=(hist != 0))
 
-def gaussian_calc(h: float, s: np.array, kernel_var: np.array, s_new: np.array) -> float:
-    G = h * np.exp((-1./2.) * np.sum(np.square((s - s_new)/kernel_var)))
+def gaussian_calc(s: np.array, kernel_var: np.array, s_new: np.array, periodicity) -> float:
+    """calculate the potential from a deployed gaussian
+    
+    Args:
+        s: array of coordinates of gaussian center
+        kernel_var: array of variance of gaussian
+        s_new: aray of location in which potential is wanted
+    
+    Returns:
+        G: potential in s_new
+    """
+    h = np.prod(1/(s * np.sqrt(2 * np.pi)))
+    s_diff = s - s_new
+    for i,p in enumerate(periodicity):
+        s_diff[i] = correct_periodicity(s_diff[i], p)
+    G = h * np.exp((-1./2.) * np.sum(np.square(s_diff/kernel_var)))
     return G
 
-def distance_calc(s_new: np.array, s_old: np.array, kernel_var: np.array) -> float:
-    d = np.sqrt(np.sum(np.square((s_old - s_new)/kernel_var)))
+def distance_calc(s_new: np.array, s_old: np.array, kernel_var: np.array, periodicity) -> float:
+    """calculate distance between a deployed gaussian and location if interest
+
+    Args:
+        s_new: location of interest, sampling point
+        s_old: gaussian center
+        kernel_var: variance of gaussian
+        periodicity: list of lower and upper boundary
+    
+    Returns:
+        d: distance as float
+    """
+    if not hasattr(s_new, "__len__"):
+        raise ValueError("Wrong Input: Not array!")
+    s_diff = s_old - s_new
+    for i,p in enumerate(periodicity):
+        s_diff[i] = correct_periodicity(s_diff[i], p)
+    d = np.sqrt(np.sum(np.square(s_diff/kernel_var)))
     return d
 
 
