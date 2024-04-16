@@ -136,11 +136,11 @@ def cond_avg(a: np.ndarray, hist: np.ndarray) -> np.ndarray:
     """
     return np.divide(a, hist, out=np.zeros_like(a), where=(hist != 0))
 
-def gaussian_calc(h: float, s: np.ndarray, kernel_var: np.ndarray, s_new: np.ndarray) -> float:
+def gaussian_calc(h: float, s: np.array, kernel_var: np.array, s_new: np.array) -> float:
     G = h * np.exp((-1./2.) * np.sum(np.square((s - s_new)/kernel_var)))
     return G
 
-def distance_calc(s_new: np.ndarray, s_old: np.ndarray, kernel_var: np.ndarray) -> float:
+def distance_calc(s_new: np.array, s_old: np.array, kernel_var: np.array) -> float:
     d = np.sqrt(np.sum(np.square((s_old - s_new)/kernel_var)))
     return d
 
