@@ -1,4 +1,3 @@
-
 from adaptive_sampling.sampling_tools.utils import gaussian_calc
 from adaptive_sampling.sampling_tools.utils import distance_calc
 from adaptive_sampling.sampling_tools.utils import correct_periodicity
@@ -92,19 +91,22 @@ def test_kde_2D():
 print("2D Test")
 OPES2 = OPES(four_particles(), [["distance", [0,1], 0,0,0]])
 OPES2.show_kernel_lists()
-OPES2.compression_check(1.0,np.array([1.0,1.0]),np.array([1.0,1.0]))
+OPES2.compression_check(np.array([1.0,1.0]),np.array([0.1,0.1]))
 OPES2.show_kernel_lists()
 print("done cycle 1")
-OPES2.compression_check(1.0,np.array([2.0,1.0]),np.array([1.0,1.0]))
+OPES2.compression_check(np.array([2.0,1.0]),np.array([0.1,0.5]))
 OPES2.show_kernel_lists()
 print("done cycle 2")
-OPES2.compression_check(1.0,np.array([1.51,1.0]),np.array([1.0,1.0]))
-OPES2.show_kernel_lists()
+#OPES2.compression_check(np.array([1.51,1.0]),np.array([0.1,0.1]))
+#OPES2.show_kernel_lists()
 print("done cycle 3")
-OPES2.compression_check(1.0,np.array([3.25,1.4]),np.array([1.0,1.0]))
+OPES2.compression_check(np.array([3.25,1.4]),np.array([0.1,0.1]))
 OPES2.show_kernel_lists()
 print("done cycle 4")
-OPES2.compression_check(1.0,np.array([2.75,1.0]),np.array([1.0,1.0]))
-OPES2.show_kernel_lists()
+#OPES2.compression_check(np.array([2.75,1.0]),np.array([0.1,0.1]))
+#OPES2.show_kernel_lists()
 print("done cycle 5")
+OPES2.calc_prob_dist(np.array([2.5,1.0]))
+OPES2.calculate_potential(np.array([2.5,1.0]))
 print("2D Test successful")
+

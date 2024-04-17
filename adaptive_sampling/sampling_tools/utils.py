@@ -136,23 +136,30 @@ def cond_avg(a: np.ndarray, hist: np.ndarray) -> np.ndarray:
     """
     return np.divide(a, hist, out=np.zeros_like(a), where=(hist != 0))
 
-def gaussian_calc(s: np.array, kernel_var: np.array, s_new: np.array, periodicity) -> float:
-    """calculate the potential from a deployed gaussian
+def gaussian_calc(s: np.array, kernel_var: np.array, s_new: np.array, periodicity, requires_grad: bool = False) -> list:
+    """calculate the potential from a deployed gaussian and if needed the derivative
     
     Args:
-        s: array of coordinates of gaussian center
-        kernel_var: array of variance of gaussian
-        s_new: aray of location in which potential is wanted
+        s: coordinates of gaussian center
+        kernel_var: variance of gaussian
+        s_new: location in which potential is wanted
+        periodicity: periodicity of CV
+        requires_grad: default False, decides, if derivative of gaussian is needed
     
     Returns:
         G: potential in s_new
+        delta_G: derivative of G
     """
     h = np.prod(1/(s * np.sqrt(2 * np.pi)))
     s_diff = s - s_new
     for i,p in enumerate(periodicity):
         s_diff[i] = correct_periodicity(s_diff[i], p)
     G = h * np.exp((-1./2.) * np.sum(np.square(s_diff/kernel_var)))
-    return G
+    if requires_grad == False:
+        return G, None
+    else:
+        delta_G = -h * np.exp((-1./2.) * np.square(s_diff/kernel_var)) * (s_diff/kernel_var)
+        return G, delta_G
 
 def distance_calc(s_new: np.array, s_old: np.array, kernel_var: np.array, periodicity) -> float:
     """calculate distance between a deployed gaussian and location if interest
