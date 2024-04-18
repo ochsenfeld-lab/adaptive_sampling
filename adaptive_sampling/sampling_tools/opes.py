@@ -12,6 +12,8 @@ class OPES(EnhancedSampling):
         kernel_location: list of centers of compressed kernels
         kernel_weigth_coeff: list of weigthing coefficients used in algorithm
         norm_factor = current normalization factor
+        gamma: bias factor
+        epsilon: regularization termparameter ensuring arg of log > 1
         md: Object of the MD Inteface
         cv_def: definition of the Collective Variable (CV) (see adaptive_sampling.colvars)
             [["cv_type", [atom_indices], minimum, maximum, bin_width], [possible second dimension]]
@@ -33,8 +35,6 @@ class OPES(EnhancedSampling):
         kernel_weigth_coeff: float = 1.0,
         norm_factor: float = 1.0,
         gamma: float = 0.5,
-        temperature: float = 300,
-        beta: float = 1.0,
         epsilon:float = 0.1,
         **kwargs
     ):
@@ -46,7 +46,7 @@ class OPES(EnhancedSampling):
         self.kernels_weigth_coeff = [kernel_weigth_coeff]
         self.norm_factor = norm_factor
         self.gamma = gamma
-        self.temperature = temperature
+        self.temperature = self.equil_temp
         self.beta = 1/temperature
         self.epsilon = epsilon
 
@@ -117,7 +117,7 @@ class OPES(EnhancedSampling):
             nothing, deletes old kernels in lists
         """
         h_new = np.prod(1/(var_new * np.sqrt(2 * np.pi)))
-        threshold = self.threshold_kde * var_new
+        threshold = self.threshold_kde * np.square(var_new)
         dist_values = self.calc_min_dist(s_new)
         #print("minimal distance is: ", dist_values[1])
         if np.all(dist_values[1] < threshold):
@@ -156,6 +156,7 @@ class OPES(EnhancedSampling):
 
         Args:
             s_prob_dist: location in which probability distribution shall be evaluated
+            require_grad: decides, whether derivative of probability distribution is saved
 
         Returns:
             prob_dist: probability distribution for location s
@@ -191,21 +192,37 @@ class OPES(EnhancedSampling):
         """calculate the potential of given location
         
         Args:
-            s_pot: location, in which potential is wanted
+            prob_dist: probability distribution at wanted point
 
         Returns:
-            potential: potential in location s
+            potential: potential for given probability distribution
         """
         potential = (1-(1/self.gamma))*(1/self.beta)*np.log(((1/self.norm_factor)*(prob_dist))+ self.epsilon)
         print("potential is: ",potential)
         return(potential)
     
     def calculate_forces(self, prob_dist:float):
+        """calculate the forces as derivative of potential
+
+        Args:
+            prob_dist: probability disitrbution on wanted location
+
+        Returns:
+            deriv_pot: derivative of potential for location s
+        """
         deriv_pot = (1-(1/self.gamma)) * (1/self.beta) * (1/ ((prob_dist / self.norm_factor) + self.epsilon))
         deriv_pot *= (self.deriv_prob_dist / self.norm_factor)
         return deriv_pot
 
     def calc_norm_factor(self, s_new: np.array):
+        """calculate the norm factor with respect to existing gaussians
+
+        Args:
+            s_new: center of new gaussian
+
+        Returns:
+            updates norm factor
+        """
         S = self.sum_weights
         N = len(self.kernels_s)
         sum_gaussians = 0.0
