@@ -136,7 +136,35 @@ def cond_avg(a: np.ndarray, hist: np.ndarray) -> np.ndarray:
     """
     return np.divide(a, hist, out=np.zeros_like(a), where=(hist != 0))
 
-def gaussian_calc(s: np.array, kernel_var: np.array, s_new: np.array, periodicity, requires_grad: bool = False) -> list:
+class Kernel():
+    """kernel object is a gaussian and can return its value
+    
+    Args:
+        height: height of the initialized gaussian
+        center: center of the initialized gaussian
+        sigma: variance of the initialized gaussian
+
+    """
+    def __init__(self, height: float, center: np.array, sigma: np.array):
+        self.height = height
+        self.center = center
+        self.sigma = sigma
+    
+    def evaluate(self, s:np.array, periodicity: list = [None]):
+        """calculating the value of the gaussian with object parameters
+        
+        Args:
+            s: location, where value is wanted
+            periodicity: periodicity of CV
+        """
+        s_diff = s - self.height
+        for i,p in enumerate(periodicity):
+            s_diff[i] = correct_periodicity(s_diff[i], p)
+        gauss_value = self.height * np.exp(-0.5 * np.sum(np.square(s_diff/self.sigma)))
+        gauss_grad = -self.height * np.exp(-0.5 * np.square(s_diff/self.sigma)) * (s_diff/self.sigma)
+        return gauss_value, gauss_grad
+
+def gaussian_calc(s: np.array, kernel_var: np.array, s_new: np.array, periodicity: list = [None], requires_grad: bool = False) -> list:
     """calculate the potential from a deployed gaussian and if needed the derivative
     
     Args:
@@ -161,7 +189,7 @@ def gaussian_calc(s: np.array, kernel_var: np.array, s_new: np.array, periodicit
         delta_G = -h * np.exp((-1./2.) * np.square(s_diff/kernel_var)) * (s_diff/kernel_var)
         return G, delta_G
 
-def distance_calc(s_new: np.array, s_old: np.array, kernel_var: np.array, periodicity) -> float:
+def distance_calc(s_new: np.array, s_old: np.array, kernel_var: np.array, periodicity: list = [None]) -> float:
     """calculate distance between a deployed gaussian and location if interest
 
     Args:
@@ -176,6 +204,7 @@ def distance_calc(s_new: np.array, s_old: np.array, kernel_var: np.array, period
     if not hasattr(s_new, "__len__"):
         raise ValueError("Wrong Input: Not array!")
     s_diff = s_old - s_new
+    print(s_diff)
     for i,p in enumerate(periodicity):
         s_diff[i] = correct_periodicity(s_diff[i], p)
     d = np.sqrt(np.sum(np.square(s_diff/kernel_var)))

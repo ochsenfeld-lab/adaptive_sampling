@@ -1,61 +1,44 @@
 from adaptive_sampling.sampling_tools.enhanced_sampling import EnhancedSampling
+from .utils import Kernel
 from .utils import gaussian_calc
 from .utils import distance_calc
+from adaptive_sampling.units import *
 import numpy as np
 
 class OPES(EnhancedSampling):
     """on-the-fly probability enhanced sampling
     
     Args:
-        dimension: dimension of the problem
+        kernel_var: initial variance of first kernel
         threshold_kde: treshold distance for kde algorithm to trigger merging of kernels
-        kernel_var: list of variances of kernels, index global for class
-        kernel_location: list of centers of compressed kernels
-        kernel_weigth_coeff: list of weigthing coefficients used in algorithm
-        norm_factor = current normalization factor
-        gamma: bias factor
-        epsilon: regularization termparameter ensuring arg of log > 1
-        sum_weights: list the sum over k for weights, calculated for each new kernel and stored
-        md: Object of the MD Inteface
-        cv_def: definition of the Collective Variable (CV) (see adaptive_sampling.colvars)
-            [["cv_type", [atom_indices], minimum, maximum, bin_width], [possible second dimension]]
-        equil_temp: equillibrium temperature of MD
-        verbose: print verbose information
-        kinetice: calculate necessary data to obtain kinetics of reaction
-        f_conf: force constant for confinment of CVs to the range of interest with harmonic walls
-        output_freq: frequency in steps for writing outputs
-        multiple_walker: share bias with other simulations via buffer file
-        periodicity: periodicity of CVs, [[lower_boundary0, upper_boundary0], ...]
-
+        energy_barr: free energy barrier that the bias should help to overcome [kcal/mol]
+        update_freq: interval of md steps in which new kernels should be placed
+        
     """
     def __init__(
         self,
+        kernel_var: np.array,
         *args,
-        dimension:int = 1,
         threshold_kde: float = 3.0,
-        kernel_var: np.array = np.ones(1),
-        kernel_location: np.array = np.ones(1),
-        kernel_weigth_coeff: float = 1.0,
-        norm_factor: float = 1.0,
-        gamma: float = 0.5,
-        epsilon:float = 0.1,
-        sum_weights: list = [1.0],
+        energy_barr: float = 20.0,
+        update_freq: int = 50,
         **kwargs
     ):
         super().__init__(*args, **kwargs)
-        self.dimension = dimension
+        self.beta = 1/(self.equil_temp * kB_in_atomic * atomic_to_kJmol * kJ_to_kcal)
         self.threshold_kde = threshold_kde
-        self.kernels_var = [np.ones(self.dimension)]
-        self.kernels_h = [1.0]
-        self.kernels_s = [np.ones(self.dimension)]
-        self.kernels_weigth_coeff = [kernel_weigth_coeff]
-        self.norm_factor = norm_factor
-        self.gamma = gamma
+        self.norm_factor = 0.0
+        self.gamma = self.beta * energy_barr
         self.temperature = self.equil_temp
-        self.beta = 1/self.temperature
-        self.epsilon = epsilon
-        self.sum_weights = sum_weights
+        self.epsilon = np.exp(((-1) * self.beta * energy_barr)/(1-(1/self.gamma)))
         self.prob_dist = 1.0
+        self.sum_weights = 1.0
+        self.sum_weights_square = 1.0
+        s, _ = self.get_cv(**kwargs)
+        self.kernel_list = [Kernel(1.0, s, kernel_var)]
+        self.sigma_0 = kernel_var
+        self.update_freq = update_freq
+        self.n_step = 0
 
     def calc_min_dist(self,s_new: np.array):
         """calculate all distance between sample point and deployed gaussians and find the minimal
@@ -68,15 +51,15 @@ class OPES(EnhancedSampling):
             distance[kernel_min_ind]: distance to nearest gaussian as float
         """
         distance = []
-        print("distance: ", distance)
-        for i in range(len(self.kernels_s)):
-            distance = distance + [distance_calc(s_new,self.kernels_s[i],self.kernels_var[i],self.periodicity)]
+        #print("distance: ", distance)
+        for k in range(len(self.kernel_list)-1):
+            distance += [distance_calc(s_new,self.kernel_list[k].center, self.kernel_list[k].sigma, self.periodicity)]
             print("distance: ", distance)
         kernel_min_ind = distance.index(min(distance))
-        print(kernel_min_ind, distance[kernel_min_ind])
+        print("kernel with minimal distance is ", kernel_min_ind+1, "in ", distance[kernel_min_ind])
         return kernel_min_ind, distance[kernel_min_ind]
     
-    def merge_kernels(self,kernel_min_ind, h_new: float, s_new: np.array, var_new: np.array):
+    def merge_kernels(self, kernel_min_ind: int, h_new: float, s_new: np.array, var_new: np.array) -> list:
         """merge two kernels calculating the characteristics of a new one with respect to the old ones and overwrite old one with merged
 
         Args:
@@ -86,171 +69,167 @@ class OPES(EnhancedSampling):
             var_new: variance of new kernel
 
         Returns:
-            height, center and variance of merged kernel as list        
+            height, center and variance of merged kernel       
         """
-        h_merge = self.kernels_h[kernel_min_ind] + h_new
-        s_merge = (1.0/h_merge)*(self.kernels_h[kernel_min_ind] * self.kernels_s[kernel_min_ind] + h_new * s_new)
-        std_merge = (1.0/h_merge)*(self.kernels_h[kernel_min_ind] * (np.square(self.kernels_var[kernel_min_ind]) + np.square(self.kernels_s[kernel_min_ind])) + h_new * (np.square(var_new) + np.square(s_new))) - np.square(s_merge)
-        self.kernels_h[kernel_min_ind] = h_merge
-        self.kernels_s[kernel_min_ind] = s_merge
-        self.kernels_var[kernel_min_ind] = np.sqrt(std_merge)
-        print("merge successful")
+        h_merge = self.kernel_list[kernel_min_ind].height + h_new
+        s_merge = (1.0/h_merge)*(self.kernel_list[kernel_min_ind].height * self.kernel_list[kernel_min_ind].center + h_new * s_new)
+        std_merge = (1.0/h_merge)*(self.kernel_list[kernel_min_ind].height * (np.square(self.kernel_list[kernel_min_ind].sigma) + np.square(self.kernel_list[kernel_min_ind].center)) + h_new * (np.square(var_new) + np.square(s_new))) - np.square(s_merge)
+        self.kernel_list[kernel_min_ind] = Kernel(h_merge, s_merge, np.sqrt(std_merge))
+        print("merge successful: ", [k.height for k in self.kernel_list])
         return h_merge, s_merge, np.sqrt(std_merge)
 
     def add_kernel_to_compressed(self,h_new: float, s_new: np.array, var_new: np.array):
-        """add new kernel on sampling point to compressed ones
+        """generate and add new kernel object on sampling point to list of compressed ones
 
         Args:
             h_new: height of new kernel
             s_new: center of new kernel
             var_new: variance of new kernel
-
-        Returns:
-            nothing, adds kernels to lists
         """
-        self.kernels_s = self.kernels_s + [s_new]
-        self.kernels_var = self.kernels_var + [var_new]
-        self.kernels_h = self.kernels_h + [h_new]
+        self.kernel_list.append(Kernel(h_new, s_new, var_new))
 
-    def compression_check(self, s_new: np.array,var_new: np.array, recursive:bool=True):
-        """kde algorithm: check whether merging or adding should be fulfilled acording to threshold distance 
-        and also check if after compression there would be enough kernels in list; if adding kernel, update normalization
+    def compression_check(self, heigth: float, s_new: np.array, var_new: np.array, recursive: bool = True):
+        """kde compression check: new kernel added in update function is tested for being to near to an existing compressed one;
+         if so, merge kernels and delete added, check recursive, otherwise skip
 
         Args:
+            heigth: weighted heigth of new kernel
             s_new: center of new kernel
             var_new: variance of new kernel
             recursive: boolean, recursion needed, default True
-
-        Returns:
-            nothing, deletes old kernels in lists
         """
-        h_new = np.prod(1/(var_new * np.sqrt(2 * np.pi)))
+        print("kernel to add: ", heigth)
+        h_new = heigth
         threshold = self.threshold_kde * np.square(var_new)
+        self.show_kernels()
         dist_values = self.calc_min_dist(s_new)
         #print("minimal distance is: ", dist_values[1])
         if np.all(dist_values[1] < threshold):
             print("kernel under threshold distance ", threshold, "in distance: ", dist_values[1])
             h_new, s_new, var_new = self.merge_kernels(dist_values[0], h_new, s_new, var_new)
+            l = len(self.kernel_list)
+            self.show_kernels()
+            del self.kernel_list[l-1]
+            print("deleted kernel to merge")
+            self.show_kernels()
             #print("remembered merged kernel")
-            if recursive and len(self.kernels_h) > 1:
+            if recursive and len(self.kernel_list) > 1:
                 print("recursion active and enough kernels in list")
-                #print(self.show_kernel_lists())
-                del self.kernels_h[dist_values[0]]
-                del self.kernels_var[dist_values[0]]
-                del self.kernels_s[dist_values[0]]
-                #print("deleted merged kernel from list... recursive compression check in progress")
+                #del self.kernel_list[dist_values[0]]
+                print("deleted merged kernel from list... recursive compression check in progress")
                 self.compression_check(h_new, s_new, var_new)
             else:
-                print("break recursion because there is only one kernel in list")
-                #self.add_kernel_to_compressed(h_new,s_new,var_new)
+                print("break recursion because there is only one kernel in list and add")
+                #self.add_kernel_to_compressed(h_new, s_new, var_new)
         else:
             print("kernel over threshold distance ", threshold, "in distance: ", dist_values[1])
-            print("add!")
-            self.add_kernel_to_compressed(h_new,s_new,var_new)
+            print("kernel stays in list, no merging and deleting required")
 
-    def show_kernel_lists(self):
-        """for testing: print lists of kernel characteristics
 
-        Arg:
-
-        Returns: 
-            lists of kernels
-        """
-        print(self.kernels_h)
-        print(self.kernels_s)
-        print(self.kernels_var)
-
-    def calc_prob_dist(self, s_prob_dist: np.array, index_modif: int = 0, require_grad: bool = True):
+    def calc_probab_distr(self, s_prob: np.array, index_modif: int = 0, require_grad: bool = True) -> list:
         """on the fly calculation of not normalized probability distribution
 
         Args:
-            s_prob_dist: location in which probability distribution shall be evaluated
+            s_prob: location in which probability distribution shall be evaluated
             index_modif: possibility to variate the upper sum boundary
             require_grad: decides, whether derivative of probability distribution is saved
 
         Returns:
-            prob_dist: probability distribution for location s
+            prob: probability distribution for location s_prob
+            deriv_prob: derivative of probability distribtuion in s_prob
         """
-        prob_dist = 1.0
-        nominator = 0
-        nom_grad = np.zeros(self.dimension)
-        self.sum_weights= 0
-        self.sum_weights_quad = 0
-        for k in range(len(self.kernels_weigth_coeff)-index_modif):
-            if k == 0:
-                weight = 1.0
-            else:
-                weight = np.exp(self.beta * self.calculate_potential(self.calc_prob_dist(self.kernels_s[k], 1)))
-            if require_grad == False:
-                nominator += weight * gaussian_calc(self.kernels_s[k], self.kernels_var[k], s_prob_dist, periodicity=[None], requires_grad=None)[0]
-            else: 
-                pot, grad_pot = gaussian_calc(self.kernels_s[k], self.kernels_var[k], s_prob_dist, periodicity=[None], requires_grad=True)
-                nominator += weight * pot
-                print(nominator)
-                print(weight)
-                print(grad_pot)
-                nom_grad += weight * grad_pot
-            print("gaussian: ", gaussian_calc(self.kernels_s[k], self.kernels_var[k], s_prob_dist, periodicity=[None], requires_grad=None)[0])
-            print("counter: ", nominator)
-            self.sum_weights += weight
-            print("sum weights: ", self.sum_weights)
-            self.sum_weights_quad += weight * weight
-            print("denominator: ", weight)
-            prob_dist = nominator/self.sum_weights
-        self.deriv_prob_dist = nom_grad / self.sum_weights
-        print("probability distribution is: ", prob_dist)
-        return prob_dist
+        prob = 0.0
+        deriv_prob = 0.0
+        for k in range(len(self.kernel_list) - index_modif):
+            prob += self.kernel_list[k].evaluate(s_prob)[0]
+            deriv_prob += self.kernel_list[k].evaluate(s_prob)[1]
+        return prob, deriv_prob
 
-    def calculate_potential(self, prob_dist: float):
+
+    def calc_pot(self, prob_dist: float, index_modif: int = 0):
         """calculate the potential of given location
         
         Args:
-            prob_dist: probability distribution at wanted point
+            prob_dist: local probability distribution on which potential shall be calculated
 
         Returns:
             potential: potential for given probability distribution
         """
         potential = (1-(1/self.gamma))*(1/self.beta)*np.log(((1/self.norm_factor)*(prob_dist))+ self.epsilon)
-        print("potential is: ",potential)
-        return(potential)
+        return potential
     
-    def calculate_forces(self, prob_dist:float):
+    def calculate_forces(self, prob_dist:float, deriv_prob_dist: float):
         """calculate the forces as derivative of potential
 
         Args:
-            prob_dist: probability disitrbution on wanted location
+            prob_dist: probability disitrbution on wanted location and its derivative 
 
         Returns:
             deriv_pot: derivative of potential for location s
         """
         deriv_pot = (1-(1/self.gamma)) * (1/self.beta) * (1/ ((prob_dist / self.norm_factor) + self.epsilon))
-        deriv_pot *= (self.deriv_prob_dist / self.norm_factor)
+        deriv_pot *= (deriv_prob_dist / self.norm_factor)
         return deriv_pot
 
-    def calc_norm_factor(self, s_new: np.array):
+    def calc_norm_factor(self, index_modif: int = 0):
         """calculate the norm factor with respect to existing gaussians
-
-        Args:
-            s_new: center of new gaussian
-
-        Returns:
-            updates norm factor
         """
         S = self.sum_weights
-        N = len(self.kernels_s)
+        N = len(self.kernel_list)
         sum_gaussians = 0.0
-        for k in range(len(self.kernels_s)):
-            sum_gaussians += gaussian_calc(self.kernels_s[k],self.kernels_var[k],s_new,periodicity=[None])[0]
+        for k in range(len(self.kernel_list) - index_modif):
+            sum_gaussians += self.kernel_list[k].evaluate(self.kernel_list[k].center)[0]
         delta_norm_factor = (1/(S * N)) * sum_gaussians
         self.norm_factor += delta_norm_factor
 
-            
-    def add_kernel():
-        pass
-    
-    def step_bias(self):
-        pass
+    def update_kde(self, s_new: np.array):
+        """main function in algorithm; calls compression and calculates weigths
+        
+        Args:
+            s_new: center of new gaussian
 
+        """
+        n = len(self.kernel_list)
+        print("n is currently: ", n)
+        prob_dist = self.calc_probab_distr(s_new)
+        print("Prob dist: ", prob_dist)
+        weigth_coeff = np.exp(self.beta * prob_dist[0])
+        self.sum_weights += weigth_coeff
+        self.sum_weights_square += weigth_coeff * weigth_coeff
+        self.n_eff = np.square(self.sum_weights) / self.sum_weights_square
+        sigma_i =  self.sigma_0 * np.power((self.n_eff * (self.ncoords + 2)/4), -1/(self.ncoords + 4))
+        height = weigth_coeff * np.prod(self.sigma_0 / sigma_i)
+        self.add_kernel_to_compressed(height, s_new, sigma_i)
+        self.calc_norm_factor()
+        self.compression_check(height, s_new, sigma_i)
+
+    def show_kernels(self):
+        """for testing print kernels
+        """
+        print("kernels: ", [k.height for k in self.kernel_list],[k.center for k in self.kernel_list],[k.sigma for k in self.kernel_list])
+            
+    def step_bias(self, s_new, **kwargs):
+        """pulls sampling data and CV, drops a gaussian every Udate_freq MD-steps, calculates the bias force
+
+        Args:
+            s_new: sampling point
+
+        Returns:
+            bias_force: bias_force on location in CV space
+        """
+        md_state = self.the_md.get_sampling_data()
+        (s_new, delta_s_new) = self.get_cv(**kwargs)
+        if md_state.step%self.update_freq == 0:
+            self.update_kde(s_new)
+        prob_dist, deriv_prob_dist = self.calc_probab_distr(s_new)
+        print("Prob_dist: ", prob_dist)
+        potential = self.calc_pot(prob_dist)
+        forces = self.calculate_forces(prob_dist, deriv_prob_dist)
+        bias_force = np.zeros_like(md_state.forces)
+        for i in range(self.ncoords):
+            bias_force += forces[i] * delta_s_new[i]
+        return bias_force
+    
     def get_pmf(self):
         pass
 

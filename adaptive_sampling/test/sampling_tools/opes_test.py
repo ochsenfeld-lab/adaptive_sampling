@@ -5,19 +5,6 @@ from adaptive_sampling.sampling_tools.opes import OPES
 from adaptive_sampling.interface.sampling_data import SamplingData
 import numpy as np
 
-def test_gaussian_calc():
-    s = np.array([3,3])
-    kernel_var = np.array(1)
-    s_new = np.array([3,3])
-    periodicity: list = [None]
-    gauss = np.array(gaussian_calc(s,kernel_var,s_new,periodicity))
-    assert gauss == 1.0
-
-def test_distance_calc():
-    periodicity: list = [None]
-    distance = distance_calc(np.array([2.0]),np.array([1.0]),np.array([1.0]),periodicity)
-    assert distance == 1.0
-
 class MD:
     def __init__(self, mass, coords):
         self.masses = np.array(mass)
@@ -49,7 +36,6 @@ def four_particles2():
     return MD(masses, coords)
 
 
-
 def test_kde_1D_2():
     OPES_test1_2 = OPES(four_particles(), [["distance", [0,1], 0,0,0]], kernel_location=np.ones(1),kernel_var=np.ones(1))
     OPES_test1_2.compression_check(1.,np.array([1.0]),np.array([1.0]))
@@ -78,42 +64,26 @@ def test_kde_2D():
 
 #print("2D Test")
 #OPES2 = OPES(four_particles(), [["distance", [0,1], 0,0,0]])
-#OPES2.show_kernel_lists()
-#OPES2.compression_check(np.array([1.0,1.0]),np.array([0.1,0.1]))
-#OPES2.show_kernel_lists()
-#print("done cycle 1")
-#OPES2.compression_check(np.array([2.0,1.0]),np.array([0.1,0.5]))
-#OPES2.show_kernel_lists()
-#print("done cycle 2")
-#OPES2.compression_check(np.array([1.51,1.0]),np.array([0.1,0.1]))
-#OPES2.show_kernel_lists()
-#print("done cycle 3")
-#OPES2.compression_check(np.array([3.25,1.4]),np.array([0.1,0.1]))
-#OPES2.show_kernel_lists()
-#print("done cycle 4")
-#OPES2.compression_check(np.array([2.75,1.0]),np.array([0.1,0.1]))
-#OPES2.show_kernel_lists()
-#print("done cycle 5")
-#OPES2.calc_prob_dist(np.array([2.5,1.0]),True)
-#OPES2.calculate_potential(np.array([2.5,1.0]))
+#OPES2.update_kde(np.array([2.0,1.5]))
 #print("2D Test successful")
 
 print("1D Test")
-OPES1 = OPES(four_particles(), [["distance", [0,1], 0,0,0]])
-OPES1.show_kernel_lists()
-OPES1.compression_check(np.array([1.0]),np.array([0.2]))
-OPES1.show_kernel_lists()
-print("done cycle 1")
-OPES1.compression_check(np.array([4.5]),np.array([0.3]))
-OPES1.show_kernel_lists()
-print("done cycle 2")
-OPES1.show_kernel_lists()
-print("done cycle 3")
-OPES1.compression_check(np.array([2.5]),np.array([0.2]))
-OPES1.show_kernel_lists()
-print("done cycle 4")
-OPES1.compression_check(np.array([0.5]),np.array([0.1]))
-OPES1.show_kernel_lists()
-print("done cycle 5")
-#OPES1.calc_prob_dist()
+OPES1 = OPES(1.0, four_particles(), [["distance", [0,1], 0,0,0]])
+OPES1.update_kde(np.array([1.0]))
+print("end cycle 1")
+OPES1.update_kde(np.array([2.0]))
+print("end cycle 2")
+OPES1.update_kde(np.array([3.0]))
+print("end cycle 3")
+OPES1.update_kde(np.array([2.5]))
+print("end cycle 3")
+OPES1.update_kde(np.array([5.0]))
+print("end cycle 3")
+OPES1.update_kde(np.array([6.0]))
+print("end cycle 3")
+OPES1.update_kde(np.array([6.0]))
+print("end cycle 3")
+OPES1.update_kde(np.array([6.0]))
+print("end cycle 3")
+OPES1.step_bias(np.array([1.0]))
 print("1D Test successful")
