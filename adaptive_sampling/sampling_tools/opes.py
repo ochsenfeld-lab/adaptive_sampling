@@ -7,6 +7,7 @@ class OPES(EnhancedSampling):
     """on-the-fly probability enhanced sampling
     
     Args:
+        dimension: dimension of the problem
         threshold_kde: treshold distance for kde algorithm to trigger merging of kernels
         kernel_var: list of variances of kernels, index global for class
         kernel_location: list of centers of compressed kernels
@@ -14,6 +15,7 @@ class OPES(EnhancedSampling):
         norm_factor = current normalization factor
         gamma: bias factor
         epsilon: regularization termparameter ensuring arg of log > 1
+        sum_weights: list the sum over k for weights, calculated for each new kernel and stored
         md: Object of the MD Inteface
         cv_def: definition of the Collective Variable (CV) (see adaptive_sampling.colvars)
             [["cv_type", [atom_indices], minimum, maximum, bin_width], [possible second dimension]]
@@ -29,26 +31,31 @@ class OPES(EnhancedSampling):
     def __init__(
         self,
         *args,
+        dimension:int = 1,
         threshold_kde: float = 3.0,
-        kernel_var: np.array = np.ones(2),
-        kernel_location: np.array = np.ones(2),
+        kernel_var: np.array = np.ones(1),
+        kernel_location: np.array = np.ones(1),
         kernel_weigth_coeff: float = 1.0,
         norm_factor: float = 1.0,
         gamma: float = 0.5,
         epsilon:float = 0.1,
+        sum_weights: list = [1.0],
         **kwargs
     ):
         super().__init__(*args, **kwargs)
+        self.dimension = dimension
         self.threshold_kde = threshold_kde
-        self.kernels_var = [kernel_var]
+        self.kernels_var = [np.ones(self.dimension)]
         self.kernels_h = [1.0]
-        self.kernels_s = [kernel_location]
+        self.kernels_s = [np.ones(self.dimension)]
         self.kernels_weigth_coeff = [kernel_weigth_coeff]
         self.norm_factor = norm_factor
         self.gamma = gamma
         self.temperature = self.equil_temp
-        self.beta = 1/temperature
+        self.beta = 1/self.temperature
         self.epsilon = epsilon
+        self.sum_weights = sum_weights
+        self.prob_dist = 1.0
 
     def calc_min_dist(self,s_new: np.array):
         """calculate all distance between sample point and deployed gaussians and find the minimal
@@ -62,7 +69,7 @@ class OPES(EnhancedSampling):
         """
         distance = []
         print("distance: ", distance)
-        for i in range(len(self.kernels_h)):
+        for i in range(len(self.kernels_s)):
             distance = distance + [distance_calc(s_new,self.kernels_s[i],self.kernels_var[i],self.periodicity)]
             print("distance: ", distance)
         kernel_min_ind = distance.index(min(distance))
@@ -87,6 +94,7 @@ class OPES(EnhancedSampling):
         self.kernels_h[kernel_min_ind] = h_merge
         self.kernels_s[kernel_min_ind] = s_merge
         self.kernels_var[kernel_min_ind] = np.sqrt(std_merge)
+        print("merge successful")
         return h_merge, s_merge, np.sqrt(std_merge)
 
     def add_kernel_to_compressed(self,h_new: float, s_new: np.array, var_new: np.array):
@@ -121,11 +129,11 @@ class OPES(EnhancedSampling):
         dist_values = self.calc_min_dist(s_new)
         #print("minimal distance is: ", dist_values[1])
         if np.all(dist_values[1] < threshold):
-            #print("kernel under threshold distance: ", dist_values[0])
+            print("kernel under threshold distance ", threshold, "in distance: ", dist_values[1])
             h_new, s_new, var_new = self.merge_kernels(dist_values[0], h_new, s_new, var_new)
             #print("remembered merged kernel")
             if recursive and len(self.kernels_h) > 1:
-                #print("recursion active and enough kernels in list")
+                print("recursion active and enough kernels in list")
                 #print(self.show_kernel_lists())
                 del self.kernels_h[dist_values[0]]
                 del self.kernels_var[dist_values[0]]
@@ -136,6 +144,7 @@ class OPES(EnhancedSampling):
                 print("break recursion because there is only one kernel in list")
                 #self.add_kernel_to_compressed(h_new,s_new,var_new)
         else:
+            print("kernel over threshold distance ", threshold, "in distance: ", dist_values[1])
             print("add!")
             self.add_kernel_to_compressed(h_new,s_new,var_new)
 
@@ -151,11 +160,12 @@ class OPES(EnhancedSampling):
         print(self.kernels_s)
         print(self.kernels_var)
 
-    def calc_prob_dist(self, s_prob_dist: np.array, require_grad: bool = True):
+    def calc_prob_dist(self, s_prob_dist: np.array, index_modif: int = 0, require_grad: bool = True):
         """on the fly calculation of not normalized probability distribution
 
         Args:
             s_prob_dist: location in which probability distribution shall be evaluated
+            index_modif: possibility to variate the upper sum boundary
             require_grad: decides, whether derivative of probability distribution is saved
 
         Returns:
@@ -163,19 +173,22 @@ class OPES(EnhancedSampling):
         """
         prob_dist = 1.0
         nominator = 0
-        nom_grad = np.zeros(self.ncoords)
+        nom_grad = np.zeros(self.dimension)
         self.sum_weights= 0
         self.sum_weights_quad = 0
-        for k in range(len(self.kernels_weigth_coeff)):
+        for k in range(len(self.kernels_weigth_coeff)-index_modif):
             if k == 0:
                 weight = 1.0
             else:
-                weight = np.exp(self.beta * self.calculate_potential(prob_dist))
+                weight = np.exp(self.beta * self.calculate_potential(self.calc_prob_dist(self.kernels_s[k], 1)))
             if require_grad == False:
                 nominator += weight * gaussian_calc(self.kernels_s[k], self.kernels_var[k], s_prob_dist, periodicity=[None], requires_grad=None)[0]
             else: 
                 pot, grad_pot = gaussian_calc(self.kernels_s[k], self.kernels_var[k], s_prob_dist, periodicity=[None], requires_grad=True)
                 nominator += weight * pot
+                print(nominator)
+                print(weight)
+                print(grad_pot)
                 nom_grad += weight * grad_pot
             print("gaussian: ", gaussian_calc(self.kernels_s[k], self.kernels_var[k], s_prob_dist, periodicity=[None], requires_grad=None)[0])
             print("counter: ", nominator)
