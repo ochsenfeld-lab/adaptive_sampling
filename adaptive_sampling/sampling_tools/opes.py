@@ -11,7 +11,7 @@ class OPES(EnhancedSampling):
     Args:
         kernel_var: initial variance of first kernel
         threshold_kde: treshold distance for kde algorithm to trigger merging of kernels
-        energy_barr: free energy barrier that the bias should help to overcome [kcal/mol]
+        energy_barr: free energy barrier that the bias should help to overcome [kJ/mol]
         update_freq: interval of md steps in which new kernels should be placed
         approximate_norm: toggel approximation of norm factor
         merge_kernels: enables merging
@@ -24,7 +24,7 @@ class OPES(EnhancedSampling):
         *args,
         threshold_kde: float = 3.0,
         energy_barr: float = 20.0,
-        update_freq: int = 50,
+        update_freq: int = 5000,
         approximate_norm: bool = False,
         merge_kernels: bool = False,
         recursion_merge: bool = False,
@@ -33,7 +33,7 @@ class OPES(EnhancedSampling):
         super().__init__(*args, **kwargs)
         self.beta = 1/(self.equil_temp * kB_in_atomic * atomic_to_kJmol * kJ_to_kcal)
         self.threshold_kde = threshold_kde
-        self.norm_factor = 0.0
+        self.norm_factor = 1.0
         self.exact_norm_factor = 0.0
         self.gamma = self.beta * energy_barr
         self.gamma_prefac = 1 - 1/self.gamma
@@ -43,7 +43,7 @@ class OPES(EnhancedSampling):
         self.sum_weights = 1.0
         self.sum_weights_square = 1.0
         s, _ = self.get_cv(**kwargs)
-        self.kernel_list = [Kernel(1.0, s, kernel_var)]
+        self.kernel_list = [] #[Kernel(1.0, s, kernel_var)]
         self.sigma_0 = kernel_var
         self.update_freq = update_freq
         self.n_step = 0
@@ -116,8 +116,7 @@ class OPES(EnhancedSampling):
             print("kernel to check: ", heigth, s_new)
             print("in recursion: ", self.in_recursion)
         h_new = heigth
-        self.show_kernels()
-        if not self.merge:
+        if not self.merge or self.md_step == 0:
             return
         threshold = self.threshold_kde * np.square(var_new)
         self.show_kernels()
@@ -198,7 +197,10 @@ class OPES(EnhancedSampling):
         Returns:
             deriv_pot: derivative of potential for location s
         """
-        deriv_pot = (1-(1/self.gamma)) * (1/self.beta) * (1/ ((prob_dist / self.norm_factor) + self.epsilon))
+        if self.verbose and self.md_step%(self.update_freq*100)==0:
+            print("Calculate forces function called")
+            print("beta: ",self.beta,"gamma prefactor: ",self.gamma_prefac,"probability dist: ",prob_dist,"norm factor: ",self.norm_factor,"epsilon: ", self.epsilon)
+        deriv_pot = (self.gamma_prefac) * (1/self.beta) * (1/ ((prob_dist / self.norm_factor) + self.epsilon))
         deriv_pot *= (deriv_prob_dist / self.norm_factor)
         return deriv_pot
 
@@ -220,16 +222,17 @@ class OPES(EnhancedSampling):
             s_new: center of new gaussian
 
         """
-        n = len(self.kernel_list)
-        #print("n is currently: ", n)
         prob_dist = self.calc_probab_distr(s_new)
-        #print("Prob dist: ", prob_dist)
         weigth_coeff = np.exp(self.beta * prob_dist[0])
+        if self.verbose:
+            print("Update function called, now placing new kernel and evaluate its proberties")
+            print("Probability distribution: ", prob_dist)
+            print("weigth coefficient is: ", weigth_coeff)
         self.sum_weights += weigth_coeff
         self.sum_weights_square += weigth_coeff * weigth_coeff
         self.n_eff = np.square(self.sum_weights) / self.sum_weights_square
         sigma_i =  self.sigma_0 * np.power((self.n_eff * (self.ncoords + 2)/4), -1/(self.ncoords + 4))
-        height = weigth_coeff * np.prod(self.sigma_0 / sigma_i)
+        height = weigth_coeff #* np.prod(self.sigma_0 / sigma_i)
         self.add_kernel_to_compressed(height, s_new, sigma_i)
         if self.approx_norm:
             self.norm_factor = self.calc_norm_factor()
@@ -258,12 +261,14 @@ class OPES(EnhancedSampling):
         (s_new, delta_s_new) = self.get_cv(**kwargs)
         self.md_step = md_state.step
         if md_state.step%self.update_freq == 0:
-            if self.verbose and self.md_step%(self.update_freq*100)==0:
-                print("step_bias adds new kernel with", s_new)
+            #if self.verbose and self.md_step%(self.update_freq*100)==0:
+            #    print("step_bias adds new kernel with", s_new)
             self.update_kde(s_new)
         prob_dist, deriv_prob_dist = self.calc_probab_distr(s_new)
-        #print("Prob_dist: ", prob_dist)
-        potential = self.calc_pot(prob_dist)
+        if self.verbose and self.md_step%(self.update_freq*100)==0:
+            self.show_kernels()
+            print("Probabiliy distribution: ", prob_dist, "and its derivative: ", deriv_prob_dist)
+        self.potential = self.calc_pot(prob_dist)
         forces = self.calculate_forces(prob_dist, deriv_prob_dist)
         bias_force = np.zeros_like(md_state.coords, dtype=float)
         for i in range(self.ncoords):
@@ -278,13 +283,23 @@ class OPES(EnhancedSampling):
         sum_gaussians = 0.0
         for k in range(len(self.kernel_list)):
             for k_s in range(len(self.kernel_list)):
+                #print("value of Gaussian: ", self.kernel_list[k].evaluate(self.kernel_list[k_s].center)[0])
                 sum_gaussians += self.kernel_list[k].evaluate(self.kernel_list[k_s].center)[0]
+                #print(sum_gaussians)
+        if self.verbose and self.md_step%(self.update_freq*100)==0:
+            print("Calculate exact norm factor function called")
+            self.show_kernels()
+            print("double sum over the gaussians gives: ",sum_gaussians)
         delta_norm_factor = (1/(S * N)) * sum_gaussians
         return delta_norm_factor
         
     
     def get_pmf(self):
-        pass
+        P = np.zeros_like(self.grid[0])
+        for i in range(len(self.grid[0])):
+            for k in self.kernel_list:
+                P[i] += k.evaluate(self.grid[0][i])[0]
+        pmf = self.gamma_prefac / self.beta * np.log(P/self.norm_factor + self.epsilon)
 
     def shared_bias(self):
         pass

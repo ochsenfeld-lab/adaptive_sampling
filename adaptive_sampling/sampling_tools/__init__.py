@@ -8,6 +8,7 @@ from .metaeabf import *
 from .reference import *
 from .feneb import *
 from .utils import *
+from .opes import *
 
 __all__ = [
     "ABF",
@@ -19,4 +20,5 @@ __all__ = [
     "WTMeABF",
     "FENEB",
     "Reference",
+    "OPES",
 ]

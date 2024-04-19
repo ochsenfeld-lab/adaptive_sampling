@@ -157,7 +157,7 @@ class Kernel():
             s: location, where value is wanted
             periodicity: periodicity of CV
         """
-        s_diff = s - self.height
+        s_diff = s - self.center
         for i,p in enumerate(periodicity):
             s_diff[i] = correct_periodicity(s_diff[i], p)
         gauss_value = self.height * np.exp(-0.5 * np.sum(np.square(s_diff/self.sigma)))
