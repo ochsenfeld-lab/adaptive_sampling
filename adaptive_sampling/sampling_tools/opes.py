@@ -87,7 +87,8 @@ class OPES(EnhancedSampling):
         h_merge = self.kernel_list[kernel_min_ind].height + h_new
         s_merge = (1.0/h_merge)*(self.kernel_list[kernel_min_ind].height * self.kernel_list[kernel_min_ind].center + h_new * s_new)
         std_merge = (1.0/h_merge)*(self.kernel_list[kernel_min_ind].height * (np.square(self.kernel_list[kernel_min_ind].sigma) + np.square(self.kernel_list[kernel_min_ind].center)) + h_new * (np.square(var_new) + np.square(s_new))) - np.square(s_merge)
-        self.kernel_list[kernel_min_ind] = Kernel(h_merge, s_merge, np.sqrt(std_merge))
+        self.kernel_list.append(Kernel(h_merge, s_merge, np.sqrt(std_merge)))
+        del self.kernel_list[kernel_min_ind]
         if self.verbose and self.md_step%(self.update_freq*100)==0:
             print("merge successful: ", [k.height for k in self.kernel_list], [k.center for k in self.kernel_list])
         return h_merge, s_merge, np.sqrt(std_merge)
@@ -129,10 +130,6 @@ class OPES(EnhancedSampling):
             index_merged_kernel = dist_values[0]
             l = len(self.kernel_list)
             self.show_kernels()
-            if self.in_recursion == True:
-                del self.kernel_list[index_merged_kernel]
-            else:
-                del self.kernel_list[-1]
             #print("deleted kernel to merge")
             self.show_kernels()
             #print("remembered merged kernel")
