@@ -13,6 +13,7 @@ class OPES(EnhancedSampling):
         threshold_kde: treshold distance for kde algorithm to trigger merging of kernels
         energy_barr: free energy barrier that the bias should help to overcome [kcal/mol]
         update_freq: interval of md steps in which new kernels should be placed
+        approximate_norm: toggel approximation of norm factor
         
     """
     def __init__(
@@ -22,15 +23,20 @@ class OPES(EnhancedSampling):
         threshold_kde: float = 3.0,
         energy_barr: float = 20.0,
         update_freq: int = 50,
+        approximate_norm: bool = False,
+        merge_kernels: bool = False,
+        recursion_merge: bool = False,
         **kwargs
     ):
         super().__init__(*args, **kwargs)
         self.beta = 1/(self.equil_temp * kB_in_atomic * atomic_to_kJmol * kJ_to_kcal)
         self.threshold_kde = threshold_kde
         self.norm_factor = 0.0
+        self.exact_norm_factor = 0.0
         self.gamma = self.beta * energy_barr
+        self.gamma_prefac = 1 - 1/self.gamma
         self.temperature = self.equil_temp
-        self.epsilon = np.exp(((-1) * self.beta * energy_barr)/(1-(1/self.gamma)))
+        self.epsilon = np.exp(((-1) * self.beta * energy_barr)/self.gamma_prefac)
         self.prob_dist = 1.0
         self.sum_weights = 1.0
         self.sum_weights_square = 1.0
@@ -39,6 +45,12 @@ class OPES(EnhancedSampling):
         self.sigma_0 = kernel_var
         self.update_freq = update_freq
         self.n_step = 0
+        self.in_recursion = False
+        self.approx_norm = approximate_norm
+        self.merge = merge_kernels
+        self.recursive = recursion_merge
+
+
 
     def calc_min_dist(self,s_new: np.array):
         """calculate all distance between sample point and deployed gaussians and find the minimal
@@ -88,7 +100,7 @@ class OPES(EnhancedSampling):
         """
         self.kernel_list.append(Kernel(h_new, s_new, var_new))
 
-    def compression_check(self, heigth: float, s_new: np.array, var_new: np.array, recursive: bool = True):
+    def compression_check(self, heigth: float, s_new: np.array, var_new: np.array):
         """kde compression check: new kernel added in update function is tested for being to near to an existing compressed one;
          if so, merge kernels and delete added, check recursive, otherwise skip
 
@@ -98,31 +110,44 @@ class OPES(EnhancedSampling):
             var_new: variance of new kernel
             recursive: boolean, recursion needed, default True
         """
-        print("kernel to add: ", heigth)
+        print("kernel to check: ", heigth, s_new)
+        print("in recursion: ", self.in_recursion)
         h_new = heigth
+        self.show_kernels()
+        if not self.merge:
+            return
+        print("HALLO")
         threshold = self.threshold_kde * np.square(var_new)
         self.show_kernels()
         dist_values = self.calc_min_dist(s_new)
         #print("minimal distance is: ", dist_values[1])
         if np.all(dist_values[1] < threshold):
             print("kernel under threshold distance ", threshold, "in distance: ", dist_values[1])
+            print("in recursion: ", self.in_recursion)
             h_new, s_new, var_new = self.merge_kernels(dist_values[0], h_new, s_new, var_new)
+            index_merged_kernel = dist_values[0]
             l = len(self.kernel_list)
             self.show_kernels()
-            del self.kernel_list[l-1]
+            if self.in_recursion == True:
+                del self.kernel_list[index_merged_kernel]
+            else:
+                del self.kernel_list[-1]
             print("deleted kernel to merge")
             self.show_kernels()
             #print("remembered merged kernel")
-            if recursive and len(self.kernel_list) > 1:
+            if self.recursive and len(self.kernel_list) > 1:
+                self.in_recursion = True
                 print("recursion active and enough kernels in list")
-                #del self.kernel_list[dist_values[0]]
-                print("deleted merged kernel from list... recursive compression check in progress")
+                print("recursive compression check in progress")
                 self.compression_check(h_new, s_new, var_new)
             else:
                 print("break recursion because there is only one kernel in list and add")
                 #self.add_kernel_to_compressed(h_new, s_new, var_new)
         else:
             print("kernel over threshold distance ", threshold, "in distance: ", dist_values[1])
+            if self.in_recursion == True:
+                print("nothing to merge recursive")
+            self.in_recursion = False
             print("kernel stays in list, no merging and deleting required")
 
 
@@ -141,8 +166,10 @@ class OPES(EnhancedSampling):
         prob = 0.0
         deriv_prob = 0.0
         for k in range(len(self.kernel_list) - index_modif):
+            print(k)
             prob += self.kernel_list[k].evaluate(s_prob)[0]
             deriv_prob += self.kernel_list[k].evaluate(s_prob)[1]
+        print("probability distribution is: ", deriv_prob)
         return prob, deriv_prob
 
 
@@ -155,7 +182,7 @@ class OPES(EnhancedSampling):
         Returns:
             potential: potential for given probability distribution
         """
-        potential = (1-(1/self.gamma))*(1/self.beta)*np.log(((1/self.norm_factor)*(prob_dist))+ self.epsilon)
+        potential = (self.gamma_prefac / self.beta)*np.log(((1/self.norm_factor)*(prob_dist))+ self.epsilon)
         return potential
     
     def calculate_forces(self, prob_dist:float, deriv_prob_dist: float):
@@ -180,7 +207,7 @@ class OPES(EnhancedSampling):
         for k in range(len(self.kernel_list) - index_modif):
             sum_gaussians += self.kernel_list[k].evaluate(self.kernel_list[k].center)[0]
         delta_norm_factor = (1/(S * N)) * sum_gaussians
-        self.norm_factor += delta_norm_factor
+        return self.norm_factor + delta_norm_factor
 
     def update_kde(self, s_new: np.array):
         """main function in algorithm; calls compression and calculates weigths
@@ -200,7 +227,11 @@ class OPES(EnhancedSampling):
         sigma_i =  self.sigma_0 * np.power((self.n_eff * (self.ncoords + 2)/4), -1/(self.ncoords + 4))
         height = weigth_coeff * np.prod(self.sigma_0 / sigma_i)
         self.add_kernel_to_compressed(height, s_new, sigma_i)
-        self.calc_norm_factor()
+        if self.approx_norm:
+            self.norm_factor = self.calc_norm_factor()
+        else:
+            self.norm_factor = self.calculate_exact_norm_factor()
+        print("normalization factors: approx", self.norm_factor, "definite", self.exact_norm_factor)
         self.compression_check(height, s_new, sigma_i)
 
     def show_kernels(self):
@@ -208,27 +239,43 @@ class OPES(EnhancedSampling):
         """
         print("kernels: ", [k.height for k in self.kernel_list],[k.center for k in self.kernel_list],[k.sigma for k in self.kernel_list])
             
-    def step_bias(self, s_new, **kwargs):
+    def step_bias(self, **kwargs):
         """pulls sampling data and CV, drops a gaussian every Udate_freq MD-steps, calculates the bias force
 
         Args:
             s_new: sampling point
 
         Returns:
-            bias_force: bias_force on location in CV space
+            bias_force: bias_force on location in CV space in atomic units
         """
         md_state = self.the_md.get_sampling_data()
         (s_new, delta_s_new) = self.get_cv(**kwargs)
         if md_state.step%self.update_freq == 0:
+            if self.verbose:
+                print("step_bias adds new kernel with", s_new)
             self.update_kde(s_new)
         prob_dist, deriv_prob_dist = self.calc_probab_distr(s_new)
         print("Prob_dist: ", prob_dist)
         potential = self.calc_pot(prob_dist)
         forces = self.calculate_forces(prob_dist, deriv_prob_dist)
-        bias_force = np.zeros_like(md_state.forces)
+        bias_force = np.zeros_like(md_state.coords, dtype=float)
         for i in range(self.ncoords):
+            print(i)
             bias_force += forces[i] * delta_s_new[i]
+        bias_force = bias_force / kJ_to_kcal / atomic_to_kJmol
+        print("the bias force is: ",  bias_force)
         return bias_force
+    
+    def calculate_exact_norm_factor(self):
+        S = self.sum_weights
+        N = len(self.kernel_list)
+        sum_gaussians = 0.0
+        for k in range(len(self.kernel_list)):
+            for k_s in range(len(self.kernel_list)):
+                sum_gaussians += self.kernel_list[k].evaluate(self.kernel_list[k_s].center)[0]
+        delta_norm_factor = (1/(S * N)) * sum_gaussians
+        return delta_norm_factor
+        
     
     def get_pmf(self):
         pass

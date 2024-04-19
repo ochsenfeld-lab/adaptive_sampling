@@ -16,3 +16,5 @@ class Test():
 
 Test1 = Test(dimension=5)
 print(Test1.dimension)
+
+print(6/2/3)
