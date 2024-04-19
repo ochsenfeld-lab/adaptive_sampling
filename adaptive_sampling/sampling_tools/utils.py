@@ -204,7 +204,7 @@ def distance_calc(s_new: np.array, s_old: np.array, kernel_var: np.array, period
     if not hasattr(s_new, "__len__"):
         raise ValueError("Wrong Input: Not array!")
     s_diff = s_old - s_new
-    print(s_diff)
+    #print(s_diff)
     for i,p in enumerate(periodicity):
         s_diff[i] = correct_periodicity(s_diff[i], p)
     d = np.sqrt(np.sum(np.square(s_diff/kernel_var)))

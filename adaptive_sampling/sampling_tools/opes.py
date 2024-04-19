@@ -14,6 +14,8 @@ class OPES(EnhancedSampling):
         energy_barr: free energy barrier that the bias should help to overcome [kcal/mol]
         update_freq: interval of md steps in which new kernels should be placed
         approximate_norm: toggel approximation of norm factor
+        merge_kernels: enables merging
+        recursion_merge: enables recursive merging
         
     """
     def __init__(
@@ -49,6 +51,7 @@ class OPES(EnhancedSampling):
         self.approx_norm = approximate_norm
         self.merge = merge_kernels
         self.recursive = recursion_merge
+        self.md_step = 0
 
 
 
@@ -63,12 +66,10 @@ class OPES(EnhancedSampling):
             distance[kernel_min_ind]: distance to nearest gaussian as float
         """
         distance = []
-        #print("distance: ", distance)
         for k in range(len(self.kernel_list)-1):
             distance += [distance_calc(s_new,self.kernel_list[k].center, self.kernel_list[k].sigma, self.periodicity)]
-            print("distance: ", distance)
         kernel_min_ind = distance.index(min(distance))
-        print("kernel with minimal distance is ", kernel_min_ind+1, "in ", distance[kernel_min_ind])
+        #print("kernel with minimal distance is ", kernel_min_ind+1, "in ", distance[kernel_min_ind])
         return kernel_min_ind, distance[kernel_min_ind]
     
     def merge_kernels(self, kernel_min_ind: int, h_new: float, s_new: np.array, var_new: np.array) -> list:
@@ -87,7 +88,8 @@ class OPES(EnhancedSampling):
         s_merge = (1.0/h_merge)*(self.kernel_list[kernel_min_ind].height * self.kernel_list[kernel_min_ind].center + h_new * s_new)
         std_merge = (1.0/h_merge)*(self.kernel_list[kernel_min_ind].height * (np.square(self.kernel_list[kernel_min_ind].sigma) + np.square(self.kernel_list[kernel_min_ind].center)) + h_new * (np.square(var_new) + np.square(s_new))) - np.square(s_merge)
         self.kernel_list[kernel_min_ind] = Kernel(h_merge, s_merge, np.sqrt(std_merge))
-        print("merge successful: ", [k.height for k in self.kernel_list])
+        if self.verbose and self.md_step%(self.update_freq*100)==0:
+            print("merge successful: ", [k.height for k in self.kernel_list], [k.center for k in self.kernel_list])
         return h_merge, s_merge, np.sqrt(std_merge)
 
     def add_kernel_to_compressed(self,h_new: float, s_new: np.array, var_new: np.array):
@@ -110,20 +112,20 @@ class OPES(EnhancedSampling):
             var_new: variance of new kernel
             recursive: boolean, recursion needed, default True
         """
-        print("kernel to check: ", heigth, s_new)
-        print("in recursion: ", self.in_recursion)
+        if self.verbose and self.md_step%(self.update_freq*100)==0:
+            print("kernel to check: ", heigth, s_new)
+            print("in recursion: ", self.in_recursion)
         h_new = heigth
         self.show_kernels()
         if not self.merge:
             return
-        print("HALLO")
         threshold = self.threshold_kde * np.square(var_new)
         self.show_kernels()
         dist_values = self.calc_min_dist(s_new)
         #print("minimal distance is: ", dist_values[1])
         if np.all(dist_values[1] < threshold):
-            print("kernel under threshold distance ", threshold, "in distance: ", dist_values[1])
-            print("in recursion: ", self.in_recursion)
+            if self.verbose and self.md_step%(self.update_freq*100)==0:
+                print("kernel under threshold distance ", threshold, "in distance: ", dist_values[1])
             h_new, s_new, var_new = self.merge_kernels(dist_values[0], h_new, s_new, var_new)
             index_merged_kernel = dist_values[0]
             l = len(self.kernel_list)
@@ -132,23 +134,26 @@ class OPES(EnhancedSampling):
                 del self.kernel_list[index_merged_kernel]
             else:
                 del self.kernel_list[-1]
-            print("deleted kernel to merge")
+            #print("deleted kernel to merge")
             self.show_kernels()
             #print("remembered merged kernel")
             if self.recursive and len(self.kernel_list) > 1:
                 self.in_recursion = True
-                print("recursion active and enough kernels in list")
-                print("recursive compression check in progress")
+                if self.verbose and self.md_step%(self.update_freq*100)==0:
+                    print("recursion active and enough kernels in list")
+                    print("recursive compression check in progress")
                 self.compression_check(h_new, s_new, var_new)
             else:
-                print("break recursion because there is only one kernel in list and add")
+                if self.verbose and self.md_step%(self.update_freq*100)==0:
+                    print("break recursion because there is only one kernel in list")
                 #self.add_kernel_to_compressed(h_new, s_new, var_new)
         else:
-            print("kernel over threshold distance ", threshold, "in distance: ", dist_values[1])
-            if self.in_recursion == True:
-                print("nothing to merge recursive")
+            if self.verbose and self.md_step%(self.update_freq*100)==0:
+                print("kernel over threshold distance ", threshold, "in distance: ", dist_values[1])
+                if self.in_recursion == True:
+                    print("nothing to merge recursive")
             self.in_recursion = False
-            print("kernel stays in list, no merging and deleting required")
+            #print("kernel stays in list, no merging and deleting required")
 
 
     def calc_probab_distr(self, s_prob: np.array, index_modif: int = 0, require_grad: bool = True) -> list:
@@ -166,10 +171,9 @@ class OPES(EnhancedSampling):
         prob = 0.0
         deriv_prob = 0.0
         for k in range(len(self.kernel_list) - index_modif):
-            print(k)
             prob += self.kernel_list[k].evaluate(s_prob)[0]
             deriv_prob += self.kernel_list[k].evaluate(s_prob)[1]
-        print("probability distribution is: ", deriv_prob)
+        #print("probability distribution is: ", deriv_prob)
         return prob, deriv_prob
 
 
@@ -217,9 +221,9 @@ class OPES(EnhancedSampling):
 
         """
         n = len(self.kernel_list)
-        print("n is currently: ", n)
+        #print("n is currently: ", n)
         prob_dist = self.calc_probab_distr(s_new)
-        print("Prob dist: ", prob_dist)
+        #print("Prob dist: ", prob_dist)
         weigth_coeff = np.exp(self.beta * prob_dist[0])
         self.sum_weights += weigth_coeff
         self.sum_weights_square += weigth_coeff * weigth_coeff
@@ -231,14 +235,16 @@ class OPES(EnhancedSampling):
             self.norm_factor = self.calc_norm_factor()
         else:
             self.norm_factor = self.calculate_exact_norm_factor()
-        print("normalization factors: approx", self.norm_factor, "definite", self.exact_norm_factor)
         self.compression_check(height, s_new, sigma_i)
 
     def show_kernels(self):
         """for testing print kernels
         """
-        print("kernels: ", [k.height for k in self.kernel_list],[k.center for k in self.kernel_list],[k.sigma for k in self.kernel_list])
-            
+        if self.verbose and self.md_step%(self.update_freq*100)==0:
+            print("kernels: ", [k.height for k in self.kernel_list],[k.center for k in self.kernel_list],[k.sigma for k in self.kernel_list])
+        else:
+            pass
+
     def step_bias(self, **kwargs):
         """pulls sampling data and CV, drops a gaussian every Udate_freq MD-steps, calculates the bias force
 
@@ -250,20 +256,20 @@ class OPES(EnhancedSampling):
         """
         md_state = self.the_md.get_sampling_data()
         (s_new, delta_s_new) = self.get_cv(**kwargs)
+        self.md_step = md_state.step
         if md_state.step%self.update_freq == 0:
-            if self.verbose:
+            if self.verbose and self.md_step%(self.update_freq*100)==0:
                 print("step_bias adds new kernel with", s_new)
             self.update_kde(s_new)
         prob_dist, deriv_prob_dist = self.calc_probab_distr(s_new)
-        print("Prob_dist: ", prob_dist)
+        #print("Prob_dist: ", prob_dist)
         potential = self.calc_pot(prob_dist)
         forces = self.calculate_forces(prob_dist, deriv_prob_dist)
         bias_force = np.zeros_like(md_state.coords, dtype=float)
         for i in range(self.ncoords):
-            print(i)
             bias_force += forces[i] * delta_s_new[i]
         bias_force = bias_force / kJ_to_kcal / atomic_to_kJmol
-        print("the bias force is: ",  bias_force)
+        #print("the bias force is: ",  bias_force)
         return bias_force
     
     def calculate_exact_norm_factor(self):
