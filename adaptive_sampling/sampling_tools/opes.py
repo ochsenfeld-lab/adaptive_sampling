@@ -1,6 +1,5 @@
 from adaptive_sampling.sampling_tools.enhanced_sampling import EnhancedSampling
 from .utils import Kernel
-from .utils import gaussian_calc
 from .utils import distance_calc
 from adaptive_sampling.units import *
 import numpy as np
@@ -20,7 +19,7 @@ class OPES(EnhancedSampling):
     """
     def __init__(
         self,
-        kernel_var: np.array,
+        kernel_std: np.array,
         *args,
         threshold_kde: float = 3.0,
         energy_barr: float = 20.0,
@@ -31,23 +30,23 @@ class OPES(EnhancedSampling):
         **kwargs
     ):
         super().__init__(*args, **kwargs)
+        self.energy_barr = energy_barr * kJ_to_kcal
         self.beta = 1/(self.equil_temp * kB_in_atomic * atomic_to_kJmol * kJ_to_kcal)
         self.threshold_kde = threshold_kde
         self.norm_factor = 1.0
         self.exact_norm_factor = 0.0
-        self.gamma = self.beta * energy_barr
+        self.gamma = self.beta * self.energy_barr
         self.gamma_prefac = 1 - 1/self.gamma
         self.temperature = self.equil_temp
-        self.epsilon = np.exp(((-1) * self.beta * energy_barr)/self.gamma_prefac)
+        self.epsilon = np.exp(((-1) * self.beta * self.energy_barr)/self.gamma_prefac)
         self.prob_dist = 1.0
         self.sum_weights = 1.0
         self.sum_weights_square = 1.0
         s, _ = self.get_cv(**kwargs)
         self.kernel_list = [] #[Kernel(1.0, s, kernel_var)]
-        self.sigma_0 = kernel_var
+        self.sigma_0 = kernel_std
         self.update_freq = update_freq
         self.n_step = 0
-        self.in_recursion = False
         self.approx_norm = approximate_norm
         self.merge = merge_kernels
         self.recursive = recursion_merge
@@ -72,84 +71,80 @@ class OPES(EnhancedSampling):
         #print("kernel with minimal distance is ", kernel_min_ind+1, "in ", distance[kernel_min_ind])
         return kernel_min_ind, distance[kernel_min_ind]
     
-    def merge_kernels(self, kernel_min_ind: int, h_new: float, s_new: np.array, var_new: np.array) -> list:
+    def merge_kernels(self, kernel_min_ind: int, h_new: float, s_new: np.array, std_new: np.array) -> list:
         """merge two kernels calculating the characteristics of a new one with respect to the old ones and overwrite old one with merged
 
         Args:
             kernel_mind_ind: index of nearest kernel, which is to be merged
             h_new: height of new kernel
             s_new: center of new kernel
-            var_new: variance of new kernel
+            std_new: standard deviation of new kernel
 
         Returns:
-            height, center and variance of merged kernel       
+            height, center and standard deviation of merged kernel       
         """
+        del self.kernel_list[-1]
         h_merge = self.kernel_list[kernel_min_ind].height + h_new
         s_merge = (1.0/h_merge)*(self.kernel_list[kernel_min_ind].height * self.kernel_list[kernel_min_ind].center + h_new * s_new)
-        std_merge = (1.0/h_merge)*(self.kernel_list[kernel_min_ind].height * (np.square(self.kernel_list[kernel_min_ind].sigma) + np.square(self.kernel_list[kernel_min_ind].center)) + h_new * (np.square(var_new) + np.square(s_new))) - np.square(s_merge)
-        self.kernel_list.append(Kernel(h_merge, s_merge, np.sqrt(std_merge)))
+        var_merge = (1.0/h_merge)*(self.kernel_list[kernel_min_ind].height * (np.square(self.kernel_list[kernel_min_ind].sigma) + np.square(self.kernel_list[kernel_min_ind].center)) + h_new * (np.square(std_new) + np.square(s_new))) - np.square(s_merge)
+        self.kernel_list.append(Kernel(h_merge, s_merge, np.sqrt(var_merge)))
         del self.kernel_list[kernel_min_ind]
-        if self.verbose and self.md_step%(self.update_freq*100)==0:
-            print("merge successful: ", [k.height for k in self.kernel_list], [k.center for k in self.kernel_list])
-        return h_merge, s_merge, np.sqrt(std_merge)
+        if self.verbose:# and self.md_step%(self.update_freq*100)==0:
+            print("merge successful: ")#, [k.height for k in self.kernel_list], [k.center for k in self.kernel_list])
+            self.show_kernels()
+        return h_merge, s_merge, np.square(var_merge)
 
-    def add_kernel_to_compressed(self,h_new: float, s_new: np.array, var_new: np.array):
+    def add_kernel_to_compressed(self,h_new: float, s_new: np.array, std_new: np.array):
         """generate and add new kernel object on sampling point to list of compressed ones
 
         Args:
             h_new: height of new kernel
             s_new: center of new kernel
-            var_new: variance of new kernel
+            std_new: standard deviation of new kernel
         """
-        self.kernel_list.append(Kernel(h_new, s_new, var_new))
+        #h_new = 1.0
+        self.kernel_list.append(Kernel(h_new, s_new, std_new))
 
-    def compression_check(self, heigth: float, s_new: np.array, var_new: np.array):
+    def compression_check(self, heigth: float, s_new: np.array, std_new: np.array):
         """kde compression check: new kernel added in update function is tested for being to near to an existing compressed one;
          if so, merge kernels and delete added, check recursive, otherwise skip
 
         Args:
             heigth: weighted heigth of new kernel
             s_new: center of new kernel
-            var_new: variance of new kernel
+            std_new: stndard deviation of new kernel
             recursive: boolean, recursion needed, default True
         """
-        if self.verbose and self.md_step%(self.update_freq*100)==0:
+        if self.verbose: #and self.md_step%(self.update_freq*100)==0:
+            self.show_kernels()
             print("kernel to check: ", heigth, s_new)
-            print("in recursion: ", self.in_recursion)
         h_new = heigth
         if not self.merge or self.md_step == 0:
+            if self.verbose:
+                print("not merging or md_step = 0")
             return
-        threshold = self.threshold_kde * np.square(var_new)
-        self.show_kernels()
+        threshold = self.threshold_kde * std_new
+        #self.show_kernels()
         dist_values = self.calc_min_dist(s_new)
         #print("minimal distance is: ", dist_values[1])
         if np.all(dist_values[1] < threshold):
-            if self.verbose and self.md_step%(self.update_freq*100)==0:
+            if self.verbose:
                 print("kernel under threshold distance ", threshold, "in distance: ", dist_values[1])
-            h_new, s_new, var_new = self.merge_kernels(dist_values[0], h_new, s_new, var_new)
-            index_merged_kernel = dist_values[0]
-            l = len(self.kernel_list)
-            self.show_kernels()
-            #print("deleted kernel to merge")
-            self.show_kernels()
-            #print("remembered merged kernel")
+            h_new, s_new, std_new = self.merge_kernels(dist_values[0], h_new, s_new, std_new)
             if self.recursive and len(self.kernel_list) > 1:
-                self.in_recursion = True
-                if self.verbose and self.md_step%(self.update_freq*100)==0:
+                if self.verbose:
                     print("recursion active and enough kernels in list")
                     print("recursive compression check in progress")
-                self.compression_check(h_new, s_new, var_new)
+                self.compression_check(h_new, s_new, std_new)
             else:
-                if self.verbose and self.md_step%(self.update_freq*100)==0:
-                    print("break recursion because there is only one kernel in list")
-                #self.add_kernel_to_compressed(h_new, s_new, var_new)
+                if self.verbose:
+                    if self.merge:
+                        print("break recursion because there is only one kernel in list")
+                    else:
+                        print("not recursive merging")
         else:
-            if self.verbose and self.md_step%(self.update_freq*100)==0:
+            if self.verbose:# and self.md_step%(self.update_freq*100)==0:
                 print("kernel over threshold distance ", threshold, "in distance: ", dist_values[1])
-                if self.in_recursion == True:
-                    print("nothing to merge recursive")
-            self.in_recursion = False
-            #print("kernel stays in list, no merging and deleting required")
 
 
     def calc_probab_distr(self, s_prob: np.array, index_modif: int = 0, require_grad: bool = True) -> list:
@@ -164,7 +159,7 @@ class OPES(EnhancedSampling):
             prob: probability distribution for location s_prob
             deriv_prob: derivative of probability distribtuion in s_prob
         """
-        prob = 0.0
+        prob = 1.0
         deriv_prob = 0.0
         for k in range(len(self.kernel_list) - index_modif):
             prob += self.kernel_list[k].evaluate(s_prob)[0]
@@ -220,16 +215,18 @@ class OPES(EnhancedSampling):
 
         """
         prob_dist = self.calc_probab_distr(s_new)
-        weigth_coeff = np.exp(self.beta * prob_dist[0])
+        potential = self.calc_pot(prob_dist[0])
+        weigth_coeff = np.exp(self.beta * potential)
         if self.verbose:
             print("Update function called, now placing new kernel and evaluate its proberties")
             print("Probability distribution: ", prob_dist)
+            print("potential is: ", potential)
             print("weigth coefficient is: ", weigth_coeff)
         self.sum_weights += weigth_coeff
         self.sum_weights_square += weigth_coeff * weigth_coeff
         self.n_eff = np.square(self.sum_weights) / self.sum_weights_square
         sigma_i =  self.sigma_0 * np.power((self.n_eff * (self.ncoords + 2)/4), -1/(self.ncoords + 4))
-        height = weigth_coeff #* np.prod(self.sigma_0 / sigma_i)
+        height = weigth_coeff * np.prod(self.sigma_0 / sigma_i)
         self.add_kernel_to_compressed(height, s_new, sigma_i)
         if self.approx_norm:
             self.norm_factor = self.calc_norm_factor()
@@ -240,7 +237,7 @@ class OPES(EnhancedSampling):
     def show_kernels(self):
         """for testing print kernels
         """
-        if self.verbose and self.md_step%(self.update_freq*100)==0:
+        if self.verbose: #and self.md_step%(self.update_freq*100)==0:
             print("kernels: ", [k.height for k in self.kernel_list],[k.center for k in self.kernel_list],[k.sigma for k in self.kernel_list])
         else:
             pass
@@ -260,6 +257,10 @@ class OPES(EnhancedSampling):
         if md_state.step%self.update_freq == 0:
             #if self.verbose and self.md_step%(self.update_freq*100)==0:
             #    print("step_bias adds new kernel with", s_new)
+            if self.verbose:
+                print("sum weights is: ", self.sum_weights)
+                print("norm_factor is:" , self.norm_factor)
+                print("gamma prefactor, epsilon and beta: ", self.gamma_prefac, self.epsilon, self.beta)
             self.update_kde(s_new)
         prob_dist, deriv_prob_dist = self.calc_probab_distr(s_new)
         if self.verbose and self.md_step%(self.update_freq*100)==0:

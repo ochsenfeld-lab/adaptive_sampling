@@ -164,12 +164,12 @@ class Kernel():
         gauss_grad = -self.height * np.exp(-0.5 * np.square(s_diff/self.sigma)) * (s_diff/self.sigma)
         return gauss_value, gauss_grad
 
-def gaussian_calc(s: np.array, kernel_var: np.array, s_new: np.array, periodicity: list = [None], requires_grad: bool = False) -> list:
+def gaussian_calc(s: np.array, kernel_std: np.array, s_new: np.array, periodicity: list = [None], requires_grad: bool = False) -> list:
     """calculate the potential from a deployed gaussian and if needed the derivative
     
     Args:
         s: coordinates of gaussian center
-        kernel_var: variance of gaussian
+        kernel_std: standard deviation of gaussian
         s_new: location in which potential is wanted
         periodicity: periodicity of CV
         requires_grad: default False, decides, if derivative of gaussian is needed
@@ -182,20 +182,20 @@ def gaussian_calc(s: np.array, kernel_var: np.array, s_new: np.array, periodicit
     s_diff = s - s_new
     for i,p in enumerate(periodicity):
         s_diff[i] = correct_periodicity(s_diff[i], p)
-    G = h * np.exp((-1./2.) * np.sum(np.square(s_diff/kernel_var)))
+    G = h * np.exp((-1./2.) * np.sum(np.square(s_diff/kernel_std)))
     if requires_grad == False:
         return G, None
     else:
-        delta_G = -h * np.exp((-1./2.) * np.square(s_diff/kernel_var)) * (s_diff/kernel_var)
+        delta_G = -h * np.exp((-1./2.) * np.square(s_diff/kernel_std)) * (s_diff/kernel_std)
         return G, delta_G
 
-def distance_calc(s_new: np.array, s_old: np.array, kernel_var: np.array, periodicity: list = [None]) -> float:
+def distance_calc(s_new: np.array, s_old: np.array, kernel_std: np.array, periodicity: list = [None]) -> float:
     """calculate distance between a deployed gaussian and location if interest
 
     Args:
         s_new: location of interest, sampling point
         s_old: gaussian center
-        kernel_var: variance of gaussian
+        kernel_std: standard deviation of gaussian
         periodicity: list of lower and upper boundary
     
     Returns:
@@ -207,7 +207,7 @@ def distance_calc(s_new: np.array, s_old: np.array, kernel_var: np.array, period
     #print(s_diff)
     for i,p in enumerate(periodicity):
         s_diff[i] = correct_periodicity(s_diff[i], p)
-    d = np.sqrt(np.sum(np.square(s_diff/kernel_var)))
+    d = np.sqrt(np.sum(np.square(s_diff/kernel_std)))
     return d
 
 

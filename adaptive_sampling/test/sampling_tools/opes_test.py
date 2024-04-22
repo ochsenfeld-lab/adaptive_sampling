@@ -69,12 +69,14 @@ def test_kde_2D():
 
 print("initiate 1D Test")
 OPES1 = OPES(0.1, four_particles(), [["distance", [0,1], 0,0,0]], merge_kernels=True, approximate_norm=False,verbose=True)
-#OPES1.update_kde(np.array([1.1]))
+OPES1.update_kde(np.array([1.1]))
+OPES1.md_step = 1
+print(OPES1.md_step)
 #OPES1.update_kde(np.array([1.25]))
 #OPES1.update_kde(np.array([1.11]))
 #OPES1.update_kde(np.array([1.124]))
 #OPES1.update_kde(np.array([1.214]))
 #OPES1.update_kde(np.array([1.123]))
 #OPES1.update_kde(np.array([1.342]))
-#OPES1.step_bias()
+OPES1.step_bias()
 print("1D Test successful")
