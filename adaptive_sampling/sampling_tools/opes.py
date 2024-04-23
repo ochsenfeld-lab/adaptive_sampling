@@ -11,7 +11,7 @@ class OPES(EnhancedSampling):
         kernel_var: initial variance of first kernel
         threshold_kde: treshold distance for kde algorithm to trigger merging of kernels
         energy_barr: free energy barrier that the bias should help to overcome [kJ/mol]
-        update_freq: interval of md steps in which new kernels should be placed
+        update_freq: interval of md steps in which new kernels should be 
         approximate_norm: toggel approximation of norm factor
         merge_kernels: enables merging
         recursion_merge: enables recursive merging
@@ -42,6 +42,10 @@ class OPES(EnhancedSampling):
         self.prob_dist = 1.0
         self.sum_weights = 1.0
         self.sum_weights_square = 1.0
+        self.output_sum_weigths = []
+        self.output_sum_weigths_square = []
+        self.output_norm_factor = []
+        self.output_bias_pot = []
         s, _ = self.get_cv(**kwargs)
         self.kernel_list = [] #[Kernel(1.0, s, kernel_var)]
         self.sigma_0 = kernel_std
@@ -242,8 +246,16 @@ class OPES(EnhancedSampling):
         else:
             pass
 
-    def step_bias(self, **kwargs):
-        """pulls sampling data and CV, drops a gaussian every Udate_freq MD-steps, calculates the bias force
+    def step_bias(
+        self, 
+        write_output: bool = True, 
+        write_traj: bool = True, 
+        output_file: str = 'opes.out',
+        traj_file: str = 'CV_traj.dat', 
+        restart_file: str = 'restart_opes',
+        **kwargs
+    ):
+        """Applies OPES to MD: pulls sampling data and CV, drops a gaussian every Udate_freq MD-steps, calculates the bias force
 
         Args:
             s_new: sampling point
@@ -251,17 +263,21 @@ class OPES(EnhancedSampling):
         Returns:
             bias_force: bias_force on location in CV space in atomic units
         """
+
+        # load md data
         md_state = self.the_md.get_sampling_data()
         (s_new, delta_s_new) = self.get_cv(**kwargs)
         self.md_step = md_state.step
+
+        # call update function to place kernel
         if md_state.step%self.update_freq == 0:
-            #if self.verbose and self.md_step%(self.update_freq*100)==0:
-            #    print("step_bias adds new kernel with", s_new)
             if self.verbose:
                 print("sum weights is: ", self.sum_weights)
                 print("norm_factor is:" , self.norm_factor)
                 print("gamma prefactor, epsilon and beta: ", self.gamma_prefac, self.epsilon, self.beta)
             self.update_kde(s_new)
+
+        # calculate values
         prob_dist, deriv_prob_dist = self.calc_probab_distr(s_new)
         if self.verbose and self.md_step%(self.update_freq*100)==0:
             self.show_kernels()
@@ -272,9 +288,30 @@ class OPES(EnhancedSampling):
         for i in range(self.ncoords):
             bias_force += forces[i] * delta_s_new[i]
         bias_force = bias_force / kJ_to_kcal / atomic_to_kJmol
-        #print("the bias force is: ",  bias_force)
+
+        # save values for traj
+        self.traj = np.append(self.traj, [s_new], axis=0)
+        self.epot.append(md_state.epot)
+        self.temp.append(md_state.temp)
+        self.output_bias_pot.append(self.potential)
+        self.output_sum_weigths.append(self.sum_weights)
+        self.output_sum_weigths_square.append(self.sum_weights_square)
+        self.output_norm_factor.append(self.norm_factor)
+
+
+        # write output
+        if md_state.step % self.out_freq == 0:
+
+            if write_traj:
+                self.write_traj(filename=traj_file)
+
+            if write_output:
+                #self.get_pmf()
+                #self.write_output(filename=output_file)
+                self.write_restart(filename=restart_file)
         return bias_force
     
+
     def calculate_exact_norm_factor(self):
         S = self.sum_weights
         N = len(self.kernel_list)
@@ -297,16 +334,65 @@ class OPES(EnhancedSampling):
         for i in range(len(self.grid[0])):
             for k in self.kernel_list:
                 P[i] += k.evaluate(self.grid[0][i])[0]
-        pmf = self.gamma_prefac / self.beta * np.log(P/self.norm_factor + self.epsilon)
+        bias_pot = self.gamma_prefac / self.beta * np.log(P/self.norm_factor + self.epsilon)
+        pmf = bias_pot/-self.gamma_prefac
+        pmf -= pmf.min()
+        print(pmf)
 
     def shared_bias(self):
         pass
 
-    def write_restart(self):
-        pass
+    def write_restart(self, filename: str="restart_opes"):
+        """write restart file
 
-    def restart(self):
-        pass
+        Args:
+            filename: name of restart file
+        """
+        self._write_restart(
+            filename=filename,
+            sum_weigths=self.sum_weights,
+            sum_weigths_square = self.sum_weights_square,
+            norm_factor = self.norm_factor,
+            heigth = [k.height for k in self.kernel_list],
+            center = [k.center for k in self.kernel_list],
+            sigma = [k.sigma for k in self.kernel_list]
+        )
 
-    def write_traj(self):
-        pass
+    def restart(self, filename: str = "restart_wtmeabf", restart_ext_sys: bool=False):
+        """restart from restart file
+
+        Args:
+            filename: name of restart file
+            restart_ext_sys: restart coordinates and momenta of extended system
+        """
+        try:
+            data = np.load(filename + ".npz", allow_pickle=True)
+        except:
+            raise OSError(f" >>> fatal error: restart file {filename}.npz not found!")
+
+        self.sum_weights = float(data["sum_weigths"])
+        self.sum_weights_square = float(data["sum_weigths_square"])
+        self.norm_factor = float(data["norm_factor"])
+        self.kernel_list = [Kernel(heigth, center, sigma) for heigth, center, sigma in zip(data['heigth'], data['center'], data['sigma'])]
+
+
+        if self.verbose:
+            print(f" >>> Info: Adaptive sampling restartet from {filename}!")
+
+    def write_traj(self, filename: str = 'CV_traj.dat'):
+        """save trajectory for post-processing"""
+
+        data = {}
+        data["Epot [H]"] = self.epot
+        data["T [K]"] = self.temp
+        data["Bias pot"] = self.output_bias_pot
+
+        self._write_traj(data, filename=filename)
+
+        # reset trajectories to save memory
+        self.traj = np.array([self.traj[-1]])
+        self.epot = [self.epot[-1]]
+        self.temp = [self.temp[-1]]
+        self.output_bias_pot = [self.output_bias_pot[-1]]
+
+
