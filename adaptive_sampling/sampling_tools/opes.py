@@ -40,8 +40,8 @@ class OPES(EnhancedSampling):
         self.temperature = self.equil_temp
         self.epsilon = np.exp(((-1) * self.beta * self.energy_barr)/self.gamma_prefac)
         self.prob_dist = 1.0
-        self.sum_weights = 1.0
-        self.sum_weights_square = 1.0
+        self.sum_weights = np.power(self.epsilon, self.gamma_prefac)
+        self.sum_weights_square = self.sum_weights * self.sum_weights
         self.output_sum_weigths = []
         self.output_sum_weigths_square = []
         self.output_norm_factor = []
