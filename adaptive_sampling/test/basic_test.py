@@ -18,3 +18,10 @@ Test1 = Test(dimension=5)
 print(Test1.dimension)
 
 print(6/2/3)
+
+x1 = np.arange(9.0).reshape((3,3))
+x2 = np.ones((3))
+x2 *= 2
+print(x1)
+print(x2)
+print(np.divide(x1,x2))
