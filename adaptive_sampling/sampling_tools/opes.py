@@ -107,7 +107,9 @@ class OPES(EnhancedSampling):
         self.kernel_height.append(h_merge)
         self.kernel_center.append(s_merge)
         self.kernel_sigma.append(np.sqrt(var_merge))
-        del self.kernel_list[kernel_min_ind]
+        del self.kernel_height[kernel_min_ind]
+        del self.kernel_center[kernel_min_ind]
+        del self.kernel_sigma[kernel_min_ind]
         if self.verbose:
             print("merge successful: ")
             self.show_kernels()
@@ -124,18 +126,16 @@ class OPES(EnhancedSampling):
             std_new: stndard deviation of new kernel
             recursive: boolean, recursion needed, default True
         """
-        print("Kernel Center Test!!:",np.asarray(self.kernel_center)[0:-1])
-        #if len(self.kernel_center)>0:
-        print(s_new)
-        #s_diff = np.absolute(s_new - np.asarray(self.kernel_center)[0:-1])
-        #else:
-        s_diff = np.absolute(s_new - np.asarray(self.kernel_center))
+        #print("Kernel Center Test!!:",np.asarray(self.kernel_center)[0:-1,:])
+        s_diff = np.absolute(s_new - np.asarray(self.kernel_center)[0:-1,:])
+        #print("S DIFF IST: ",s_diff)
         #if len(s_diff)>0:
         for i,p in enumerate(self.periodicity[0:-1]):
             s_diff[i] = correct_periodicity(s_diff[i], p)
-        distance = np.sqrt(np.sum(np.square(np.divide(s_diff, self.kernel_sigma)), axis=1))
-        kernel_min_ind = np.argmin(distance)
-        min_distance = distance[kernel_min_ind]
+        distance = np.sqrt(np.sum(np.square(np.divide(s_diff, np.asarray(self.kernel_sigma)[0:-1,:])), axis=1))
+        if len(distance) > 0:
+            kernel_min_ind = np.argmin(distance)
+            min_distance = distance[kernel_min_ind]
         if self.verbose:
             print("calculated distances are: ", distance)
             #print("kernel with minimal distance is ", kernel_min_ind+1, "in ", distance[kernel_min_ind])
@@ -165,7 +165,7 @@ class OPES(EnhancedSampling):
                         print("not recursive merging")
         else:
             if self.verbose:# and self.md_step%(self.update_freq*100)==0:
-                print("kernel over threshold distance ", threshold, "in distance: ", dist_values[1])
+                print("kernel over threshold distance ", self.merge_threshold, "in distance: ", min_distance)
 
 
     def calc_probab_distr(self, s_prob: np.array, require_grad: bool = True) -> list:
@@ -209,13 +209,13 @@ class OPES(EnhancedSampling):
         Returns:
             deriv_pot: derivative of potential for location s
         """
-        if self.verbose:
+        if self.verbose and self.md_step%(self.update_freq*100)==0:
             print("Calculate forces function called")
             print("prob_dist: ", prob_dist, deriv_prob_dist)
             print("norm factor: ", self.norm_factor)
             print("beta: ",self.beta,"gamma prefactor: ",self.gamma_prefac,"probability dist: ",prob_dist,"norm factor: ",self.norm_factor,"epsilon: ", self.epsilon)
         deriv_pot = (self.gamma_prefac/self.beta) * (1/ ((prob_dist / self.norm_factor) + self.epsilon)) * (deriv_prob_dist / self.norm_factor)
-        if self.verbose:
+        if self.verbose and self.md_step%(self.update_freq*100)==0:
             print("derivate of pot: ", deriv_pot)
         return deriv_pot[0]
 
