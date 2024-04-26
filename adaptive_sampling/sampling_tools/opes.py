@@ -1,6 +1,4 @@
 from adaptive_sampling.sampling_tools.enhanced_sampling import EnhancedSampling
-from .utils import Kernel
-from .utils import distance_calc
 from adaptive_sampling.units import *
 from .utils import correct_periodicity
 import numpy as np
@@ -9,12 +7,11 @@ class OPES(EnhancedSampling):
     """on-the-fly probability enhanced sampling
     
     Args:
-        kernel_var: initial variance of first kernel
-        threshold_kde: treshold distance for kde algorithm to trigger merging of kernels
+        kernel_std: standard deviation of first kernel
         energy_barr: free energy barrier that the bias should help to overcome [kJ/mol]
         update_freq: interval of md steps in which new kernels should be 
-        approximate_norm: toggel approximation of norm factor
-        merge_kernels: enables merging
+        approximate_norm: enables approximation of norm factor
+        merge_threshold: threshold distance for kde-merging in units of std, "np.inf" disables merging
         recursion_merge: enables recursive merging
         
     """
@@ -22,268 +19,47 @@ class OPES(EnhancedSampling):
         self,
         kernel_std: np.array,
         *args,
-        threshold_kde: float = 1.0,
         energy_barr: float = 20.0,
-        update_freq: int = 5000,
+        update_freq: int = 1000,
         approximate_norm: bool = False,
         merge_threshold: bool = np.inf,
         recursion_merge: bool = False,
         **kwargs
     ):
         super().__init__(*args, **kwargs)
+        # Constants
         self.energy_barr = energy_barr * kJ_to_kcal
         self.beta = 1/(self.equil_temp * kB_in_atomic * atomic_to_kJmol * kJ_to_kcal)
-        self.threshold_kde = threshold_kde
         self.norm_factor = 1.0
         self.exact_norm_factor = 0.0
         self.gamma = self.beta * self.energy_barr
         self.gamma_prefac = 1 - 1/self.gamma
         self.temperature = self.equil_temp
         self.epsilon = np.exp(((-1) * self.beta * self.energy_barr)/self.gamma_prefac)
+        # Initial values
         self.prob_dist = 1.0
         self.deriv_prob_dist = 0.0
         self.sum_weights = np.power(self.epsilon, self.gamma_prefac)
         self.sum_weights_square = self.sum_weights * self.sum_weights
-        self.output_sum_weigths = []
-        self.output_sum_weigths_square = []
-        self.output_norm_factor = []
-        self.output_bias_pot = []
-        s, _ = self.get_cv(**kwargs)
-        #self.kernel_list = []
-        self.kernel_height = []
-        self.kernel_center = []
-        self.kernel_sigma = []
         self.sigma_0 = kernel_std
+        # Simulation Parameters
         self.update_freq = update_freq
-        self.n_step = 0
         self.approx_norm = approximate_norm
         self.merge = False if merge_threshold == np.inf else True
         self.merge_threshold = merge_threshold
         self.recursive = recursion_merge
         self.md_step = 0
+        s, _ = self.get_cv(**kwargs)
+        # Kernels
+        self.kernel_height = []
+        self.kernel_center = []
+        self.kernel_sigma = []
+        # Output
+        self.output_sum_weigths = []
+        self.output_sum_weigths_square = []
+        self.output_norm_factor = []
+        self.output_bias_pot = []
 
-
-
-    def calc_min_dist(self,s_new: np.array) -> tuple:
-        """calculate all distance between sample point and deployed gaussians and find the minimal
-
-        Args:
-            s_new: current cv point
-
-        Returns:
-            kernel_min_ind: index of nearest gaussian with respect to initialized lists
-            distance[kernel_min_ind]: distance to nearest gaussian as float
-        """
-        if not hasattr(s_new, "__len__"):
-            raise ValueError("Wrong Input: Not array!")
-        s_diff = np.absolute(s_new - np.asarray(self.kernel_center))
-        for i,p in enumerate(self.periodicity):
-            s_diff[i] = correct_periodicity(s_diff[i], p)
-        distance = np.sqrt(np.sum(np.square(s_diff/self.kernel_sigma)))
-        kernel_min_ind = distance.index(min(distance))
-        #print("kernel with minimal distance is ", kernel_min_ind+1, "in ", distance[kernel_min_ind])
-        return kernel_min_ind, distance[kernel_min_ind]
-    
-    def merge_kernels(self, kernel_min_ind: int, h_new: float, s_new: np.array, std_new: np.array) -> list:
-        """merge two kernels calculating the characteristics of a new one with respect to the old ones and overwrite old one with merged
-
-        Args:
-            kernel_mind_ind: index of nearest kernel, which is to be merged
-            h_new: height of new kernel
-            s_new: center of new kernel
-            std_new: standard deviation of new kernel
-
-        Returns:
-            height, center and standard deviation of merged kernel       
-        """
-        del self.kernel_height[-1]
-        del self.kernel_center[-1]
-        del self.kernel_sigma[-1]
-        #print(kernel_min_ind)
-        #print(self.kernel_height)
-        h_merge = self.kernel_height[kernel_min_ind] + h_new
-        s_merge = (1.0/h_merge)*(self.kernel_height[kernel_min_ind] * self.kernel_center[kernel_min_ind] + h_new * s_new)
-        var_merge = (1.0/h_merge)*(self.kernel_height[kernel_min_ind] * (np.square(self.kernel_sigma[kernel_min_ind]) + np.square(self.kernel_center[kernel_min_ind])) + h_new * (np.square(std_new) + np.square(s_new))) - np.square(s_merge)
-        self.kernel_height.append(h_merge)
-        self.kernel_center.append(s_merge)
-        self.kernel_sigma.append(np.sqrt(var_merge))
-        del self.kernel_height[kernel_min_ind]
-        del self.kernel_center[kernel_min_ind]
-        del self.kernel_sigma[kernel_min_ind]
-        if self.verbose:
-            print("merge successful: ")
-            self.show_kernels()
-        return h_merge, s_merge, np.sqrt(var_merge)
-
-
-    def compression_check(self, height: float, s_new: np.array, std_new: np.array):
-        """kde compression check: new kernel added in update function is tested for being to near to an existing compressed one;
-         if so, merge kernels and delete added, check recursive, otherwise skip
-
-        Args:
-            heigth: weighted heigth of new kernel
-            s_new: center of new kernel
-            std_new: stndard deviation of new kernel
-            recursive: boolean, recursion needed, default True
-        """
-        #print("Kernel Center Test!!:",np.asarray(self.kernel_center)[0:-1,:])
-        s_diff = np.absolute(s_new - np.asarray(self.kernel_center)[0:-1,:])
-        #print("S DIFF IST: ",s_diff)
-        #if len(s_diff)>0:
-        for i,p in enumerate(self.periodicity[0:-1]):
-            s_diff[i] = correct_periodicity(s_diff[i], p)
-        distance = np.sqrt(np.sum(np.square(np.divide(s_diff, np.asarray(self.kernel_sigma)[0:-1,:])), axis=1))
-        if len(distance) > 0:
-            kernel_min_ind = np.argmin(distance)
-            min_distance = distance[kernel_min_ind]
-        if self.verbose:
-            print("calculated distances are: ", distance)
-            #print("kernel with minimal distance is ", kernel_min_ind+1, "in ", distance[kernel_min_ind])
-            #print(kernel_min_ind, min_distance)
-        if self.verbose:
-            self.show_kernels()
-            print("kernel to check: ", height, s_new)
-        h_new = height
-        if not self.merge or self.md_step == 0:
-            if self.verbose:
-                print("not merging or md_step = 0")
-            return
-        if np.all(min_distance < self.merge_threshold):
-            if self.verbose:
-                print("kernel under threshold distance ", self.merge_threshold, "in distance: ", min_distance)
-            h_new, s_new, std_new = self.merge_kernels(kernel_min_ind, h_new, s_new, std_new)
-            if self.recursive and len(self.kernel_list) > 1:
-                if self.verbose:
-                    print("recursion active and enough kernels in list")
-                    print("recursive compression check in progress")
-                self.compression_check(h_new, s_new, std_new)
-            else:
-                if self.verbose:
-                    if self.merge:
-                        print("break recursion because there is only one kernel in list")
-                    else:
-                        print("not recursive merging")
-        else:
-            if self.verbose:# and self.md_step%(self.update_freq*100)==0:
-                print("kernel over threshold distance ", self.merge_threshold, "in distance: ", min_distance)
-
-
-    def calc_probab_distr(self, s_prob: np.array, require_grad: bool = True) -> list:
-        """on the fly calculation of not normalized probability distribution
-
-        Args:
-            s_prob: location in which probability distribution shall be evaluated
-            require_grad: decides, whether derivative of probability distribution is saved
-
-        Returns:
-            prob: probability distribution for location s_prob
-            deriv_prob: derivative of probability distribtuion in s_prob
-        """
-        prob = 1.0
-        deriv_prob = 0.0
-        for k in range(len(self.kernel_list)):
-            prob += self.kernel_list[k].evaluate(s_prob)[0]
-            deriv_prob += self.kernel_list[k].evaluate(s_prob)[1]
-        #print("probability distribution is: ", deriv_prob)
-        return prob, deriv_prob
-
-
-    def calc_pot(self, prob_dist: float):
-        """calculate the potential of given location
-        
-        Args:
-            prob_dist: local probability distribution on which potential shall be calculated
-
-        Returns:
-            potential: potential for given probability distribution
-        """
-        potential = (self.gamma_prefac / self.beta) * np.log(prob_dist / self.norm_factor + self.epsilon)
-        return potential
-    
-    def calculate_forces(self, prob_dist:float, deriv_prob_dist: float):
-        """calculate the forces as derivative of potential
-
-        Args:
-            prob_dist: probability disitrbution on wanted location and its derivative 
-
-        Returns:
-            deriv_pot: derivative of potential for location s
-        """
-        if self.verbose and self.md_step%(self.update_freq*100)==0:
-            print("Calculate forces function called")
-            print("prob_dist: ", prob_dist, deriv_prob_dist)
-            print("norm factor: ", self.norm_factor)
-            print("beta: ",self.beta,"gamma prefactor: ",self.gamma_prefac,"probability dist: ",prob_dist,"norm factor: ",self.norm_factor,"epsilon: ", self.epsilon)
-        deriv_pot = (self.gamma_prefac/self.beta) * (1/ ((prob_dist / self.norm_factor) + self.epsilon)) * (deriv_prob_dist / self.norm_factor)
-        if self.verbose and self.md_step%(self.update_freq*100)==0:
-            print("derivate of pot: ", deriv_pot)
-        return deriv_pot[0]
-
-    def update_kde(self, s_new: np.array):
-        """main function in algorithm; calls compression and calculates weigths
-        
-        Args:
-            s_new: center of new gaussian
-
-        """
-        # Calculate probability
-        if len(self.kernel_center) > 0:
-            s_diff = np.absolute(s_new - np.asarray(self.kernel_center))
-            for i,p in enumerate(self.periodicity):
-                s_diff[i] = correct_periodicity(s_diff[i], p)
-            val_gaussians = np.asarray(self.kernel_height) * np.exp(-0.5 * np.sum(np.square(np.divide(s_diff, np.asarray(self.kernel_sigma))),axis=1))
-            prob_dist = np.sum(val_gaussians)
-            self.prob_dist = prob_dist
-        else:
-            prob_dist = self.prob_dist
-
-        # Calculate bias potential
-        potential = self.calc_pot(prob_dist)
-
-        # Calculate weight coefficients
-        weigth_coeff = np.exp(self.beta * potential)
-        if self.verbose:
-            print("Update function called, now placing new kernel and evaluate its proberties")
-            print("Probability distribution: ", prob_dist)
-            print("potential is: ", potential)
-            print("weigth coefficient is: ", weigth_coeff)
-        self.sum_weights += weigth_coeff
-        self.sum_weights_square += weigth_coeff * weigth_coeff
-
-        # Bandwidth rescaling
-        self.n_eff = np.square(self.sum_weights) / self.sum_weights_square
-        sigma_i =  self.sigma_0 * np.power((self.n_eff * (self.ncoords + 2)/4), -1/(self.ncoords + 4))
-        height = weigth_coeff * np.prod(self.sigma_0 / sigma_i)
-
-        # Add new Kernel at current cv point
-        self.kernel_height.append(height)
-        self.kernel_center.append(s_new)
-        self.kernel_sigma.append(sigma_i)
-
-        # Calculate normalization factor
-        s_diff = np.absolute(s_new - np.asarray(self.kernel_center))
-        for i,p in enumerate(self.periodicity):
-            s_diff[i] = correct_periodicity(s_diff[i], p)
-        val_gaussians = np.asarray(self.kernel_height) * np.exp(-0.5 * np.sum(np.square(np.divide(s_diff, np.asarray(self.kernel_sigma))),axis=1))
-
-        if self.approx_norm:
-            self.norm_factor = self.calc_norm_factor(s_new, val_gaussians)
-        else:
-            self.norm_factor = self.calculate_exact_norm_factor()
-
-        # Kernel Density Compression
-        self.compression_check(height, s_new, sigma_i)
-
-    def show_kernels(self):
-        """for testing print kernels
-        """
-        if self.verbose: #and self.md_step%(self.update_freq*100)==0:
-            print("Kernels: ")
-            print("heights ", self.kernel_height)
-            print("centers ", self.kernel_center)
-            print("sigmas ", self.kernel_sigma)
-        else:
-            pass
 
     def step_bias(
         self, 
@@ -297,8 +73,9 @@ class OPES(EnhancedSampling):
         """Applies OPES to MD: pulls sampling data and CV, drops a gaussian every Udate_freq MD-steps, calculates the bias force
 
         Args:
-            s_new: sampling point
-
+            write_output: enables output file
+            write_traj: enables traj file
+        
         Returns:
             bias_force: bias_force on location in CV space in atomic units
         """
@@ -308,14 +85,8 @@ class OPES(EnhancedSampling):
         (s_new, delta_s_new) = self.get_cv(**kwargs)
         self.md_step = md_state.step
 
-
         # Call update function to place kernel
         if md_state.step%self.update_freq == 0:
-            if self.verbose:
-                print("sum weights is: ", self.sum_weights)
-                print("norm_factor is:" , self.norm_factor)
-                print("gamma prefactor, epsilon and beta: ", self.gamma_prefac, self.epsilon, self.beta)
-                self.show_kernels()
             self.update_kde(s_new)
 
         # Calculate new probability
@@ -324,11 +95,10 @@ class OPES(EnhancedSampling):
             s_diff[i] = correct_periodicity(s_diff[i], p)
         val_gaussians = np.asarray(self.kernel_height) * np.exp(-0.5 * np.sum(np.square(np.divide(s_diff, np.asarray(self.kernel_sigma))),axis=1))
         prob_dist = np.sum(val_gaussians)
-        deriv_prob_dist = -np.asarray(self.kernel_height) * np.exp(-0.5 * np.square(np.divide(s_diff, np.asarray(self.kernel_sigma)))) * np.divide(s_diff, np.asarray(self.kernel_sigma))
+        deriv_prob_dist = -val_gaussians * np.divide(s_diff, np.asarray(self.kernel_sigma))
         self.prob_dist = prob_dist
         self.deriv_prob_dist = deriv_prob_dist
         if self.verbose and self.md_step%(self.update_freq*100)==0:
-            self.show_kernels()
             print("Probabiliy distribution: ", prob_dist, "and its derivative: ", deriv_prob_dist)
 
         # Calculate Potential
@@ -364,45 +134,254 @@ class OPES(EnhancedSampling):
 
         return bias_force
     
-    
-    def calc_norm_factor(self, s_new: np.array, val_gaussians: np.array):
-        """calculate the norm factor with respect to existing gaussians
+
+    def update_kde(
+        self, 
+        s_new: np.array
+    ):
+        
+        """main function in algorithm; calls compression and calculates weigths
+        
+        Args:
+            s_new: center of new gaussian
+
         """
+
+        # Calculate probability
+        if len(self.kernel_center) > 0:
+            s_diff = np.absolute(s_new - np.asarray(self.kernel_center))
+            for i,p in enumerate(self.periodicity):
+                s_diff[i] = correct_periodicity(s_diff[i], p)
+            val_gaussians = np.asarray(self.kernel_height) * np.exp(-0.5 * np.sum(np.square(np.divide(s_diff, np.asarray(self.kernel_sigma))),axis=0))
+            prob_dist = np.sum(val_gaussians)
+            self.prob_dist = prob_dist
+        else:
+            prob_dist = self.prob_dist
+
+        # Calculate bias potential
+        potential = self.calc_pot(prob_dist)
+
+        # Calculate weight coefficients
+        weigth_coeff = np.exp(self.beta * potential)
+        if self.verbose:
+            print("Update function called, now placing new kernel and evaluate its proberties")
+            print("Probability distribution: ", prob_dist)
+            print("potential is: ", potential)
+        self.sum_weights += weigth_coeff
+        self.sum_weights_square += weigth_coeff * weigth_coeff
+
+        # Bandwidth rescaling
+        self.n_eff = np.square(self.sum_weights) / self.sum_weights_square
+        sigma_i =  self.sigma_0 * np.power((self.n_eff * (self.ncoords + 2)/4), -1/(self.ncoords + 4))
+        height = weigth_coeff * np.prod(self.sigma_0 / sigma_i)
+
+        # Add new Kernel at current cv point
+        self.kernel_height.append(height)
+        self.kernel_center.append(s_new)
+        self.kernel_sigma.append(sigma_i)
+
+        # Calculate normalization factor
+        s_diff = np.absolute(s_new - np.asarray(self.kernel_center))
+        for i,p in enumerate(self.periodicity):
+            s_diff[i] = correct_periodicity(s_diff[i], p)
+        val_gaussians = np.asarray(self.kernel_height) * np.exp(-0.5 * np.sum(np.square(np.divide(s_diff, np.asarray(self.kernel_sigma))),axis=0))
+
+        if self.approx_norm:
+            self.norm_factor = self.calc_norm_factor(s_new, val_gaussians)
+        else:
+            self.norm_factor = self.calculate_exact_norm_factor()
+
+        # Kernel Density Compression
+        self.compression_check(height, s_new, sigma_i)
+    
+
+    def calc_pot(
+        self, 
+        prob_dist: float
+    ):
+        
+        """calculate the potential of given location
+        
+        Args:
+            prob_dist: local probability distribution on which potential shall be calculated
+
+        Returns:
+            potential: potential for given probability distribution
+        """
+
+        potential = (self.gamma_prefac / self.beta) * np.log(prob_dist / self.norm_factor + self.epsilon)
+        return potential
+    
+    
+    def calculate_forces(
+        self, 
+        prob_dist:float, 
+        deriv_prob_dist: float
+    ) -> float:
+        
+        """calculate the forces as derivative of potential
+
+        Args:
+            prob_dist: probability disitrbution on wanted location and its derivative 
+
+        Returns:
+            deriv_pot: derivative of potential for location s
+        """
+
+        deriv_pot = (self.gamma_prefac/self.beta) * (1/ ((prob_dist / self.norm_factor) + self.epsilon)) * (deriv_prob_dist / self.norm_factor)
+        if self.verbose and self.md_step%(self.update_freq*100)==0:
+            print("derivate of pot: ", deriv_pot)
+
+        return deriv_pot[0]
+
+
+    def calc_norm_factor(
+        self, 
+        val_gaussians: np.array
+    ):
+        
+        """approximatec the norm factor with respect to existing gaussians by adding the change for newly added kernel
+
+        Args:
+            val_gaussians: value of all gaussians at location of sampling
+
+        Returns:
+            approximation formula for adding one summed change in norm factor to previous one
+        """
+
         S = self.sum_weights
         N = len(self.kernel_center)
         sum_gaussians = np.sum(val_gaussians)
-        if self.verbose and self.md_step%(self.update_freq*100)==0:
-            print("Calculate exact norm factor function called")
-            self.show_kernels()
-            print("sum over the gaussians gives: ",sum_gaussians)
         delta_norm_factor = (1/(S * N)) * sum_gaussians
+
         return self.norm_factor + delta_norm_factor
 
-    def calculate_exact_norm_factor(self):
+
+    def calculate_exact_norm_factor(
+        self
+    ):
+
+        """calculate exact norm factor from all compressed kernel
+        
+        Returns:
+            exact norm factor
+        """
+
         S = self.sum_weights
         N = len(self.kernel_center)
         sum_sum_gaussians = 0.0
+
+        # Loop over all Kernels
         for s in self.kernel_center:
             s_diff = np.absolute(s - np.asarray(self.kernel_center))
+
+            # Correct Periodicity of spatial distances
             for i,p in enumerate(self.periodicity):
                 s_diff[i] = correct_periodicity(s_diff[i], p)
-            val_gaussians = np.asarray(self.kernel_height) * np.exp(-0.5 * np.sum(np.square(np.divide(s_diff, np.asarray(self.kernel_sigma))),axis=1))
+
+            # Calculate values of Gaussians at center of kernel currently in loop and sum them
+            val_gaussians = np.asarray(self.kernel_height) * np.exp(-0.5 * np.sum(np.square(np.divide(s_diff, np.asarray(self.kernel_sigma))),axis=0))
             sum_gaussians =np.sum(val_gaussians)
             sum_sum_gaussians += sum_gaussians
         
-        if self.verbose and self.md_step%(self.update_freq*100)==0:
-            print("Calculate exact norm factor function called")
-            self.show_kernels()
-            print("double sum over the gaussians gives: ",sum_sum_gaussians)
         norm_factor = (1/(S * N)) * sum_sum_gaussians
-        return norm_factor
-        
-    
-    def get_pmf(self):
-        pass
 
-    def shared_bias(self):
-        pass
+        return norm_factor
+
+
+    def compression_check(
+        self, 
+        height: float, 
+        s_new: np.array, 
+        std_new: np.array
+    ):
+        
+        """kde compression check: new kernel added in update function is tested for being to near to an existing compressed one;
+         if so, merge kernels and delete added, check recursive, otherwise skip
+
+        Args:
+            heigth: weighted heigth of new kernel
+            s_new: center of new kernel
+            std_new: stndard deviation of new kernel
+            recursive: boolean, recursion needed, default True
+        """
+
+        # Calculate spatial distances of sampling point and all kernel centers and correct their periodicities
+        s_diff = np.absolute(s_new - np.asarray(self.kernel_center)[0:-1,:])
+        for i,p in enumerate(self.periodicity[0:-1]):
+            s_diff[i] = correct_periodicity(s_diff[i], p)
+        distance = np.sqrt(np.sum(np.square(np.divide(s_diff, np.asarray(self.kernel_sigma)[0:-1,:])), axis=1))
+        if len(distance) > 0:
+            kernel_min_ind = np.argmin(distance)
+            min_distance = distance[kernel_min_ind]
+
+        # Check if merging is enabled
+        if not self.merge or self.md_step == 0:
+            if self.verbose:
+                print("not merging or md_step = 0")
+            return
+        
+        # Check if minimal distance requires merging
+        if np.all(min_distance < self.merge_threshold):
+            if self.verbose:
+                print("kernel under threshold distance ", self.merge_threshold, "in distance: ", min_distance)
+
+            # Merge
+            h_new, s_new, std_new = self.merge_kernels(kernel_min_ind, height, s_new, std_new)
+
+            # Recursive merging
+            if self.recursive and len(self.kernel_list) > 1:
+                if self.verbose:
+                    print("recursive compression check in progress")
+                self.compression_check(h_new, s_new, std_new)
+            else:
+                if self.verbose:
+                    print("not recursive merging")
+        else:
+            if self.verbose:
+                print("kernel over threshold distance ", self.merge_threshold, "in distance: ", min_distance)
+
+
+    def merge_kernels(
+        self, 
+        kernel_min_ind: int, 
+        h_new: float, 
+        s_new: np.array, 
+        std_new: np.array
+    ) -> list:
+        
+        """merge two kernels calculating the characteristics of a new one with respect to the old ones and overwrite old one with merged
+
+        Args:
+            kernel_mind_ind: index of nearest kernel, which is to be merged
+            h_new: height of new kernel
+            s_new: center of new kernel
+            std_new: standard deviation of new kernel
+
+        Returns:
+            height, center and standard deviation of merged kernel       
+        """
+
+        # Delete added kernel
+        del self.kernel_height[-1]
+        del self.kernel_center[-1]
+        del self.kernel_sigma[-1]
+
+        # Calculate properties of merged kernel and add it
+        h_merge = self.kernel_height[kernel_min_ind] + h_new
+        s_merge = (1.0/h_merge)*(self.kernel_height[kernel_min_ind] * self.kernel_center[kernel_min_ind] + h_new * s_new)
+        var_merge = (1.0/h_merge)*(self.kernel_height[kernel_min_ind] * (np.square(self.kernel_sigma[kernel_min_ind]) + np.square(self.kernel_center[kernel_min_ind])) + h_new * (np.square(std_new) + np.square(s_new))) - np.square(s_merge)
+        self.kernel_height.append(h_merge)
+        self.kernel_center.append(s_merge)
+        self.kernel_sigma.append(np.sqrt(var_merge))
+
+        # Delete previously existing kernel
+        del self.kernel_height[kernel_min_ind]
+        del self.kernel_center[kernel_min_ind]
+        del self.kernel_sigma[kernel_min_ind]
+
+        return h_merge, s_merge, np.sqrt(var_merge)
+
 
     def write_restart(self, filename: str="restart_opes"):
         """write restart file
@@ -420,29 +399,42 @@ class OPES(EnhancedSampling):
             sigma = self.kernel_sigma
         )
 
-    def restart(self, filename: str = "restart_wtmeabf", restart_ext_sys: bool=False):
+
+    def restart(
+        self, 
+        filename: str = "restart_wtmeabf"
+    ):
+        
         """restart from restart file
 
         Args:
             filename: name of restart file
-            restart_ext_sys: restart coordinates and momenta of extended system
         """
+
         try:
             data = np.load(filename + ".npz", allow_pickle=True)
         except:
             raise OSError(f" >>> fatal error: restart file {filename}.npz not found!")
 
+        # Load dicitionary entries from restart file
         self.sum_weights = float(data["sum_weigths"])
         self.sum_weights_square = float(data["sum_weigths_square"])
         self.norm_factor = float(data["norm_factor"])
-        self.kernel_list = [Kernel(heigth, center, sigma) for heigth, center, sigma in zip(data['heigth'], data['center'], data['sigma'])]
-
+        self.kernel_height = data["height"]
+        self.kernel_center = data["center"]
+        self.kernel_sigma = data["sigma"]
 
         if self.verbose:
             print(f" >>> Info: Adaptive sampling restartet from {filename}!")
 
-    def write_traj(self, filename: str = 'CV_traj.dat'):
-        """save trajectory for post-processing"""
+
+    def write_traj(
+        self, 
+        filename: str = 'CV_traj.dat'
+    ):
+        
+        """save trajectory for post-processing
+        """
 
         data = {}
         data["Epot [H]"] = self.epot
@@ -451,10 +443,34 @@ class OPES(EnhancedSampling):
 
         self._write_traj(data, filename=filename)
 
-        # reset trajectories to save memory
+        # Reset trajectories to save memory
         self.traj = np.array([self.traj[-1]])
         self.epot = [self.epot[-1]]
         self.temp = [self.temp[-1]]
         self.output_bias_pot = [self.output_bias_pot[-1]]
+
+
+    def show_kernels(
+        self
+    ):
+        
+        """for testing print kernels
+        """
+
+        if self.verbose: #and self.md_step%(self.update_freq*100)==0:
+            print("Kernels: ")
+            print("heights ", self.kernel_height)
+            print("centers ", self.kernel_center)
+            print("sigmas ", self.kernel_sigma)
+        else:
+            pass
+        
+    
+    def get_pmf(self):
+        pass
+
+    def shared_bias(self):
+        pass
+
 
 

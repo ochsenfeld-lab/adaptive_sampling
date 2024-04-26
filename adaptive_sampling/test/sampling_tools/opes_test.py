@@ -1,9 +1,7 @@
-from adaptive_sampling.sampling_tools.utils import gaussian_calc
-from adaptive_sampling.sampling_tools.utils import distance_calc
-from adaptive_sampling.sampling_tools.utils import correct_periodicity
-from adaptive_sampling.sampling_tools.opes import OPES
-from adaptive_sampling.interface.sampling_data import SamplingData
 import numpy as np
+from adaptive_sampling.sampling_tools.utils import correct_periodicity
+from adaptive_sampling.sampling_tools.opes import *
+from adaptive_sampling.interface.sampling_data import SamplingData
 
 class MD:
     def __init__(self, mass, coords):
@@ -68,7 +66,7 @@ def test_kde_2D():
 #print("2D Test successful")
 
 print("initiate 1D Test")
-OPES1 = OPES(0.1, four_particles(), [["distance", [0,1], 0,0,0]], merge_kernels=True, merge_threshold = 1.0, approximate_norm=False,verbose=True)
+OPES1 = OPES([0.1,0.1], four_particles(), [["distance", [0,1], 0,0,0]], merge_kernels=True, merge_threshold = 1.0, approximate_norm=False,verbose=True)
 OPES1.update_kde(np.array([1.1]))
 OPES1.md_step = 1
 print(OPES1.md_step)
