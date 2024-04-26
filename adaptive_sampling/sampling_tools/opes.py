@@ -22,7 +22,7 @@ class OPES(EnhancedSampling):
         energy_barr: float = 20.0,
         update_freq: int = 1000,
         approximate_norm: bool = False,
-        merge_threshold: bool = np.inf,
+        merge_threshold: float = 1.0,
         recursion_merge: bool = False,
         **kwargs
     ):
@@ -30,8 +30,6 @@ class OPES(EnhancedSampling):
         # Constants
         self.energy_barr = energy_barr * kJ_to_kcal
         self.beta = 1/(self.equil_temp * kB_in_atomic * atomic_to_kJmol * kJ_to_kcal)
-        self.norm_factor = 1.0
-        self.exact_norm_factor = 0.0
         self.gamma = self.beta * self.energy_barr
         self.gamma_prefac = 1 - 1/self.gamma
         self.temperature = self.equil_temp
@@ -39,6 +37,8 @@ class OPES(EnhancedSampling):
         # Initial values
         self.prob_dist = 1.0
         self.deriv_prob_dist = 0.0
+        self.norm_factor = 1.0
+        self.exact_norm_factor = 0.0
         self.sum_weights = np.power(self.epsilon, self.gamma_prefac)
         self.sum_weights_square = self.sum_weights * self.sum_weights
         self.sigma_0 = kernel_std
@@ -79,7 +79,7 @@ class OPES(EnhancedSampling):
         Returns:
             bias_force: bias_force on location in CV space in atomic units
         """
-
+        
         # Load md data
         md_state = self.the_md.get_sampling_data()
         (s_new, delta_s_new) = self.get_cv(**kwargs)
@@ -90,16 +90,23 @@ class OPES(EnhancedSampling):
             self.update_kde(s_new)
 
         # Calculate new probability
-        s_diff = np.absolute(s_new - np.asarray(self.kernel_center).T)
-        for i,p in enumerate(self.periodicity):
-            s_diff[i] = correct_periodicity(s_diff[i], p)
-        val_gaussians = np.asarray(self.kernel_height) * np.exp(-0.5 * np.sum(np.square(np.divide(s_diff, np.asarray(self.kernel_sigma))),axis=1))
+        val_gaussians = self.get_val_gaussian(s_new)
         prob_dist = np.sum(val_gaussians)
-        deriv_prob_dist = -val_gaussians * np.divide(s_diff, np.asarray(self.kernel_sigma))
+
+        s_diff = s_new - np.asarray(self.kernel_center)
+        # Correct Periodicity of spatial distances
+        for i in range(self.ncoords):
+            s_diff[i] = correct_periodicity(s_diff[i], self.periodicity[i])
+
+        deriv_prob_dist = np.sum(-val_gaussians * np.divide(s_diff, np.asarray(self.kernel_sigma)).T, axis=1)
+        #np.sum(-np.asarray(self.kernel_height) * np.exp(-0.5 * np.square(np.divide(s_diff, np.asarray(self.kernel_sigma)))) * np.divide(s_diff, np.asarray(self.kernel_sigma)).T, axis=1)
         self.prob_dist = prob_dist
         self.deriv_prob_dist = deriv_prob_dist
-        if self.verbose and self.md_step%(self.update_freq*100)==0:
+        if self.verbose and self.md_step%(self.update_freq)==0:
+            self.show_kernels()
             print("Probabiliy distribution: ", prob_dist, "and its derivative: ", deriv_prob_dist)
+            print("val gaussians =  ", val_gaussians)
+
 
         # Calculate Potential
         self.potential = self.calc_pot(prob_dist)
@@ -134,6 +141,31 @@ class OPES(EnhancedSampling):
 
         return bias_force
     
+    def get_val_gaussian(
+        self,
+        s: np.array
+    ) -> np.array: 
+        
+        """get the values of all gaussians at point s_new
+        
+        Args:
+            s = point of interest
+            
+        Returns:
+            val_gaussians: array of all values of all kernels at s
+        """
+
+        s_diff = s - np.asarray(self.kernel_center)
+
+        # Correct Periodicity of spatial distances
+        for i in range(self.ncoords):
+            s_diff[i] = correct_periodicity(s_diff[i], self.periodicity[i])
+
+        # Calculate values of Gaussians at center of kernel currently in loop and sum them
+        val_gaussians = np.asarray(self.kernel_height) * \
+            np.exp(-0.5 * np.sum(np.square(np.divide(s_diff, np.asarray(self.kernel_sigma))),axis=1))
+
+        return val_gaussians
 
     def update_kde(
         self, 
@@ -148,15 +180,16 @@ class OPES(EnhancedSampling):
         """
 
         # Calculate probability
-        if len(self.kernel_center) > 0:
-            s_diff = np.absolute(s_new - np.asarray(self.kernel_center))
-            for i,p in enumerate(self.periodicity):
-                s_diff[i] = correct_periodicity(s_diff[i], p)
-            val_gaussians = np.asarray(self.kernel_height) * np.exp(-0.5 * np.sum(np.square(np.divide(s_diff, np.asarray(self.kernel_sigma))),axis=0))
-            prob_dist = np.sum(val_gaussians)
-            self.prob_dist = prob_dist
-        else:
-            prob_dist = self.prob_dist
+        if len(self.kernel_center) == 0:
+            self.kernel_height.append(1.0)
+            self.kernel_center.append(s_new)
+            self.kernel_sigma.append(self.sigma_0)
+            kernel_placed = True
+        else: 
+            kernel_placed = False
+            
+        prob_dist = np.sum(self.get_val_gaussian(s_new))
+        self.prob_dist = prob_dist
 
         # Calculate bias potential
         potential = self.calc_pot(prob_dist)
@@ -171,28 +204,27 @@ class OPES(EnhancedSampling):
         self.sum_weights_square += weigth_coeff * weigth_coeff
 
         # Bandwidth rescaling
-        self.n_eff = np.square(self.sum_weights) / self.sum_weights_square
+        self.n_eff = np.square(1+self.sum_weights) / (1+self.sum_weights_square)
         sigma_i =  self.sigma_0 * np.power((self.n_eff * (self.ncoords + 2)/4), -1/(self.ncoords + 4))
         height = weigth_coeff * np.prod(self.sigma_0 / sigma_i)
 
         # Add new Kernel at current cv point
-        self.kernel_height.append(height)
-        self.kernel_center.append(s_new)
-        self.kernel_sigma.append(sigma_i)
+        if not kernel_placed:
+            self.kernel_height.append(height)
+            self.kernel_center.append(s_new)
+            self.kernel_sigma.append(sigma_i)
 
         # Calculate normalization factor
-        s_diff = np.absolute(s_new - np.asarray(self.kernel_center))
-        for i,p in enumerate(self.periodicity):
-            s_diff[i] = correct_periodicity(s_diff[i], p)
-        val_gaussians = np.asarray(self.kernel_height) * np.exp(-0.5 * np.sum(np.square(np.divide(s_diff, np.asarray(self.kernel_sigma))),axis=0))
 
         if self.approx_norm:
-            self.norm_factor = self.calc_norm_factor(s_new, val_gaussians)
+            val_gaussians = self.get_val_gaussian(s_new)
+            self.norm_factor = self.calc_norm_factor(val_gaussians)
         else:
             self.norm_factor = self.calculate_exact_norm_factor()
 
-        # Kernel Density Compression
-        self.compression_check(height, s_new, sigma_i)
+        # Kernel Density 
+        if len(self.kernel_center) > 1:
+            self.compression_check(height, s_new, sigma_i)
     
 
     def calc_pot(
@@ -228,11 +260,12 @@ class OPES(EnhancedSampling):
             deriv_pot: derivative of potential for location s
         """
 
-        deriv_pot = (self.gamma_prefac/self.beta) * (1/ ((prob_dist / self.norm_factor) + self.epsilon)) * (deriv_prob_dist / self.norm_factor)
+        deriv_pot = (self.gamma_prefac/self.beta) *\
+              (1/ ((prob_dist / self.norm_factor) + self.epsilon)) * (deriv_prob_dist / self.norm_factor)
         if self.verbose and self.md_step%(self.update_freq*100)==0:
             print("derivate of pot: ", deriv_pot)
 
-        return deriv_pot[0]
+        return deriv_pot
 
 
     def calc_norm_factor(
@@ -273,19 +306,10 @@ class OPES(EnhancedSampling):
 
         # Loop over all Kernels
         for s in self.kernel_center:
-            s_diff = np.absolute(s - np.asarray(self.kernel_center))
-
-            # Correct Periodicity of spatial distances
-            for i,p in enumerate(self.periodicity):
-                s_diff[i] = correct_periodicity(s_diff[i], p)
-
-            # Calculate values of Gaussians at center of kernel currently in loop and sum them
-            val_gaussians = np.asarray(self.kernel_height) * np.exp(-0.5 * np.sum(np.square(np.divide(s_diff, np.asarray(self.kernel_sigma))),axis=0))
-            sum_gaussians =np.sum(val_gaussians)
+            sum_gaussians =np.sum(self.get_val_gaussian(s))
             sum_sum_gaussians += sum_gaussians
         
         norm_factor = (1/(S * N)) * sum_sum_gaussians
-
         return norm_factor
 
 
@@ -303,21 +327,27 @@ class OPES(EnhancedSampling):
             heigth: weighted heigth of new kernel
             s_new: center of new kernel
             std_new: stndard deviation of new kernel
-            recursive: boolean, recursion needed, default True
         """
 
         # Calculate spatial distances of sampling point and all kernel centers and correct their periodicities
-        s_diff = np.absolute(s_new - np.asarray(self.kernel_center)[0:-1,:])
-        for i,p in enumerate(self.periodicity[0:-1]):
-            s_diff[i] = correct_periodicity(s_diff[i], p)
-        distance = np.sqrt(np.sum(np.square(np.divide(s_diff, np.asarray(self.kernel_sigma)[0:-1,:])), axis=1))
-        if len(distance) > 0:
-            kernel_min_ind = np.argmin(distance)
-            min_distance = distance[kernel_min_ind]
+        s_diff = s_new - np.asarray(self.kernel_center)
+
+        # Correct Periodicity of spatial distances
+        for i in range(self.ncoords):
+            s_diff[i] = correct_periodicity(s_diff[i], self.periodicity[i])
+
+        distance = np.sqrt(np.sum(np.square(np.divide(s_diff, np.asarray(self.kernel_sigma))), axis=1))
+        if self.verbose:
+            print("distances: ", distance)
+        kernel_min_ind = np.argmin(distance[:-1])# if len(distance) > 1 else
+        min_distance = distance[kernel_min_ind]
 
         # Check if merging is enabled
-        if not self.merge or self.md_step == 0:
+        if not self.merge:
             if self.verbose:
+                print("md step", self.md_step)
+                print("self.merge", self.merge)
+                print("merge_threshold", self.merge_threshold)
                 print("not merging or md_step = 0")
             return
         
@@ -330,7 +360,7 @@ class OPES(EnhancedSampling):
             h_new, s_new, std_new = self.merge_kernels(kernel_min_ind, height, s_new, std_new)
 
             # Recursive merging
-            if self.recursive and len(self.kernel_list) > 1:
+            if self.recursive and len(self.kernel_center) > 1:
                 if self.verbose:
                     print("recursive compression check in progress")
                 self.compression_check(h_new, s_new, std_new)
@@ -370,7 +400,8 @@ class OPES(EnhancedSampling):
         # Calculate properties of merged kernel and add it
         h_merge = self.kernel_height[kernel_min_ind] + h_new
         s_merge = (1.0/h_merge)*(self.kernel_height[kernel_min_ind] * self.kernel_center[kernel_min_ind] + h_new * s_new)
-        var_merge = (1.0/h_merge)*(self.kernel_height[kernel_min_ind] * (np.square(self.kernel_sigma[kernel_min_ind]) + np.square(self.kernel_center[kernel_min_ind])) + h_new * (np.square(std_new) + np.square(s_new))) - np.square(s_merge)
+        var_merge = (1.0/h_merge)*(self.kernel_height[kernel_min_ind] * (np.square(self.kernel_sigma[kernel_min_ind]) +\
+                 np.square(self.kernel_center[kernel_min_ind])) + h_new * (np.square(std_new) + np.square(s_new))) - np.square(s_merge)
         self.kernel_height.append(h_merge)
         self.kernel_center.append(s_merge)
         self.kernel_sigma.append(np.sqrt(var_merge))
