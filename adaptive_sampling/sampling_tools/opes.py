@@ -93,10 +93,10 @@ class OPES(EnhancedSampling):
         val_gaussians = self.get_val_gaussian(s_new)
         prob_dist = np.sum(val_gaussians)
 
-        s_diff = s_new - np.asarray(self.kernel_center)
+        s_diff = (s_new - np.asarray(self.kernel_center))#.flatten()
         # Correct Periodicity of spatial distances
         for i in range(self.ncoords):
-            s_diff[i] = correct_periodicity(s_diff[i], self.periodicity[i])
+            s_diff[0,i] = correct_periodicity(s_diff[0,i], self.periodicity[i])
 
         deriv_prob_dist = np.sum(-val_gaussians * np.divide(s_diff, np.asarray(self.kernel_sigma)).T, axis=1)
         #np.sum(-np.asarray(self.kernel_height) * np.exp(-0.5 * np.square(np.divide(s_diff, np.asarray(self.kernel_sigma)))) * np.divide(s_diff, np.asarray(self.kernel_sigma)).T, axis=1)
@@ -155,13 +155,16 @@ class OPES(EnhancedSampling):
             val_gaussians: array of all values of all kernels at s
         """
 
-        s_diff = s - np.asarray(self.kernel_center)
+        s_diff = (s - np.asarray(self.kernel_center))
 
         # Correct Periodicity of spatial distances
         for i in range(self.ncoords):
-            s_diff[i] = correct_periodicity(s_diff[i], self.periodicity[i])
-
+            s_diff[0,i] = correct_periodicity(s_diff[0,i], self.periodicity[i])
+            
         # Calculate values of Gaussians at center of kernel currently in loop and sum them
+        if self.verbose and self.md_step%self.update_freq ==0:
+            print("S_diff", s_diff)
+            print(np.asarray(self.kernel_sigma))
         val_gaussians = np.asarray(self.kernel_height) * \
             np.exp(-0.5 * np.sum(np.square(np.divide(s_diff, np.asarray(self.kernel_sigma))),axis=1))
 
