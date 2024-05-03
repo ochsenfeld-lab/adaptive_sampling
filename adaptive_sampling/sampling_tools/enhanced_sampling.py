@@ -183,7 +183,7 @@ class EnhancedSampling(ABC):
             bias_force: confinement force
         """
         conf_force = np.zeros_like(self.the_md.get_sampling_data().forces.ravel())
-        if self.f_conf == 0.0:
+        if (self.f_conf == 0.0).all():
             return conf_force
         
         for i in range(self.ncoords):

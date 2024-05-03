@@ -1,3 +1,4 @@
+import sys,os
 from adaptive_sampling.sampling_tools.enhanced_sampling import EnhancedSampling
 from adaptive_sampling.units import *
 from .utils import correct_periodicity
@@ -13,6 +14,7 @@ class OPES(EnhancedSampling):
         approximate_norm: enables approximation of norm factor
         merge_threshold: threshold distance for kde-merging in units of std, "np.inf" disables merging
         recursion_merge: enables recursive merging
+        convergence_freq: interval of calculating and writing convergency criteria
         
     """
     def __init__(
@@ -24,13 +26,18 @@ class OPES(EnhancedSampling):
         approximate_norm: bool = False,
         merge_threshold: float = 1.0,
         recursion_merge: bool = False,
+        convergence_freq: int = 1000,
+        bias_factor: float = None,
         **kwargs
     ):
         super().__init__(*args, **kwargs)
         # Constants
         self.energy_barr = energy_barr * kJ_to_kcal
         self.beta = 1/(self.equil_temp * kB_in_atomic * atomic_to_kJmol * kJ_to_kcal)
-        self.gamma = self.beta * self.energy_barr
+        if bias_factor == None:
+            self.gamma = self.beta * self.energy_barr
+        else:
+            self.gamma = bias_factor
         self.gamma_prefac = 1 - 1/self.gamma
         self.temperature = self.equil_temp
         self.epsilon = np.exp(((-1) * self.beta * self.energy_barr)/self.gamma_prefac)
@@ -41,9 +48,13 @@ class OPES(EnhancedSampling):
         self.exact_norm_factor = 0.0
         self.sum_weights = np.power(self.epsilon, self.gamma_prefac)
         self.sum_weights_square = self.sum_weights * self.sum_weights
-        self.sigma_0 = kernel_std
+        #self.pmf = np.zeros_like(self.grid)
+        #self.pmf_height = 0.0
+        self.sigma_0 = self.unit_conversion_cv(np.asarray(kernel_std))[0]
+
         # Simulation Parameters
         self.update_freq = update_freq
+        self.converg_freq = convergence_freq
         self.approx_norm = approximate_norm
         self.merge = False if merge_threshold == np.inf else True
         self.merge_threshold = merge_threshold
@@ -59,6 +70,10 @@ class OPES(EnhancedSampling):
         self.output_sum_weigths_square = []
         self.output_norm_factor = []
         self.output_bias_pot = []
+        #self.output_pmf_height = []
+        #self.conv = np.array([s])
+
+
 
 
     def step_bias(
@@ -68,6 +83,7 @@ class OPES(EnhancedSampling):
         output_file: str = 'opes.out',
         traj_file: str = 'CV_traj.dat', 
         restart_file: str = 'restart_opes',
+        convergence_file: str = 'convergence.dat',
         **kwargs
     ):
         """Applies OPES to MD: pulls sampling data and CV, drops a gaussian every Udate_freq MD-steps, calculates the bias force
@@ -118,6 +134,14 @@ class OPES(EnhancedSampling):
             bias_force += forces[i] * delta_s_new[i]
         bias_force = bias_force / kJ_to_kcal / atomic_to_kJmol
 
+        bias_force += self.harmonic_walls(s_new, delta_s_new)  # , 1.6 * self.hill_std)
+
+
+        # Calculate PMF and its height
+        #if md_state.step % self.converg_freq == 0:
+        #    self.pmf = self.get_pmf()
+        #    self.pmf_height = np.absolute(self.pmf.max() - self.pmf.min())
+
         # Save values for traj
         self.traj = np.append(self.traj, [s_new], axis=0)
         self.epot.append(md_state.epot)
@@ -127,8 +151,14 @@ class OPES(EnhancedSampling):
         self.output_sum_weigths_square.append(self.sum_weights_square)
         self.output_norm_factor.append(self.norm_factor)
 
+        #self.conv = np.append(self.conv,[s_new], axis=0)
+        #self.output_pmf_height.append(self.pmf_height)
 
         # Write output
+        #if md_state.step % self.converg_freq == 0:
+        #    self.write_convergence(filename=convergence_file)
+
+
         if md_state.step % self.out_freq == 0:
 
             if write_traj:
@@ -395,19 +425,14 @@ class OPES(EnhancedSampling):
             height, center and standard deviation of merged kernel       
         """
 
-        # Delete added kernel
-        del self.kernel_height[-1]
-        del self.kernel_center[-1]
-        del self.kernel_sigma[-1]
-
         # Calculate properties of merged kernel and add it
         h_merge = self.kernel_height[kernel_min_ind] + h_new
         s_merge = (1.0/h_merge)*(self.kernel_height[kernel_min_ind] * self.kernel_center[kernel_min_ind] + h_new * s_new)
         var_merge = (1.0/h_merge)*(self.kernel_height[kernel_min_ind] * (np.square(self.kernel_sigma[kernel_min_ind]) +\
                  np.square(self.kernel_center[kernel_min_ind])) + h_new * (np.square(std_new) + np.square(s_new))) - np.square(s_merge)
-        self.kernel_height.append(h_merge)
-        self.kernel_center.append(s_merge)
-        self.kernel_sigma.append(np.sqrt(var_merge))
+        self.kernel_height[-1] = h_merge
+        self.kernel_center[-1] = s_merge
+        self.kernel_sigma[-1] = np.sqrt(var_merge)
 
         # Delete previously existing kernel
         del self.kernel_height[kernel_min_ind]
@@ -461,6 +486,50 @@ class OPES(EnhancedSampling):
         if self.verbose:
             print(f" >>> Info: Adaptive sampling restartet from {filename}!")
 
+    def write_convergence(
+        self,
+        filename: str = 'convergence.dat'
+    ):
+        """save convergence criteria for post-processing
+        """
+        step = self.the_md.get_sampling_data().step
+
+        data = {}
+        data["PMF height"] = self.output_pmf_height
+
+        # write header
+        if not os.path.isfile(filename) and step == 0:
+            # start new file in first step
+
+            with open(filename, "w") as converg_out:
+                converg_out.write("%14s\t" % "time [fs]")
+                for i in range(len(self.conv[0])):
+                    converg_out.write("%14s\t" % f"Xi{i}")
+                for kw in data.keys():
+                    converg_out.write("%14s\t" % kw)
+
+        elif step > 0:
+            # append new steps of trajectory since last output
+            with open(filename, "a") as converg_out:
+                for n in range(self.converg_freq):
+                    converg_out.write(
+                        "\n%14.6f\t"
+                        % (
+                            (step - self.converg_freq + n)
+                            * self.the_md.get_sampling_data().dt
+                        )
+                    )  # time in fs
+                    for i in range(len(self.conv[0])):
+                        if self.cv_type[i] == "angle":
+                            converg_out.write("%14.6f\t" % (self.conv[-self.converg_freq + n][i] * DEGREES_per_RADIAN))
+                        elif self.cv_type[i] == "distance":
+                            converg_out.write("%14.6f\t" % (self.conv[-self.converg_freq + n][i] * BOHR_to_ANGSTROM))
+                        else:
+                            converg_out.write("%14.6f\t" % (self.conv[-self.converg_freq + n][i]))
+
+                    for val in data.values():
+                        converg_out.write("%14.6f\t" % (val[-self.converg_freq + n]))
+                        
 
     def write_traj(
         self, 
@@ -500,8 +569,37 @@ class OPES(EnhancedSampling):
             pass
         
     
-    def get_pmf(self):
-        pass
+    def get_pmf(
+        self
+    ):
+        """calculate pmf on the fly from compressed kernels
+        """
+
+        if self.ncoords == 1:
+            P = np.zeros_like(self.grid[0])
+            for x in range(len(self.grid[0])):
+                s_diff = self.grid[0][x] - np.asarray(self.kernel_center)
+                for l in range(self.ncoords):
+                    s_diff[l] = correct_periodicity(s_diff[l], self.periodicity[l])
+                val_gaussians = np.asarray(self.kernel_height) * np.exp(-0.5 * np.sum(np.square(np.divide(s_diff, np.asarray(self.kernel_sigma))),axis=1))
+                P[x] = np.sum(val_gaussians)
+
+        elif self.ncoords == 2:
+            P = np.zeros_like(self.grid)
+            for x in range(len(self.grid[0,:])):
+                for y in range(len(self.grid[1,:])):
+                    s_diff = np.array([self.grid[0,x], self.grid[1,y]]) - np.asarray(self.kernel_center)
+                    for l in range(self.ncoords):
+                        s_diff[l] = correct_periodicity(s_diff[l], self.periodicity[l])
+                    val_gaussians = np.asarray(self.kernel_height) * np.exp(-0.5 * np.sum(np.square(np.divide(s_diff, np.asarray(self.kernel_sigma))),axis=1))
+                    P[x,y] = np.sum(val_gaussians)
+
+        bias_pot = self.gamma_prefac / self.beta * np.log(P/self.norm_factor + self.epsilon)
+        pmf = bias_pot/-self.gamma_prefac
+        pmf -= pmf.min()
+        
+        return pmf
+
 
     def shared_bias(self):
         pass
