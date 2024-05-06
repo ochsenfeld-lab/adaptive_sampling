@@ -44,14 +44,14 @@ class OPES(EnhancedSampling):
         # Initial values
         self.prob_dist = 1.0
         self.deriv_prob_dist = 0.0
-        self.norm_factor = 1.0
+        self.uprob  = 1.0
         self.exact_norm_factor = 0.0
         self.sum_weights = np.power(self.epsilon, self.gamma_prefac)
         self.sum_weights_square = self.sum_weights * self.sum_weights
-        #self.pmf = np.zeros_like(self.grid)
-        #self.pmf_height = 0.0
+        self.norm_factor = 1/self.sum_weights
+        self.md_state = self.the_md.get_sampling_data()
         self.sigma_0 = self.unit_conversion_cv(np.asarray(kernel_std))[0]
-
+        self.potential_k_1 = 0.0
         # Simulation Parameters
         self.update_freq = update_freq
         self.converg_freq = convergence_freq
@@ -59,12 +59,14 @@ class OPES(EnhancedSampling):
         self.merge = False if merge_threshold == np.inf else True
         self.merge_threshold = merge_threshold
         self.recursive = recursion_merge
-        self.md_step = 0
         s, _ = self.get_cv(**kwargs)
         # Kernels
-        self.kernel_height = []
-        self.kernel_center = []
-        self.kernel_sigma = []
+        self.kernel_height = [1.0]
+        self.kernel_center = [s]
+        self.kernel_sigma = [self.sigma_0]
+        self.delta_kernel_height = []
+        self.delta_kernel_center = []
+        self.delta_kernel_sigma = []
         # Output
         self.output_sum_weigths = []
         self.output_sum_weigths_square = []
@@ -72,8 +74,6 @@ class OPES(EnhancedSampling):
         self.output_bias_pot = []
         #self.output_pmf_height = []
         #self.conv = np.array([s])
-
-
 
 
     def step_bias(
@@ -97,12 +97,11 @@ class OPES(EnhancedSampling):
         """
         
         # Load md data
-        md_state = self.the_md.get_sampling_data()
+        self.md_state = self.the_md.get_sampling_data()
         (s_new, delta_s_new) = self.get_cv(**kwargs)
-        self.md_step = md_state.step
 
         # Call update function to place kernel
-        if md_state.step%self.update_freq == 0:
+        if self.md_state.step%self.update_freq == 0:
             self.update_kde(s_new)
 
         # Calculate new probability
@@ -118,7 +117,7 @@ class OPES(EnhancedSampling):
         #np.sum(-np.asarray(self.kernel_height) * np.exp(-0.5 * np.square(np.divide(s_diff, np.asarray(self.kernel_sigma)))) * np.divide(s_diff, np.asarray(self.kernel_sigma)).T, axis=1)
         self.prob_dist = prob_dist
         self.deriv_prob_dist = deriv_prob_dist
-        if self.verbose and self.md_step%(self.update_freq)==0:
+        if self.verbose and self.md_state.step%(self.update_freq)==0:
             self.show_kernels()
             print("Probabiliy distribution: ", prob_dist, "and its derivative: ", deriv_prob_dist)
             print("val gaussians =  ", val_gaussians)
@@ -144,12 +143,18 @@ class OPES(EnhancedSampling):
 
         # Save values for traj
         self.traj = np.append(self.traj, [s_new], axis=0)
-        self.epot.append(md_state.epot)
-        self.temp.append(md_state.temp)
+        self.epot.append(self.md_state.epot)
+        self.temp.append(self.md_state.temp)
         self.output_bias_pot.append(self.potential)
         self.output_sum_weigths.append(self.sum_weights)
         self.output_sum_weigths_square.append(self.sum_weights_square)
-        self.output_norm_factor.append(self.norm_factor)
+        S = self.sum_weights
+        N = len(self.kernel_center)
+        if self.approx_norm:
+            norm_factor = self.uprob/S/N
+        else:
+            norm_factor = self.norm_factor
+        self.output_norm_factor.append(norm_factor)
 
         #self.conv = np.append(self.conv,[s_new], axis=0)
         #self.output_pmf_height.append(self.pmf_height)
@@ -159,7 +164,7 @@ class OPES(EnhancedSampling):
         #    self.write_convergence(filename=convergence_file)
 
 
-        if md_state.step % self.out_freq == 0:
+        if self.md_state.step % self.out_freq == 0:
 
             if write_traj:
                 self.write_traj(filename=traj_file)
@@ -173,7 +178,7 @@ class OPES(EnhancedSampling):
     
     def get_val_gaussian(
         self,
-        s: np.array
+        s: np.array,
     ) -> np.array: 
         
         """get the values of all gaussians at point s_new
@@ -184,7 +189,6 @@ class OPES(EnhancedSampling):
         Returns:
             val_gaussians: array of all values of all kernels at s
         """
-
         s_diff = (s - np.asarray(self.kernel_center))
 
         # Correct Periodicity of spatial distances
@@ -192,13 +196,14 @@ class OPES(EnhancedSampling):
             s_diff[0,i] = correct_periodicity(s_diff[0,i], self.periodicity[i])
             
         # Calculate values of Gaussians at center of kernel currently in loop and sum them
-        if self.verbose and self.md_step%self.update_freq ==0:
+        if self.verbose and self.md_state.step%self.update_freq ==0:
             print("S_diff", s_diff)
             print(np.asarray(self.kernel_sigma))
         val_gaussians = np.asarray(self.kernel_height) * \
             np.exp(-0.5 * np.sum(np.square(np.divide(s_diff, np.asarray(self.kernel_sigma))),axis=1))
 
         return val_gaussians
+
 
     def update_kde(
         self, 
@@ -212,20 +217,13 @@ class OPES(EnhancedSampling):
 
         """
 
-        # Calculate probability
-        if len(self.kernel_center) == 0:
-            self.kernel_height.append(1.0)
-            self.kernel_center.append(s_new)
-            self.kernel_sigma.append(self.sigma_0)
-            kernel_placed = True
-        else: 
-            kernel_placed = False
-            
+        # calculate probability
         prob_dist = np.sum(self.get_val_gaussian(s_new))
         self.prob_dist = prob_dist
 
         # Calculate bias potential
         potential = self.calc_pot(prob_dist)
+        self.potential_k_1 = potential
 
         # Calculate weight coefficients
         weigth_coeff = np.exp(self.beta * potential)
@@ -241,24 +239,15 @@ class OPES(EnhancedSampling):
         sigma_i =  self.sigma_0 * np.power((self.n_eff * (self.ncoords + 2)/4), -1/(self.ncoords + 4))
         height = weigth_coeff * np.prod(self.sigma_0 / sigma_i)
 
-        # Add new Kernel at current cv point
-        if not kernel_placed:
-            self.kernel_height.append(height)
-            self.kernel_center.append(s_new)
-            self.kernel_sigma.append(sigma_i)
+        # Kernel Density 
+        if len(self.kernel_center) > 0 and self.md_state.step > 0:
+            self.compression_check(height, s_new, sigma_i)
 
         # Calculate normalization factor
-
         if self.approx_norm:
-            val_gaussians = self.get_val_gaussian(s_new)
-            self.norm_factor = self.calc_norm_factor(val_gaussians)
+            self.uprob += self.calc_norm_factor()
         else:
             self.norm_factor = self.calculate_exact_norm_factor()
-
-        # Kernel Density 
-        if len(self.kernel_center) > 1:
-            self.compression_check(height, s_new, sigma_i)
-    
 
     def calc_pot(
         self, 
@@ -274,7 +263,14 @@ class OPES(EnhancedSampling):
             potential: potential for given probability distribution
         """
 
-        potential = (self.gamma_prefac / self.beta) * np.log(prob_dist / self.norm_factor + self.epsilon)
+        S = self.sum_weights
+        N = len(self.kernel_center)
+        if self.approx_norm:
+            norm_factor = self.uprob/S/N
+        else:
+            norm_factor = self.norm_factor
+        potential = (self.gamma_prefac / self.beta) * np.log(prob_dist / norm_factor + self.epsilon)
+
         return potential
     
     
@@ -293,17 +289,22 @@ class OPES(EnhancedSampling):
             deriv_pot: derivative of potential for location s
         """
 
+        S = self.sum_weights
+        N = len(self.kernel_center)
+        if self.approx_norm:
+            norm_factor = self.uprob/S/N
+        else:
+            norm_factor = self.norm_factor
         deriv_pot = (self.gamma_prefac/self.beta) *\
-              (1/ ((prob_dist / self.norm_factor) + self.epsilon)) * (deriv_prob_dist / self.norm_factor)
-        if self.verbose and self.md_step%(self.update_freq*100)==0:
+              (1/ ((prob_dist / norm_factor) + self.epsilon)) * (deriv_prob_dist / norm_factor)
+        if self.verbose and self.md_state.step%(self.update_freq*100)==0:
             print("derivate of pot: ", deriv_pot)
 
         return deriv_pot
 
 
     def calc_norm_factor(
-        self, 
-        val_gaussians: np.array
+        self,
     ):
         
         """approximatec the norm factor with respect to existing gaussians by adding the change for newly added kernel
@@ -312,16 +313,21 @@ class OPES(EnhancedSampling):
             val_gaussians: value of all gaussians at location of sampling
 
         Returns:
-            approximation formula for adding one summed change in norm factor to previous one
+            delta_uprob: non normalized sum over the gauss values for the newly placed kernel
         """
 
         S = self.sum_weights
         N = len(self.kernel_center)
-        sum_gaussians = np.sum(val_gaussians)
-        delta_norm_factor = (1/(S * N)) * sum_gaussians
-
-        return self.norm_factor + delta_norm_factor
-
+        delta_uprob =0.0
+        # Loop over all kernels and delta list
+        for i, s in enumerate(self.kernel_center):
+            for j, d in enumerate(self.delta_kernel_center):
+                sign = -1.0 if self.delta_kernel_height[j] < 0 else 1.0
+                s_diff = (s - d)
+                delta_sum_uprob = self.delta_kernel_height[j] * np.exp(-0.5 * np.sum(np.square(s_diff/self.delta_kernel_sigma[j])))
+                delta_sum_uprob += sign * self.kernel_height[i] * np.exp(-0.5 * np.sum(np.square(s_diff/self.kernel_sigma[i])))
+                delta_uprob += delta_sum_uprob
+        return delta_uprob
 
     def calculate_exact_norm_factor(
         self
@@ -362,6 +368,15 @@ class OPES(EnhancedSampling):
             std_new: stndard deviation of new kernel
         """
 
+        # Set up and update kernel lists
+        self.kernel_height.append(height)
+        self.kernel_center.append(s_new)
+        self.kernel_sigma.append(std_new)
+
+        self.delta_kernel_height = []
+        self.delta_kernel_center = []
+        self.delta_kernel_sigma = []
+
         # Calculate spatial distances of sampling point and all kernel centers and correct their periodicities
         s_diff = s_new - np.asarray(self.kernel_center)
 
@@ -378,7 +393,7 @@ class OPES(EnhancedSampling):
         # Check if merging is enabled
         if not self.merge:
             if self.verbose:
-                print("md step", self.md_step)
+                print("md step", self.md_state.step)
                 print("self.merge", self.merge)
                 print("merge_threshold", self.merge_threshold)
                 print("not merging or md_step = 0")
@@ -396,6 +411,7 @@ class OPES(EnhancedSampling):
             if self.recursive and len(self.kernel_center) > 1:
                 if self.verbose:
                     print("recursive compression check in progress")
+                del self.delta_kernel_height[0]
                 self.compression_check(h_new, s_new, std_new)
             else:
                 if self.verbose:
@@ -403,6 +419,10 @@ class OPES(EnhancedSampling):
         else:
             if self.verbose:
                 print("kernel over threshold distance ", self.merge_threshold, "in distance: ", min_distance)
+        self.delta_kernel_height.append(self.kernel_height[-1])
+        self.delta_kernel_center.append(self.kernel_center[-1])
+        self.delta_kernel_sigma.append(self.kernel_sigma[-1])
+
 
 
     def merge_kernels(
@@ -435,6 +455,9 @@ class OPES(EnhancedSampling):
         self.kernel_sigma[-1] = np.sqrt(var_merge)
 
         # Delete previously existing kernel
+        self.delta_kernel_height.append(-self.kernel_height[kernel_min_ind])
+        self.delta_kernel_center.append(self.kernel_center[kernel_min_ind])
+        self.delta_kernel_sigma.append(self.kernel_sigma[kernel_min_ind])
         del self.kernel_height[kernel_min_ind]
         del self.kernel_center[kernel_min_ind]
         del self.kernel_sigma[kernel_min_ind]
@@ -448,11 +471,19 @@ class OPES(EnhancedSampling):
         Args:
             filename: name of restart file
         """
+
+        S = self.sum_weights
+        N = len(self.kernel_center)
+        if self.approx_norm:
+            norm_factor = self.uprob/S/N
+        else:
+            norm_factor = self.norm_factor
+
         self._write_restart(
             filename=filename,
             sum_weigths=self.sum_weights,
             sum_weigths_square = self.sum_weights_square,
-            norm_factor = self.norm_factor,
+            norm_factor = norm_factor,
             heigth = self.kernel_height,
             center = self.kernel_center,
             sigma = self.kernel_sigma
@@ -479,6 +510,7 @@ class OPES(EnhancedSampling):
         self.sum_weights = float(data["sum_weigths"])
         self.sum_weights_square = float(data["sum_weigths_square"])
         self.norm_factor = float(data["norm_factor"])
+        self.uprob = self.norm_factor * self.sum_weights * len(self.kernel_center)
         self.kernel_height = data["height"]
         self.kernel_center = data["center"]
         self.kernel_sigma = data["sigma"]
@@ -560,7 +592,7 @@ class OPES(EnhancedSampling):
         """for testing print kernels
         """
 
-        if self.verbose: #and self.md_step%(self.update_freq*100)==0:
+        if self.verbose: #and self.md_state.step%(self.update_freq*100)==0:
             print("Kernels: ")
             print("heights ", self.kernel_height)
             print("centers ", self.kernel_center)
@@ -594,7 +626,13 @@ class OPES(EnhancedSampling):
                     val_gaussians = np.asarray(self.kernel_height) * np.exp(-0.5 * np.sum(np.square(np.divide(s_diff, np.asarray(self.kernel_sigma))),axis=1))
                     P[x,y] = np.sum(val_gaussians)
 
-        bias_pot = self.gamma_prefac / self.beta * np.log(P/self.norm_factor + self.epsilon)
+        S = self.sum_weights
+        N = len(self.kernel_center)
+        if self.approx_norm:
+            norm_factor = self.uprob/S/N
+        else:
+            norm_factor = self.norm_factor
+        bias_pot = self.gamma_prefac / self.beta * np.log(P/norm_factor + self.epsilon)
         pmf = bias_pot/-self.gamma_prefac
         pmf -= pmf.min()
         
