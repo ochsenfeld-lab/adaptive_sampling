@@ -376,7 +376,7 @@ class OPES(EnhancedSampling):
         distance = np.sqrt(np.sum(np.square(np.divide(s_diff, np.asarray(self.kernel_sigma))), axis=1))
         if self.verbose:
             print("distances: ", distance)
-        kernel_min_ind = np.argmin(distance[:-1])# if len(distance) > 1 else
+        kernel_min_ind = np.argmin(distance[:-1]) if len(distance) > 1 else None
         min_distance = distance[kernel_min_ind]
 
         return kernel_min_ind, min_distance
