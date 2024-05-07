@@ -44,14 +44,11 @@ class OPES(EnhancedSampling):
         # Initial values
         self.prob_dist = 1.0
         self.deriv_prob_dist = 0.0
-        self.uprob  = 1.0
-        self.exact_norm_factor = 0.0
         self.sum_weights = np.power(self.epsilon, self.gamma_prefac)
         self.sum_weights_square = self.sum_weights * self.sum_weights
         self.norm_factor = 1/self.sum_weights
         self.md_state = self.the_md.get_sampling_data()
         self.sigma_0 = self.unit_conversion_cv(np.asarray(kernel_std))[0]
-        self.potential_k_1 = 0.0
         # Simulation Parameters
         self.update_freq = update_freq
         self.converg_freq = convergence_freq
@@ -148,13 +145,7 @@ class OPES(EnhancedSampling):
         self.output_bias_pot.append(self.potential)
         self.output_sum_weigths.append(self.sum_weights)
         self.output_sum_weigths_square.append(self.sum_weights_square)
-        S = self.sum_weights
-        N = len(self.kernel_center)
-        if self.approx_norm:
-            norm_factor = self.uprob/S/N
-        else:
-            norm_factor = self.norm_factor
-        self.output_norm_factor.append(norm_factor)
+        self.output_norm_factor.append(self.norm_factor)
 
         #self.conv = np.append(self.conv,[s_new], axis=0)
         #self.output_pmf_height.append(self.pmf_height)
@@ -217,13 +208,15 @@ class OPES(EnhancedSampling):
 
         """
 
+        self.N_old = len(self.kernel_center)
+        self.S_old = self.sum_weights
+
         # calculate probability
         prob_dist = np.sum(self.get_val_gaussian(s_new))
         self.prob_dist = prob_dist
 
         # Calculate bias potential
         potential = self.calc_pot(prob_dist)
-        self.potential_k_1 = potential
 
         # Calculate weight coefficients
         weigth_coeff = np.exp(self.beta * potential)
@@ -244,10 +237,8 @@ class OPES(EnhancedSampling):
             self.compression_check(height, s_new, sigma_i)
 
         # Calculate normalization factor
-        if self.approx_norm:
-            self.uprob += self.calc_norm_factor()
-        else:
-            self.norm_factor = self.calculate_exact_norm_factor()
+        self.norm_factor = self.calc_norm_factor(approximate = self.approx_norm)
+
 
     def calc_pot(
         self, 
@@ -263,14 +254,7 @@ class OPES(EnhancedSampling):
             potential: potential for given probability distribution
         """
 
-        S = self.sum_weights
-        N = len(self.kernel_center)
-        if self.approx_norm:
-            norm_factor = self.uprob/S/N
-        else:
-            norm_factor = self.norm_factor
-        potential = (self.gamma_prefac / self.beta) * np.log(prob_dist / norm_factor + self.epsilon)
-
+        potential = (self.gamma_prefac / self.beta) * np.log(prob_dist / self.norm_factor + self.epsilon)
         return potential
     
     
@@ -289,14 +273,8 @@ class OPES(EnhancedSampling):
             deriv_pot: derivative of potential for location s
         """
 
-        S = self.sum_weights
-        N = len(self.kernel_center)
-        if self.approx_norm:
-            norm_factor = self.uprob/S/N
-        else:
-            norm_factor = self.norm_factor
         deriv_pot = (self.gamma_prefac/self.beta) *\
-              (1/ ((prob_dist / norm_factor) + self.epsilon)) * (deriv_prob_dist / norm_factor)
+              (1/ ((prob_dist / self.norm_factor) + self.epsilon)) * (deriv_prob_dist / self.norm_factor)
         if self.verbose and self.md_state.step%(self.update_freq*100)==0:
             print("derivate of pot: ", deriv_pot)
 
@@ -305,12 +283,15 @@ class OPES(EnhancedSampling):
 
     def calc_norm_factor(
         self,
+        approx_for_loop:bool = False,
+        approximate: bool = True
     ):
         
         """approximatec the norm factor with respect to existing gaussians by adding the change for newly added kernel
 
         Args:
-            val_gaussians: value of all gaussians at location of sampling
+            approx_for_loop: enable double-for loop for approximation for testin
+            approximate: enable normalization factor approximation with delta_kernel lists
 
         Returns:
             delta_uprob: non normalized sum over the gauss values for the newly placed kernel
@@ -318,16 +299,53 @@ class OPES(EnhancedSampling):
 
         S = self.sum_weights
         N = len(self.kernel_center)
-        delta_uprob =0.0
-        # Loop over all kernels and delta list
-        for i, s in enumerate(self.kernel_center):
-            for j, d in enumerate(self.delta_kernel_center):
-                sign = -1.0 if self.delta_kernel_height[j] < 0 else 1.0
-                s_diff = (s - d)
-                delta_sum_uprob = self.delta_kernel_height[j] * np.exp(-0.5 * np.sum(np.square(s_diff/self.delta_kernel_sigma[j])))
-                delta_sum_uprob += sign * self.kernel_height[i] * np.exp(-0.5 * np.sum(np.square(s_diff/self.kernel_sigma[i])))
-                delta_uprob += delta_sum_uprob
-        return delta_uprob
+        
+        if approximate:
+            delta_uprob =0.0
+            if approx_for_loop:
+                # Unparallelized double for loop but no n² scaling because of delta_kernel lists
+                for i, s in enumerate(self.kernel_center):
+                    for j, d in enumerate(self.delta_kernel_center):
+                        sign = -1.0 if self.delta_kernel_height[j] < 0 else 1.0
+                        s_diff = (s - d)
+                        delta_sum_uprob = self.delta_kernel_height[j] * np.exp(-0.5 * np.sum(np.square(s_diff/self.delta_kernel_sigma[j])))
+                        delta_sum_uprob += sign * self.kernel_height[i] * np.exp(-0.5 * np.sum(np.square(s_diff/self.kernel_sigma[i])))
+                        delta_uprob += delta_sum_uprob
+
+            else:
+                # Numpy parallelized approximation
+                for j, s in enumerate(self.delta_kernel_center):
+
+                    # Sign for correct probability correction from deleted, merged or added kernels
+                    sign = -1.0 if self.delta_kernel_height[j] < 0 else 1.0
+
+                    # Calculate spatial distances and correct periodicity
+                    s_diff = (s - np.asarray(self.kernel_center))
+                    for i in range(self.ncoords):
+                        s_diff[0,i] = correct_periodicity(s_diff[0,i], self.periodicity[i])
+
+                    # Calculate change in probability for changed kernels by delta kernel list
+                    delta_sum_uprob = sign * np.sum(np.asarray(self.kernel_height) *\
+                            np.exp(-0.5 * np.sum(np.square(np.divide(s_diff, np.asarray(self.kernel_sigma))),axis=1)))
+                    delta_sum_uprob += np.sum(np.asarray(self.delta_kernel_height[j]) *\
+                            np.exp(-0.5 * np.sum(np.square(np.divide(s_diff, np.asarray(self.delta_kernel_sigma[j]))),axis=1)))
+                    delta_uprob += delta_sum_uprob
+
+            # Get old uprob from denormalized old norm factor and add change in uprob then calculate new norm factor and set
+            new_uprob = self.norm_factor * self.N_old * self.S_old + delta_uprob
+            norm_factor = new_uprob/N/S
+            return norm_factor
+
+        else:
+            uprob = 0.0
+            # Loop over all kernels with all kernels to get exact uprob
+            for s in self.kernel_center:
+                sum_gaussians =np.sum(self.get_val_gaussian(s))
+                uprob += sum_gaussians
+            # Get norm factor from exact uprob and set it
+            norm_factor = uprob/N/S
+            return norm_factor
+
 
     def calculate_exact_norm_factor(
         self
@@ -397,6 +415,9 @@ class OPES(EnhancedSampling):
                 print("self.merge", self.merge)
                 print("merge_threshold", self.merge_threshold)
                 print("not merging or md_step = 0")
+            self.delta_kernel_height.append(self.kernel_height[-1])
+            self.delta_kernel_center.append(self.kernel_center[-1])
+            self.delta_kernel_sigma.append(self.kernel_sigma[-1])
             return
         
         # Check if minimal distance requires merging
@@ -472,18 +493,11 @@ class OPES(EnhancedSampling):
             filename: name of restart file
         """
 
-        S = self.sum_weights
-        N = len(self.kernel_center)
-        if self.approx_norm:
-            norm_factor = self.uprob/S/N
-        else:
-            norm_factor = self.norm_factor
-
         self._write_restart(
             filename=filename,
             sum_weigths=self.sum_weights,
             sum_weigths_square = self.sum_weights_square,
-            norm_factor = norm_factor,
+            norm_factor = self.norm_factor,
             heigth = self.kernel_height,
             center = self.kernel_center,
             sigma = self.kernel_sigma
@@ -510,7 +524,6 @@ class OPES(EnhancedSampling):
         self.sum_weights = float(data["sum_weigths"])
         self.sum_weights_square = float(data["sum_weigths_square"])
         self.norm_factor = float(data["norm_factor"])
-        self.uprob = self.norm_factor * self.sum_weights * len(self.kernel_center)
         self.kernel_height = data["height"]
         self.kernel_center = data["center"]
         self.kernel_sigma = data["sigma"]
@@ -626,13 +639,7 @@ class OPES(EnhancedSampling):
                     val_gaussians = np.asarray(self.kernel_height) * np.exp(-0.5 * np.sum(np.square(np.divide(s_diff, np.asarray(self.kernel_sigma))),axis=1))
                     P[x,y] = np.sum(val_gaussians)
 
-        S = self.sum_weights
-        N = len(self.kernel_center)
-        if self.approx_norm:
-            norm_factor = self.uprob/S/N
-        else:
-            norm_factor = self.norm_factor
-        bias_pot = self.gamma_prefac / self.beta * np.log(P/norm_factor + self.epsilon)
+        bias_pot = self.gamma_prefac / self.beta * np.log(P/self.norm_factor + self.epsilon)
         pmf = bias_pot/-self.gamma_prefac
         pmf -= pmf.min()
         
