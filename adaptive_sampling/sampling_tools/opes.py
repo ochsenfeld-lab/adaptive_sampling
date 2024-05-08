@@ -106,7 +106,7 @@ class OPES(EnhancedSampling):
         s_diff = (s_new - np.asarray(self.kernel_center))
         # Correct periodicity of spatial distances
         for i in range(self.ncoords):
-            s_diff[0,i] = correct_periodicity(s_diff[0,i], self.periodicity[i])
+            s_diff[:,i] = correct_periodicity(s_diff[:,i], self.periodicity[i])
 
         deriv_prob_dist = np.sum(-val_gaussians * np.divide(s_diff, np.asarray(self.kernel_sigma)).T, axis=1)
         self.prob_dist = prob_dist
@@ -167,7 +167,7 @@ class OPES(EnhancedSampling):
 
         # Correct Periodicity of spatial distances
         for i in range(self.ncoords):
-            s_diff[0,i] = correct_periodicity(s_diff[0,i], self.periodicity[i])
+            s_diff[:,i] = correct_periodicity(s_diff[:,i], self.periodicity[i])
             
         # Calculate values of Gaussians at center of kernel currently in loop and sum them
         if self.verbose and self.md_state.step%self.update_freq ==0:
@@ -287,7 +287,7 @@ class OPES(EnhancedSampling):
                 # Calculate spatial distances and correct periodicity
                 s_diff = (s - np.asarray(self.kernel_center))
                 for i in range(self.ncoords):
-                    s_diff[0,i] = correct_periodicity(s_diff[0,i], self.periodicity[i])
+                    s_diff[:,i] = correct_periodicity(s_diff[:,i], self.periodicity[i])
 
                 # Calculate change in probability for changed kernels by delta kernel list
                 delta_sum_uprob = sign * np.sum(np.asarray(self.kernel_height) *\
@@ -333,19 +333,17 @@ class OPES(EnhancedSampling):
 
         kernel_min_ind, min_distance = self.calc_min_dist(s_new)
         
-        if self.merge_kernels and np.all(min_distance < self.merge_threshold):
-            h_new, s_new, std_new = self.merge_kernels(kernel_min_ind, h_new, s_new, std_new)
-
-        kernel_min_ind, min_distance = self.calc_min_dist(s_new)
-
         # Recursive merging if enabled and distances under threshold
-        while self.recursive and np.all(min_distance < self.merge_threshold):
+        while self.merge and np.all(min_distance < self.merge_threshold):
 
             # Merge again
             h_new, s_new, std_new = self.merge_kernels(kernel_min_ind, h_new, s_new, std_new)
 
             # Calculate new distances to update while condition
             kernel_min_ind, min_distance = self.calc_min_dist(s_new)
+
+            if not self.recursive:
+                break
 
         # Append final merged kernel or if no merging occured just the new kernel to delta list
         self.delta_kernel_height.append(h_new)
@@ -371,7 +369,7 @@ class OPES(EnhancedSampling):
 
         # Correct Periodicity of spatial distances
         for i in range(self.ncoords):
-            s_diff[i] = correct_periodicity(s_diff[i], self.periodicity[i])
+            s_diff[:,i] = correct_periodicity(s_diff[:,i], self.periodicity[i])
 
         distance = np.sqrt(np.sum(np.square(np.divide(s_diff, np.asarray(self.kernel_sigma))), axis=1))
         if self.verbose:
@@ -514,7 +512,7 @@ class OPES(EnhancedSampling):
             for x in range(len(self.grid[0])):
                 s_diff = self.grid[0][x] - np.asarray(self.kernel_center)
                 for l in range(self.ncoords):
-                    s_diff[l] = correct_periodicity(s_diff[l], self.periodicity[l])
+                    s_diff[:,l] = correct_periodicity(s_diff[:,l], self.periodicity[l])
                 val_gaussians = np.asarray(self.kernel_height) * np.exp(-0.5 * np.sum(np.square(np.divide(s_diff, np.asarray(self.kernel_sigma))),axis=1))
                 P[x] = np.sum(val_gaussians)
 
@@ -524,7 +522,7 @@ class OPES(EnhancedSampling):
                 for y in range(len(self.grid[1,:])):
                     s_diff = np.array([self.grid[0,x], self.grid[1,y]]) - np.asarray(self.kernel_center)
                     for l in range(self.ncoords):
-                        s_diff[l] = correct_periodicity(s_diff[l], self.periodicity[l])
+                        s_diff[:,l] = correct_periodicity(s_diff[:,l], self.periodicity[l])
                     val_gaussians = np.asarray(self.kernel_height) * np.exp(-0.5 * np.sum(np.square(np.divide(s_diff, np.asarray(self.kernel_sigma))),axis=1))
                     P[x,y] = np.sum(val_gaussians)
         else:
