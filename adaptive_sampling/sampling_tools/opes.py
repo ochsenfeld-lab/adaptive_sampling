@@ -14,7 +14,6 @@ class OPES(EnhancedSampling):
         approximate_norm: enables approximation of norm factor
         merge_threshold: threshold distance for kde-merging in units of std, "np.inf" disables merging
         recursion_merge: enables recursive merging
-        convergence_freq: interval of calculating and writing convergency criteria
         bias_factor: allows setting a default bias factor instead of calculating it from energy barrier
     """
     def __init__(
@@ -26,7 +25,6 @@ class OPES(EnhancedSampling):
         approximate_norm: bool = False,
         merge_threshold: float = 1.0,
         recursion_merge: bool = False,
-        convergence_freq: int = 1000,
         bias_factor: float = None,
         **kwargs
     ):
@@ -49,12 +47,12 @@ class OPES(EnhancedSampling):
         self.sum_weights = np.power(self.epsilon, self.gamma_prefac)
         self.sum_weights_square = self.sum_weights * self.sum_weights
         self.norm_factor = 1/self.sum_weights
+        self.uprob_old = self.norm_factor * self.sum_weights
         self.md_state = self.the_md.get_sampling_data()
         self.sigma_0 = self.unit_conversion_cv(np.asarray(kernel_std))[0]
 
         # Simulation Parameters
         self.update_freq = update_freq
-        self.converg_freq = convergence_freq
         self.approx_norm = approximate_norm
         self.merge = False if merge_threshold == np.inf else True
         self.merge_threshold = merge_threshold
@@ -62,7 +60,7 @@ class OPES(EnhancedSampling):
         s, _ = self.get_cv(**kwargs)
 
         # Kernels
-        self.kernel_height = [1.0]
+        self.kernel_height = [1.2]
         self.kernel_center = [s]
         self.kernel_sigma = [self.sigma_0]
 
@@ -71,6 +69,7 @@ class OPES(EnhancedSampling):
         self.output_sum_weigths_square = []
         self.output_norm_factor = []
         self.output_bias_pot = []
+        self.merge_count = 0
 
 
     def step_bias(
@@ -297,7 +296,8 @@ class OPES(EnhancedSampling):
                 delta_uprob += delta_sum_uprob
 
             # Get old uprob from denormalized old norm factor and add change in uprob then calculate new norm factor and set
-            new_uprob = self.norm_factor * self.N_old * self.S_old + delta_uprob
+            new_uprob = self.uprob_old + delta_uprob
+            self.uprob_old = new_uprob
             norm_factor = new_uprob/N/S
             return norm_factor
 
@@ -308,6 +308,7 @@ class OPES(EnhancedSampling):
                 sum_gaussians =np.sum(self.get_val_gaussian(s))
                 uprob += sum_gaussians
             # Get norm factor from exact uprob and set it
+            self.uprob_old = uprob
             norm_factor = uprob/N/S
             return norm_factor
 
@@ -418,6 +419,9 @@ class OPES(EnhancedSampling):
         del self.kernel_height[kernel_min_ind]
         del self.kernel_center[kernel_min_ind]
         del self.kernel_sigma[kernel_min_ind]
+
+        # Count merging events
+        self.merge_count += 1
 
         return h_merge, s_merge, np.sqrt(var_merge)
 
@@ -538,6 +542,7 @@ class OPES(EnhancedSampling):
 
     def shared_bias(self):
         pass
+
 
 
 
