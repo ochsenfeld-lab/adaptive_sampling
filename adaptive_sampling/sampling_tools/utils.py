@@ -69,7 +69,7 @@ def correct_periodicity(x: Union[np.ndarray, float], periodicity: list,
 
 
 def welford_var(
-    count: float, mean: float, M2: float, newValue: float
+    count: float, mean: float, M2: float, newValue: float, decay: float = 1.0,
 ) -> Tuple[float, float, float]:
     """On-the-fly estimate of sample variance by Welford's online algorithm
     
@@ -86,7 +86,7 @@ def welford_var(
     """
     if count == 0:
         return 0.0, 0.0, 0.0
-    delta = newValue - mean
+    delta = (newValue - mean)/ decay
     mean += delta / count
     delta2 = newValue - mean
     M2 += delta * delta2

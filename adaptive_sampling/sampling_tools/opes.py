@@ -9,23 +9,27 @@ class OPES(EnhancedSampling):
     
     Args:
         kernel_std: standard deviation of first kernel
+        explore: enables exploration mode
         energy_barr: free energy barrier that the bias should help to overcome [kJ/mol]
         update_freq: interval of md steps in which new kernels should be 
         approximate_norm: enables approximation of norm factor
         merge_threshold: threshold distance for kde-merging in units of std, "np.inf" disables merging
         recursion_merge: enables recursive merging
         bias_factor: allows setting a default bias factor instead of calculating it from energy barrier
+        print_pmf: enables calculation of pmf on the fly
     """
     def __init__(
         self,
         kernel_std: np.array,
         *args,
+        explore: bool = False,
         energy_barr: float = 20.0,
         update_freq: int = 1000,
         approximate_norm: bool = False,
         merge_threshold: float = 1.0,
         recursion_merge: bool = False,
         bias_factor: float = None,
+        print_pmf: bool = False,
         **kwargs
     ):
         super().__init__(*args, **kwargs)
@@ -50,14 +54,18 @@ class OPES(EnhancedSampling):
         self.uprob_old = self.norm_factor * self.sum_weights
         self.md_state = self.the_md.get_sampling_data()
         self.sigma_0 = self.unit_conversion_cv(np.asarray(kernel_std))[0]
+        self.n = 0 #counter for number of updates
+        self.pmf = 0.0
 
         # Simulation Parameters
+        self.explore = explore
         self.update_freq = update_freq
         self.approx_norm = approximate_norm
         self.merge = False if merge_threshold == np.inf else True
         self.merge_threshold = merge_threshold
         self.recursive = recursion_merge
         s, _ = self.get_cv(**kwargs)
+        self.print_pmf = print_pmf
 
         # Kernels
         self.kernel_height = [1.2]
@@ -100,14 +108,20 @@ class OPES(EnhancedSampling):
 
         # Calculate new probability
         val_gaussians = self.get_val_gaussian(s_new)
-        prob_dist = np.sum(val_gaussians)
+        if not self.explore:
+            prob_dist = np.sum(val_gaussians)
+        else:
+            prob_dist = np.sum(val_gaussians) / self.n
 
         s_diff = (s_new - np.asarray(self.kernel_center))
         # Correct periodicity of spatial distances
         for i in range(self.ncoords):
             s_diff[:,i] = correct_periodicity(s_diff[:,i], self.periodicity[i])
 
-        deriv_prob_dist = np.sum(-val_gaussians * np.divide(s_diff, np.asarray(self.kernel_sigma)).T, axis=1)
+        if not self.explore:
+            deriv_prob_dist = np.sum(-val_gaussians * np.divide(s_diff, np.asarray(self.kernel_sigma)).T, axis=1)
+        else:
+            deriv_prob_dist = np.sum(-val_gaussians * np.divide(s_diff, np.asarray(self.kernel_sigma)).T, axis=1) / self.n
         self.prob_dist = prob_dist
         self.deriv_prob_dist = deriv_prob_dist
         if self.verbose and self.md_state.step%(self.update_freq)==0:
@@ -193,9 +207,13 @@ class OPES(EnhancedSampling):
         self.delta_kernel_sigma = []
         self.N_old = len(self.kernel_center)
         self.S_old = self.sum_weights
+        self.n += 1
 
-        # calculate probability
-        prob_dist = np.sum(self.get_val_gaussian(s_new))
+        # Calculate probability
+        if not self.explore:
+            prob_dist = np.sum(self.get_val_gaussian(s_new))
+        else:
+            prob_dist = np.sum(self.get_val_gaussian(s_new)) / self.n
         self.prob_dist = prob_dist
 
         # Calculate bias potential
@@ -211,9 +229,14 @@ class OPES(EnhancedSampling):
         self.sum_weights_square += weigth_coeff * weigth_coeff
 
         # Bandwidth rescaling
-        self.n_eff = np.square(1+self.sum_weights) / (1+self.sum_weights_square)
-        sigma_i =  self.sigma_0 * np.power((self.n_eff * (self.ncoords + 2)/4), -1/(self.ncoords + 4))
-        height = weigth_coeff * np.prod(self.sigma_0 / sigma_i)
+        if not self.explore:
+            self.n_eff = np.square(1+self.sum_weights) / (1+self.sum_weights_square)
+            sigma_i = self.sigma_0 * np.power((self.n_eff * (self.ncoords + 2)/4), -1/(self.ncoords + 4))
+            height = weigth_coeff * np.prod(self.sigma_0 / sigma_i)
+        else:
+            self.n_eff = self.n
+            sigma_i = self.sigma_0 * np.power((self.n_eff * (self.ncoords + 2)/4), -1/(self.ncoords + 4))
+            height = 1.0
 
         # Kernel Density 
         if len(self.kernel_center) > 0 and self.md_state.step > 0:
@@ -221,6 +244,10 @@ class OPES(EnhancedSampling):
 
         # Calculate normalization factor
         self.norm_factor = self.calc_norm_factor(approximate = self.approx_norm)
+
+        # Calculate pmf on the fly if enabled
+        if self.print_pmf:
+            self.pmf = self.get_pmf()
 
 
     def calc_pot(
@@ -235,7 +262,10 @@ class OPES(EnhancedSampling):
         Returns:
             potential: potential for given probability distribution
         """
-        potential = (self.gamma_prefac / self.beta) * np.log(prob_dist / self.norm_factor + self.epsilon)
+        if not self.explore:
+            potential = (self.gamma_prefac / self.beta) * np.log(prob_dist / self.norm_factor + self.epsilon)
+        else:
+            potential = (self.gamma - 1 / self.beta) * np.log(prob_dist / self.norm_factor + self.epsilon)
         return potential
     
     
@@ -298,15 +328,23 @@ class OPES(EnhancedSampling):
             # Get old uprob from denormalized old norm factor and add change in uprob then calculate new norm factor and set
             new_uprob = self.uprob_old + delta_uprob
             self.uprob_old = new_uprob
-            norm_factor = new_uprob/N/S
+            if not self.explore:
+                norm_factor = new_uprob/N/S
+            else:
+                norm_factor = new_uprob/N/S/self.n
             return norm_factor
 
         else:
             uprob = 0.0
             # Loop over all kernels with all kernels to get exact uprob
-            for s in self.kernel_center:
-                sum_gaussians =np.sum(self.get_val_gaussian(s))
-                uprob += sum_gaussians
+            if not self.explore:
+                for s in self.kernel_center:
+                    sum_gaussians =np.sum(self.get_val_gaussian(s))
+                    uprob += sum_gaussians
+            else:
+                for s in self.kernel_center:
+                    sum_gaussians = np.sum(self.get_val_gaussian(s)) / self.n
+                    uprob += sum_gaussians
             # Get norm factor from exact uprob and set it
             self.uprob_old = uprob
             norm_factor = uprob/N/S
@@ -509,7 +547,10 @@ class OPES(EnhancedSampling):
     def get_pmf(
         self
     ):
-        """calculate pmf on the fly from compressed kernels
+        """calculate pmf on the fly from compressed kernels for one and two dimensional CV spaces
+
+        Returns:
+            pmf: potential of mean force
         """
         if self.ncoords == 1:
             P = np.zeros_like(self.grid[0])
