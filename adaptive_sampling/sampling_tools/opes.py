@@ -2,6 +2,7 @@ import sys,os
 from adaptive_sampling.sampling_tools.enhanced_sampling import EnhancedSampling
 from adaptive_sampling.units import *
 from .utils import correct_periodicity
+from .utils import welford_var
 import numpy as np
 
 class OPES(EnhancedSampling):
@@ -30,20 +31,29 @@ class OPES(EnhancedSampling):
         recursion_merge: bool = False,
         bias_factor: float = None,
         print_pmf: bool = False,
+        adaptive_sigma: bool = False,
         **kwargs
     ):
         super().__init__(*args, **kwargs)
+        
+        # Simulation Parameters
+        self.explore = explore
+        self.update_freq = update_freq
+        self.approx_norm = approximate_norm
+        self.adaptive_sigma = adaptive_sigma
+        self.merge = False if merge_threshold == np.inf else True
+        self.merge_threshold = merge_threshold
+        self.recursive = recursion_merge
+        s, _ = self.get_cv(**kwargs)
+        self.print_pmf = print_pmf
 
         # Constants
         self.energy_barr = energy_barr * kJ_to_kcal
         self.beta = 1/(self.equil_temp * kB_in_atomic * atomic_to_kJmol * kJ_to_kcal)
-        if bias_factor == None:
-            self.gamma = self.beta * self.energy_barr
-        else:
-            self.gamma = bias_factor
-        self.gamma_prefac = 1 - 1/self.gamma
+        self.gamma = self.beta * self.energy_barr if bias_factor == None else bias_factor # Enable setting of bias factor
+        self.gamma_prefac = self.gamma - 1 if explore else 1 - 1/self.gamma # Differentiate between explore and normal opes
         self.temperature = self.equil_temp
-        self.epsilon = np.exp(((-1) * self.beta * self.energy_barr)/self.gamma_prefac)
+        self.epsilon = np.exp((-self.beta * self.energy_barr) / self.gamma_prefac)
 
         # Initial values
         self.prob_dist = 1.0
@@ -53,22 +63,16 @@ class OPES(EnhancedSampling):
         self.norm_factor = 1/self.sum_weights
         self.uprob_old = self.norm_factor * self.sum_weights
         self.md_state = self.the_md.get_sampling_data()
-        self.sigma_0 = self.unit_conversion_cv(np.asarray(kernel_std))[0]
-        self.n = 0 #counter for number of updates
+        self.sigma_0 = self.unit_conversion_cv(np.asarray(kernel_std))[0] # Standard deviation of first kernel converted to atomic units
+        self.n = 0 # Counter for number of updates
         self.pmf = 0.0
-
-        # Simulation Parameters
-        self.explore = explore
-        self.update_freq = update_freq
-        self.approx_norm = approximate_norm
-        self.merge = False if merge_threshold == np.inf else True
-        self.merge_threshold = merge_threshold
-        self.recursive = recursion_merge
-        s, _ = self.get_cv(**kwargs)
-        self.print_pmf = print_pmf
+        self.adaptive_sigma_stride = 10 * self.update_freq
+        self.adaptive_counter = 0
+        self.welford_m2 = np.zeros(self.ncoords)
+        self.welford_mean = np.zeros(self.ncoords)
 
         # Kernels
-        self.kernel_height = [1.2]
+        self.kernel_height = [1.0]
         self.kernel_center = [s]
         self.kernel_sigma = [self.sigma_0]
 
@@ -78,6 +82,7 @@ class OPES(EnhancedSampling):
         self.output_norm_factor = []
         self.output_bias_pot = []
         self.merge_count = 0
+        self.uprob_print = self.uprob_old
 
 
     def step_bias(
@@ -102,26 +107,29 @@ class OPES(EnhancedSampling):
         self.md_state = self.the_md.get_sampling_data()
         (s_new, delta_s_new) = self.get_cv(**kwargs)
 
+        # Update sigma if adaptive sigma is enabled
+        if self.adaptive_sigma:
+            self.adaptive_counter += 1
+            tau = self.adaptive_sigma_stride
+            if self.adaptive_counter < self.adaptive_sigma_stride:
+                tau = self.adaptive_counter
+            self.welford_mean, self.welford_m2, self.welford_var = welford_var(self.md_state.step, self.welford_mean, self.welford_m2, s_new, tau)
+
         # Call update function to place kernel
         if self.md_state.step%self.update_freq == 0:
             self.update_kde(s_new)
 
-        # Calculate new probability
+        # Calculate new probability and its derivative
+        divisor = self.n if self.explore else 1.0
         val_gaussians = self.get_val_gaussian(s_new)
-        if not self.explore:
-            prob_dist = np.sum(val_gaussians)
-        else:
-            prob_dist = np.sum(val_gaussians) / self.n
+        prob_dist = np.sum(val_gaussians) / divisor
 
         s_diff = (s_new - np.asarray(self.kernel_center))
-        # Correct periodicity of spatial distances
         for i in range(self.ncoords):
             s_diff[:,i] = correct_periodicity(s_diff[:,i], self.periodicity[i])
 
-        if not self.explore:
-            deriv_prob_dist = np.sum(-val_gaussians * np.divide(s_diff, np.asarray(self.kernel_sigma)).T, axis=1)
-        else:
-            deriv_prob_dist = np.sum(-val_gaussians * np.divide(s_diff, np.asarray(self.kernel_sigma)).T, axis=1) / self.n
+        deriv_prob_dist = np.sum(-val_gaussians * np.divide(s_diff, np.asarray(self.kernel_sigma)).T, axis=1) / divisor
+
         self.prob_dist = prob_dist
         self.deriv_prob_dist = deriv_prob_dist
         if self.verbose and self.md_state.step%(self.update_freq)==0:
@@ -210,10 +218,8 @@ class OPES(EnhancedSampling):
         self.n += 1
 
         # Calculate probability
-        if not self.explore:
-            prob_dist = np.sum(self.get_val_gaussian(s_new))
-        else:
-            prob_dist = np.sum(self.get_val_gaussian(s_new)) / self.n
+        divisor = self.n if self.explore else 1.0
+        prob_dist = np.sum(self.get_val_gaussian(s_new)) / divisor
         self.prob_dist = prob_dist
 
         # Calculate bias potential
@@ -229,14 +235,19 @@ class OPES(EnhancedSampling):
         self.sum_weights_square += weigth_coeff * weigth_coeff
 
         # Bandwidth rescaling
-        if not self.explore:
-            self.n_eff = np.square(1+self.sum_weights) / (1+self.sum_weights_square)
-            sigma_i = self.sigma_0 * np.power((self.n_eff * (self.ncoords + 2)/4), -1/(self.ncoords + 4))
-            height = weigth_coeff * np.prod(self.sigma_0 / sigma_i)
+        self.n_eff = np.square(1+self.sum_weights) / (1+self.sum_weights_square) if not self.explore else self.n
+
+        if self.adaptive_sigma:
+            if self.md_state.step == 0:
+                sigma_i = self.sigma_0
+            else:
+                factor = self.gamma if not self.explore else 1.0
+                sigma_i = np.sqrt(self.welford_m2/self.md_state.step/factor)
         else:
-            self.n_eff = self.n
             sigma_i = self.sigma_0 * np.power((self.n_eff * (self.ncoords + 2)/4), -1/(self.ncoords + 4))
-            height = 1.0
+        
+        height = weigth_coeff * np.prod(self.sigma_0 / sigma_i) if not self.explore else 1.0
+
 
         # Kernel Density 
         if len(self.kernel_center) > 0 and self.md_state.step > 0:
@@ -262,10 +273,7 @@ class OPES(EnhancedSampling):
         Returns:
             potential: potential for given probability distribution
         """
-        if not self.explore:
-            potential = (self.gamma_prefac / self.beta) * np.log(prob_dist / self.norm_factor + self.epsilon)
-        else:
-            potential = (self.gamma - 1 / self.beta) * np.log(prob_dist / self.norm_factor + self.epsilon)
+        potential = (self.gamma_prefac / self.beta) * np.log(prob_dist / self.norm_factor + self.epsilon)
         return potential
     
     
@@ -303,7 +311,10 @@ class OPES(EnhancedSampling):
         Returns:
             delta_uprob: non normalized sum over the gauss values for the newly placed kernel
         """
-        S = self.sum_weights
+        if not self.explore:
+            S = self.sum_weights
+        else:
+            S = self.n 
         N = len(self.kernel_center)
         
         if approximate:
@@ -329,9 +340,11 @@ class OPES(EnhancedSampling):
             new_uprob = self.uprob_old + delta_uprob
             self.uprob_old = new_uprob
             if not self.explore:
+                self.uprob_print = new_uprob
                 norm_factor = new_uprob/N/S
             else:
-                norm_factor = new_uprob/N/S/self.n
+                self.uprob_print = new_uprob
+                norm_factor = new_uprob/N/S
             return norm_factor
 
         else:
@@ -343,7 +356,7 @@ class OPES(EnhancedSampling):
                     uprob += sum_gaussians
             else:
                 for s in self.kernel_center:
-                    sum_gaussians = np.sum(self.get_val_gaussian(s)) / self.n
+                    sum_gaussians = np.sum(self.get_val_gaussian(s))
                     uprob += sum_gaussians
             # Get norm factor from exact uprob and set it
             self.uprob_old = uprob
@@ -480,7 +493,8 @@ class OPES(EnhancedSampling):
             norm_factor = self.norm_factor,
             heigth = self.kernel_height,
             center = self.kernel_center,
-            sigma = self.kernel_sigma
+            sigma = self.kernel_sigma,
+            explore = self.explore
         )
 
 
@@ -505,6 +519,7 @@ class OPES(EnhancedSampling):
         self.kernel_height = data["height"]
         self.kernel_center = data["center"]
         self.kernel_sigma = data["sigma"]
+        self.explore = data["explore"]
 
         if self.verbose:
             print(f" >>> Info: Adaptive sampling restartet from {filename}!")
