@@ -311,10 +311,7 @@ class OPES(EnhancedSampling):
         Returns:
             delta_uprob: non normalized sum over the gauss values for the newly placed kernel
         """
-        if not self.explore:
-            S = self.sum_weights
-        else:
-            S = self.n 
+        S = self.sum_weights if not self.explore else self.n
         N = len(self.kernel_center)
         
         if approximate:
@@ -339,25 +336,18 @@ class OPES(EnhancedSampling):
             # Get old uprob from denormalized old norm factor and add change in uprob then calculate new norm factor and set
             new_uprob = self.uprob_old + delta_uprob
             self.uprob_old = new_uprob
-            if not self.explore:
-                self.uprob_print = new_uprob
-                norm_factor = new_uprob/N/S
-            else:
-                self.uprob_print = new_uprob
-                norm_factor = new_uprob/N/S
+            self.uprob_print = new_uprob
+            norm_factor = new_uprob/N/S
+
             return norm_factor
 
         else:
             uprob = 0.0
             # Loop over all kernels with all kernels to get exact uprob
-            if not self.explore:
-                for s in self.kernel_center:
-                    sum_gaussians =np.sum(self.get_val_gaussian(s))
-                    uprob += sum_gaussians
-            else:
-                for s in self.kernel_center:
-                    sum_gaussians = np.sum(self.get_val_gaussian(s))
-                    uprob += sum_gaussians
+            for s in self.kernel_center:
+                sum_gaussians =np.sum(self.get_val_gaussian(s))
+                uprob += sum_gaussians
+
             # Get norm factor from exact uprob and set it
             self.uprob_old = uprob
             norm_factor = uprob/N/S
