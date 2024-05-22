@@ -18,11 +18,13 @@ class OPES(EnhancedSampling):
         recursion_merge: enables recursive merging
         bias_factor: allows setting a default bias factor instead of calculating it from energy barrier
         print_pmf: enables calculation of pmf on the fly
+        adaptive_sigma: enables adaptive sigma calculation nontheless with rescaling
+        fixed_sigma: disables bandwidth rescaling and uses input sigma for all kernels
     """
     def __init__(
         self,
-        kernel_std: np.array,
         *args,
+        kernel_std: np.array = np.array([None, None]),
         explore: bool = False,
         energy_barr: float = 20.0,
         update_freq: int = 1000,
@@ -32,6 +34,7 @@ class OPES(EnhancedSampling):
         bias_factor: float = None,
         print_pmf: bool = False,
         adaptive_sigma: bool = False,
+        fixed_sigma: bool = False,
         **kwargs
     ):
         super().__init__(*args, **kwargs)
@@ -41,11 +44,15 @@ class OPES(EnhancedSampling):
         self.update_freq = update_freq
         self.approx_norm = approximate_norm
         self.adaptive_sigma = adaptive_sigma
+        self.fixed_sigma = fixed_sigma
+        if self.fixed_sigma and self.adaptive_sigma:
+            raise ValueError(" >>> Error: Adaptive and fixed sigma cannot be enabled at the same time!")
         self.merge = False if merge_threshold == np.inf else True
         self.merge_threshold = merge_threshold
         self.recursive = recursion_merge
         s, _ = self.get_cv(**kwargs)
         self.print_pmf = print_pmf
+        self.sigma_estimate = True if kernel_std.all() == None else False
 
         # Constants
         self.energy_barr = energy_barr * kJ_to_kcal
@@ -63,7 +70,8 @@ class OPES(EnhancedSampling):
         self.norm_factor = 1/self.sum_weights
         self.uprob_old = self.norm_factor * self.sum_weights
         self.md_state = self.the_md.get_sampling_data()
-        self.sigma_0 = self.unit_conversion_cv(np.asarray(kernel_std))[0] # Standard deviation of first kernel converted to atomic units
+        if kernel_std.all() != None:
+            self.sigma_0 = self.unit_conversion_cv(np.asarray(kernel_std))[0] # Standard deviation of first kernel converted to atomic units
         self.n = 0 # Counter for number of updates
         self.pmf = 0.0
         self.adaptive_sigma_stride = 10 * self.update_freq
@@ -72,9 +80,9 @@ class OPES(EnhancedSampling):
         self.welford_mean = np.zeros(self.ncoords)
 
         # Kernels
-        self.kernel_height = [1.0]
-        self.kernel_center = [s]
-        self.kernel_sigma = [self.sigma_0]
+        self.kernel_height = []
+        self.kernel_center = []
+        self.kernel_sigma = []
 
         # Output
         self.output_sum_weigths = []
@@ -83,6 +91,7 @@ class OPES(EnhancedSampling):
         self.output_bias_pot = []
         self.merge_count = 0
         self.uprob_print = self.uprob_old
+        self.n_eff = 1.0
 
 
     def step_bias(
@@ -107,6 +116,24 @@ class OPES(EnhancedSampling):
         self.md_state = self.the_md.get_sampling_data()
         (s_new, delta_s_new) = self.get_cv(**kwargs)
 
+        # Unbiased estimation of sigma
+        if self.sigma_estimate and self.md_state.step < self.adaptive_sigma_stride:
+            self.adaptive_counter += 1
+            tau = self.adaptive_sigma_stride
+            if self.adaptive_counter < self.adaptive_sigma_stride:
+                tau = self.adaptive_counter
+            self.welford_mean, self.welford_m2, self.welford_var = welford_var(self.md_state.step, self.welford_mean, self.welford_m2, s_new, tau)
+            self.sigma_0 = np.sqrt(self.welford_var)
+
+            self.traj = np.append(self.traj, [s_new], axis=0)
+            self.epot.append(self.md_state.epot)
+            self.temp.append(self.md_state.temp)
+            self.output_bias_pot.append(0.0)
+            self.output_sum_weigths.append(self.sum_weights)
+            self.output_sum_weigths_square.append(self.sum_weights_square)
+            self.output_norm_factor.append(self.norm_factor)
+            return np.zeros_like(self.the_md.coords)
+
         # Update sigma if adaptive sigma is enabled
         if self.adaptive_sigma:
             self.adaptive_counter += 1
@@ -114,6 +141,8 @@ class OPES(EnhancedSampling):
             if self.adaptive_counter < self.adaptive_sigma_stride:
                 tau = self.adaptive_counter
             self.welford_mean, self.welford_m2, self.welford_var = welford_var(self.md_state.step, self.welford_mean, self.welford_m2, s_new, tau)
+            factor = self.gamma if not self.explore else 1.0
+            self.sigma_0 = np.sqrt(self.welford_var / factor)
 
         # Call update function to place kernel
         if self.md_state.step%self.update_freq == 0:
@@ -184,6 +213,9 @@ class OPES(EnhancedSampling):
         Returns:
             val_gaussians: array of all values of all kernels at s
         """
+        if len(self.kernel_center) == 0:
+            return np.zeros(1)
+
         s_diff = (s - np.asarray(self.kernel_center))
 
         # Correct Periodicity of spatial distances
@@ -213,8 +245,7 @@ class OPES(EnhancedSampling):
         self.delta_kernel_height = []
         self.delta_kernel_center = []
         self.delta_kernel_sigma = []
-        self.N_old = len(self.kernel_center)
-        self.S_old = self.sum_weights
+
         self.n += 1
 
         # Calculate probability
@@ -237,21 +268,15 @@ class OPES(EnhancedSampling):
         # Bandwidth rescaling
         self.n_eff = np.square(1+self.sum_weights) / (1+self.sum_weights_square) if not self.explore else self.n
 
-        if self.adaptive_sigma:
-            if self.md_state.step == 0:
-                sigma_i = self.sigma_0
-            else:
-                factor = self.gamma if not self.explore else 1.0
-                sigma_i = np.sqrt(self.welford_m2/self.md_state.step/factor)
-        else:
+        if not self.fixed_sigma and len(self.kernel_sigma) > 0:
             sigma_i = self.sigma_0 * np.power((self.n_eff * (self.ncoords + 2)/4), -1/(self.ncoords + 4))
+        else:
+            sigma_i = self.sigma_0
         
         height = weigth_coeff * np.prod(self.sigma_0 / sigma_i) if not self.explore else 1.0
 
-
         # Kernel Density 
-        if len(self.kernel_center) > 0 and self.md_state.step > 0:
-            self.compression_check(height, s_new, sigma_i)
+        self.compression_check(height, s_new, sigma_i)
 
         # Calculate normalization factor
         self.norm_factor = self.calc_norm_factor(approximate = self.approx_norm)
@@ -376,7 +401,7 @@ class OPES(EnhancedSampling):
         kernel_min_ind, min_distance = self.calc_min_dist(s_new)
         
         # Recursive merging if enabled and distances under threshold
-        while self.merge and np.all(min_distance < self.merge_threshold):
+        while self.merge and np.all(min_distance < self.merge_threshold) and len(self.kernel_center) > 1:
 
             # Merge again
             h_new, s_new, std_new = self.merge_kernels(kernel_min_ind, h_new, s_new, std_new)
