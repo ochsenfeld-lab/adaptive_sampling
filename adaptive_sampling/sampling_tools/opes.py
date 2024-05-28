@@ -1,9 +1,9 @@
 import sys,os
+import numpy as np
 from adaptive_sampling.sampling_tools.enhanced_sampling import EnhancedSampling
 from adaptive_sampling.units import *
 from .utils import correct_periodicity
 from .utils import welford_var
-import numpy as np
 
 class OPES(EnhancedSampling):
     """on-the-fly probability enhanced sampling
@@ -19,6 +19,7 @@ class OPES(EnhancedSampling):
         bias_factor: allows setting a default bias factor instead of calculating it from energy barrier
         print_pmf: enables calculation of pmf on the fly
         adaptive_sigma: enables adaptive sigma calculation nontheless with rescaling
+        unbiased_time: time in update frequencies for unbiased estimation of sigma if no input is given
         fixed_sigma: disables bandwidth rescaling and uses input sigma for all kernels
     """
     def __init__(
@@ -34,6 +35,7 @@ class OPES(EnhancedSampling):
         bias_factor: float = None,
         print_pmf: bool = False,
         adaptive_sigma: bool = False,
+        unbiased_time: int = 10,
         fixed_sigma: bool = False,
         **kwargs
     ):
@@ -52,7 +54,9 @@ class OPES(EnhancedSampling):
         self.recursive = recursion_merge
         s, _ = self.get_cv(**kwargs)
         self.print_pmf = print_pmf
-        self.sigma_estimate = True if kernel_std.all() == None else False
+        self.sigma_estimate = True if (kernel_std == None).all() else False
+        if (kernel_std == None).any() and not (kernel_std == None).all():
+            raise ValueError(" >>> Error: Kernel standard deviation must be set either all None or all values!")
 
         # Constants
         self.energy_barr = energy_barr * kJ_to_kcal
@@ -65,16 +69,17 @@ class OPES(EnhancedSampling):
         # Initial values
         self.prob_dist = 1.0
         self.deriv_prob_dist = 0.0
+        self.potential = 0.0
         self.sum_weights = np.power(self.epsilon, self.gamma_prefac)
         self.sum_weights_square = self.sum_weights * self.sum_weights
         self.norm_factor = 1/self.sum_weights
         self.uprob_old = self.norm_factor * self.sum_weights
         self.md_state = self.the_md.get_sampling_data()
-        if kernel_std.all() != None:
+        if (kernel_std != None).all():
             self.sigma_0 = self.unit_conversion_cv(np.asarray(kernel_std))[0] # Standard deviation of first kernel converted to atomic units
         self.n = 0 # Counter for number of updates
         self.pmf = 0.0
-        self.adaptive_sigma_stride = 10 * self.update_freq
+        self.adaptive_sigma_stride = unbiased_time * self.update_freq
         self.adaptive_counter = 0
         self.welford_m2 = np.zeros(self.ncoords)
         self.welford_mean = np.zeros(self.ncoords)
@@ -92,6 +97,10 @@ class OPES(EnhancedSampling):
         self.merge_count = 0
         self.uprob_print = self.uprob_old
         self.n_eff = 1.0
+
+        # Error catching
+        if self.kinetics == True and self.ncoords > 1:
+            raise ValueError(" >>> Error: Kinetics can only be calculated for one-dimensional CV space!")
 
 
     def step_bias(
@@ -115,6 +124,10 @@ class OPES(EnhancedSampling):
         # Load md data
         self.md_state = self.the_md.get_sampling_data()
         (s_new, delta_s_new) = self.get_cv(**kwargs)
+
+        # Corretion for kinetics
+        if self.kinetics:
+            self._kinetics(delta_s_new)
 
         # Unbiased estimation of sigma
         if self.sigma_estimate and self.md_state.step < self.adaptive_sigma_stride:
@@ -509,7 +522,8 @@ class OPES(EnhancedSampling):
             heigth = self.kernel_height,
             center = self.kernel_center,
             sigma = self.kernel_sigma,
-            explore = self.explore
+            explore = self.explore,
+            n = self.n
         )
 
 
@@ -535,6 +549,7 @@ class OPES(EnhancedSampling):
         self.kernel_center = data["center"]
         self.kernel_sigma = data["sigma"]
         self.explore = data["explore"]
+        self.n = data["n"]
 
         if self.verbose:
             print(f" >>> Info: Adaptive sampling restartet from {filename}!")
@@ -580,32 +595,35 @@ class OPES(EnhancedSampling):
         """calculate pmf on the fly from compressed kernels for one and two dimensional CV spaces
 
         Returns:
-            pmf: potential of mean force
+            pmf: potential of mean force in kcal
         """
         if self.ncoords == 1:
             P = np.zeros_like(self.grid[0])
+            divisor = 1.0 if not self.explore else self.n
             for x in range(len(self.grid[0])):
                 s_diff = self.grid[0][x] - np.asarray(self.kernel_center)
                 for l in range(self.ncoords):
                     s_diff[:,l] = correct_periodicity(s_diff[:,l], self.periodicity[l])
                 val_gaussians = np.asarray(self.kernel_height) * np.exp(-0.5 * np.sum(np.square(np.divide(s_diff, np.asarray(self.kernel_sigma))),axis=1))
-                P[x] = np.sum(val_gaussians)
+                P[x] = np.sum(val_gaussians) / divisor
 
         elif self.ncoords == 2:
             P = np.zeros_like(self.grid)
+            divisor = 1.0 if not self.explore else self.n
             for x in range(len(self.grid[0,:])):
                 for y in range(len(self.grid[1,:])):
                     s_diff = np.array([self.grid[0,x], self.grid[1,y]]) - np.asarray(self.kernel_center)
                     for l in range(self.ncoords):
                         s_diff[:,l] = correct_periodicity(s_diff[:,l], self.periodicity[l])
                     val_gaussians = np.asarray(self.kernel_height) * np.exp(-0.5 * np.sum(np.square(np.divide(s_diff, np.asarray(self.kernel_sigma))),axis=1))
-                    P[x,y] = np.sum(val_gaussians)
+                    P[x,y] = np.sum(val_gaussians) / divisor
         else:
             pmf = 0.0
             return pmf
         
-        bias_pot = self.gamma_prefac / self.beta * np.log(P/self.norm_factor + self.epsilon)
-        pmf = bias_pot/-self.gamma_prefac
+        bias_pot = np.log(P/self.norm_factor + self.epsilon) / self.beta
+        bias_pot = - self.gamma * bias_pot if self.explore else self.gamma_prefac * bias_pot
+        pmf = bias_pot/-self.gamma_prefac if not self.explore else bias_pot
         pmf -= pmf.min()
         
         return pmf
