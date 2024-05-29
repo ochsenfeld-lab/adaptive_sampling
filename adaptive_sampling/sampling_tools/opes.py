@@ -163,14 +163,15 @@ class OPES(EnhancedSampling):
 
         # Calculate new probability and its derivative
         divisor = self.n if self.explore else 1.0
+        KDE_norm = self.sum_weights if not self.explore else self.n
         val_gaussians = self.get_val_gaussian(s_new)
-        prob_dist = np.sum(val_gaussians) / divisor
+        prob_dist = np.sum(val_gaussians) / divisor / KDE_norm
 
         s_diff = (s_new - np.asarray(self.kernel_center))
         for i in range(self.ncoords):
             s_diff[:,i] = correct_periodicity(s_diff[:,i], self.periodicity[i])
 
-        deriv_prob_dist = np.sum(-val_gaussians * np.divide(s_diff, np.asarray(self.kernel_sigma)).T, axis=1) / divisor
+        deriv_prob_dist = np.sum(-val_gaussians * np.divide(s_diff, np.asarray(self.kernel_sigma)).T, axis=1) / divisor / KDE_norm
 
         self.prob_dist = prob_dist
         self.deriv_prob_dist = deriv_prob_dist
@@ -260,10 +261,11 @@ class OPES(EnhancedSampling):
         self.delta_kernel_sigma = []
 
         self.n += 1
+        KDE_norm = self.sum_weights if not self.explore else self.n
 
         # Calculate probability
         divisor = self.n if self.explore else 1.0
-        prob_dist = np.sum(self.get_val_gaussian(s_new)) / divisor
+        prob_dist = np.sum(self.get_val_gaussian(s_new)) / divisor / KDE_norm
         self.prob_dist = prob_dist
 
         # Calculate bias potential
@@ -272,7 +274,7 @@ class OPES(EnhancedSampling):
         # Calculate weight coefficients
         weigth_coeff = np.exp(self.beta * potential)
         if self.verbose:
-            print("Update function called, now placing new kernel and evaluate its proberties")
+            print("Update function called, now placing new kernel and evaluate its properties")
             print("Probability distribution: ", prob_dist)
             print("potential is: ", potential)
         self.sum_weights += weigth_coeff
