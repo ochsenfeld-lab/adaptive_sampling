@@ -162,16 +162,15 @@ class OPES(EnhancedSampling):
             self.update_kde(s_new)
 
         # Calculate new probability and its derivative
-        divisor = self.n if self.explore else 1.0
         KDE_norm = self.sum_weights if not self.explore else self.n
         val_gaussians = self.get_val_gaussian(s_new)
-        prob_dist = np.sum(val_gaussians) / divisor / KDE_norm
+        prob_dist = np.sum(val_gaussians) / KDE_norm
 
         s_diff = (s_new - np.asarray(self.kernel_center))
         for i in range(self.ncoords):
             s_diff[:,i] = correct_periodicity(s_diff[:,i], self.periodicity[i])
 
-        deriv_prob_dist = np.sum(-val_gaussians * np.divide(s_diff, np.asarray(self.kernel_sigma)).T, axis=1) / divisor / KDE_norm
+        deriv_prob_dist = np.sum(-val_gaussians * np.divide(s_diff, np.asarray(self.kernel_sigma)).T, axis=1) / KDE_norm
 
         self.prob_dist = prob_dist
         self.deriv_prob_dist = deriv_prob_dist
@@ -264,8 +263,7 @@ class OPES(EnhancedSampling):
         KDE_norm = self.sum_weights if not self.explore else self.n
 
         # Calculate probability
-        divisor = self.n if self.explore else 1.0
-        prob_dist = np.sum(self.get_val_gaussian(s_new)) / divisor / KDE_norm
+        prob_dist = np.sum(self.get_val_gaussian(s_new)) / KDE_norm
         self.prob_dist = prob_dist
 
         # Calculate bias potential
@@ -601,24 +599,24 @@ class OPES(EnhancedSampling):
         """
         if self.ncoords == 1:
             P = np.zeros_like(self.grid[0])
-            divisor = 1.0 if not self.explore else self.n
+            KDE_norm = self.sum_weights if not self.explore else self.n
             for x in range(len(self.grid[0])):
                 s_diff = self.grid[0][x] - np.asarray(self.kernel_center)
                 for l in range(self.ncoords):
                     s_diff[:,l] = correct_periodicity(s_diff[:,l], self.periodicity[l])
                 val_gaussians = np.asarray(self.kernel_height) * np.exp(-0.5 * np.sum(np.square(np.divide(s_diff, np.asarray(self.kernel_sigma))),axis=1))
-                P[x] = np.sum(val_gaussians) / divisor
+                P[x] = np.sum(val_gaussians) / KDE_norm
 
         elif self.ncoords == 2:
             P = np.zeros_like(self.grid)
-            divisor = 1.0 if not self.explore else self.n
+            KDE_norm = self.sum_weights if not self.explore else self.n
             for x in range(len(self.grid[0,:])):
                 for y in range(len(self.grid[1,:])):
                     s_diff = np.array([self.grid[0,x], self.grid[1,y]]) - np.asarray(self.kernel_center)
                     for l in range(self.ncoords):
                         s_diff[:,l] = correct_periodicity(s_diff[:,l], self.periodicity[l])
                     val_gaussians = np.asarray(self.kernel_height) * np.exp(-0.5 * np.sum(np.square(np.divide(s_diff, np.asarray(self.kernel_sigma))),axis=1))
-                    P[x,y] = np.sum(val_gaussians) / divisor
+                    P[x,y] = np.sum(val_gaussians) / KDE_norm
         else:
             pmf = 0.0
             return pmf
@@ -629,11 +627,106 @@ class OPES(EnhancedSampling):
         pmf -= pmf.min()
         
         return pmf
-
+    
 
     def shared_bias(self):
         pass
 
 
+    def weighted_pmf_history2d(
+        self,
+        cv_x: np.array,
+        cv_y: np.array,
+        cv_pot: np.array,
+        hist_res: int = 10,
+    ) -> np.array:
+        """calculate weighted pmf history
 
+        Args:
+            cv_x: trajectory of cv x
+            cv_y: trajectory of cv y
+            hist_res: resolution of history
+
+        Returns:
+            pmf_weight_hist: weighted pmf history
+            scattered_time: time points of history
+        """
+
+        if self.ncoords != 2:
+            raise ValueError(" >>> Error: 2D weighted pmf history can only be calculated for two-dimensional CV spaces!")
+
+        dx = 1.0 # Bin size x dimension
+        dy = 1.0 # Bin size y dimension
+        dx2 = dx / 2.0
+        dy2 = dy / 2.0
+
+        n = int(len(cv_x)/hist_res)
+        scattered_time = []
+        pmf_weight_hist = []
+        divisor = self.sum_weights if not self.explore else self.n
+
+        print("Initialize pmf history calculation.")
+        for j in range(hist_res):
+            print("Iteration ",j+1," of", hist_res, "started.")
+            n_sample = j * n + n
+            scattered_time.append(n_sample)
+            probability_hist = np.zeros((120,80))
+            for i,x in enumerate(self.grid[0]): # Loop over grid so that i are bin centers
+                for j,y in enumerate(self.grid[1]):
+                    indices_hist = np.where(np.logical_and(np.logical_and((cv_x[0:n_sample] >= x - dx2), (cv_x[0:n_sample] < x + dx2)), np.logical_and((cv_y[0:n_sample] >= y - dy2), (cv_y[0:n_sample] < y + dy2))))
+                    probability_hist[i,j] = np.sum(np.exp(self.beta * cv_pot[indices_hist[0]])) /divisor
+            probability_hist /= np.array(probability_hist).sum()
+            potential_hist = -np.log(probability_hist)/self.beta/kJ_to_kcal
+            potential_hist -= potential_hist.min()
+            potential_hist = np.where(potential_hist==np.inf, 0, potential_hist)
+            pmf_weight_hist.append(potential_hist)
+        print("Done")
+        
+        return pmf_weight_hist, scattered_time
+    
+    
+    def weighted_pmf_history1d(
+        self,
+        cv_x: np.array,
+        cv_pot: np.array,
+        hist_res: int = 100,
+    ) -> np.array:
+        """calculate weighted pmf history
+
+        Args:
+            cv_x: trajectory of cv x
+            hist_res: resolution of history
+
+        Returns:
+            pmf_weight_hist: weighted pmf history
+            scattered_time: time points of history
+        """
+
+        if self.ncoords != 1:
+            raise ValueError(" >>> Error: 1D weighted pmf history can only be calculated for one-dimensional CV spaces!")
+
+        dx = 1.0 # Bin size
+        dx2 = dx / 2.0
+
+        n = int(len(cv_x)/hist_res)
+        scattered_time = []
+        pmf_bin_hist = []
+        divisor = self.sum_weights if not self.explore else self.n
+        print("Initialize pmf history calculation.")
+        for j in range(hist_res):
+            n_sample = j * n + n
+            print("Iteration ",j+1," of", hist_res, "started.")
+            scattered_time.append(n_sample)
+            probability_hist = np.zeros(100)
+            for i in range(70,170): # Loop over grid so that i are bin centers
+                indices_hist = np.where(np.logical_and((cv_x[0:n_sample] >= i - dx2), (cv_x[0:n_sample] < i + dx2)))
+                probability_hist[i-70] = np.sum(np.exp(self.beta * cv_pot[indices_hist])) / divisor
+            probability_hist /= probability_hist.sum()
+            potential_hist = (-np.log(probability_hist)/self.beta) /kJ_to_kcal
+            potential_hist -= potential_hist.min()
+            potential_hist = np.where(potential_hist==np.inf, 0, potential_hist)
+            pmf_bin_hist.append(potential_hist)
+        print("Done.")
+
+        return pmf_bin_hist, scattered_time
 
