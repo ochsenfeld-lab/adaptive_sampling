@@ -29,7 +29,7 @@ class OPES(EnhancedSampling):
         explore: bool = False,
         energy_barr: float = 20.0,
         update_freq: int = 1000,
-        approximate_norm: bool = False,
+        approximate_norm: bool = True,
         merge_threshold: float = 1.0,
         recursion_merge: bool = False,
         bias_factor: float = None,
@@ -78,7 +78,7 @@ class OPES(EnhancedSampling):
         if (kernel_std != None).all():
             self.sigma_0 = self.unit_conversion_cv(np.asarray(kernel_std))[0] # Standard deviation of first kernel converted to atomic units
         self.n = 0 # Counter for number of updates
-        self.pmf = 0.0
+        #self.pmf = 0.0
         self.adaptive_sigma_stride = unbiased_time * self.update_freq
         self.adaptive_counter = 0
         self.welford_m2 = np.zeros(self.ncoords)
@@ -129,6 +129,8 @@ class OPES(EnhancedSampling):
         if self.kinetics:
             self._kinetics(delta_s_new)
 
+        # start
+        # bias_force = self.opes_bias(s_new)
         # Unbiased estimation of sigma
         if self.sigma_estimate and self.md_state.step < self.adaptive_sigma_stride:
             self.adaptive_counter += 1
@@ -184,6 +186,8 @@ class OPES(EnhancedSampling):
 
         # Calculate forces
         forces = self.calculate_forces(prob_dist, deriv_prob_dist)
+        #end
+
         bias_force = np.zeros_like(self.the_md.coords, dtype=float)
         for i in range(self.ncoords):
             bias_force += forces[i] * delta_s_new[i]
@@ -296,7 +300,7 @@ class OPES(EnhancedSampling):
 
         # Calculate pmf on the fly if enabled
         if self.print_pmf:
-            self.pmf = self.get_pmf()
+            self.pmf = self.opes_get_pmf()
 
 
     def calc_pot(
@@ -660,6 +664,8 @@ class OPES(EnhancedSampling):
         dx2 = dx / 2.0
         dy2 = dy / 2.0
 
+        print("grid[0]",self.grid[0])
+        print("grid[1]",self.grid[1])
         n = int(len(cv_x)/hist_res)
         scattered_time = []
         pmf_weight_hist = []
@@ -730,3 +736,74 @@ class OPES(EnhancedSampling):
 
         return pmf_bin_hist, scattered_time
 
+
+    def opes_bias(
+        self,
+        s_new: np.array
+    ) -> np.array:
+        """calculate the bias force for a given location in CV space by the OPES algorithm e.g. for extended system usecase
+        
+        Args:
+            s_new: location in CV space for which the bias force is wanted, for extended system its cv position of fictional particle
+
+        Returns:
+            bias_force: bias force on location in CV space in atomic units
+        """
+
+        # Unbiased estimation of sigma
+        if self.sigma_estimate and self.md_state.step < self.adaptive_sigma_stride:
+            self.adaptive_counter += 1
+            tau = self.adaptive_sigma_stride
+            if self.adaptive_counter < self.adaptive_sigma_stride:
+                tau = self.adaptive_counter
+            self.welford_mean, self.welford_m2, self.welford_var = welford_var(self.md_state.step, self.welford_mean, self.welford_m2, s_new, tau)
+            self.sigma_0 = np.sqrt(self.welford_var)
+
+            self.traj = np.append(self.traj, [s_new], axis=0)
+            self.epot.append(self.md_state.epot)
+            self.temp.append(self.md_state.temp)
+            self.output_bias_pot.append(0.0)
+            self.output_sum_weigths.append(self.sum_weights)
+            self.output_sum_weigths_square.append(self.sum_weights_square)
+            self.output_norm_factor.append(self.norm_factor)
+            return np.zeros_like(self.the_md.coords)
+
+        # Update sigma if adaptive sigma is enabled
+        if self.adaptive_sigma:
+            self.adaptive_counter += 1
+            tau = self.adaptive_sigma_stride
+            if self.adaptive_counter < self.adaptive_sigma_stride:
+                tau = self.adaptive_counter
+            self.welford_mean, self.welford_m2, self.welford_var = welford_var(self.md_state.step, self.welford_mean, self.welford_m2, s_new, tau)
+            factor = self.gamma if not self.explore else 1.0
+            self.sigma_0 = np.sqrt(self.welford_var / factor)
+
+        # Call update function to place kernel
+        if self.md_state.step%self.update_freq == 0:
+            self.update_kde(s_new)
+
+        # Calculate new probability and its derivative
+        KDE_norm = self.sum_weights if not self.explore else self.n
+        val_gaussians = self.get_val_gaussian(s_new)
+        prob_dist = np.sum(val_gaussians) / KDE_norm
+
+        s_diff = (s_new - np.asarray(self.kernel_center))
+        for i in range(self.ncoords):
+            s_diff[:,i] = correct_periodicity(s_diff[:,i], self.periodicity[i])
+
+        deriv_prob_dist = np.sum(-val_gaussians * np.divide(s_diff, np.asarray(self.kernel_sigma)).T, axis=1) / KDE_norm
+
+        self.prob_dist = prob_dist
+        self.deriv_prob_dist = deriv_prob_dist
+        if self.verbose and self.md_state.step%(self.update_freq)==0:
+            self.show_kernels()
+            print("Probabiliy distribution: ", prob_dist, "and its derivative: ", deriv_prob_dist)
+            print("val gaussians =  ", val_gaussians)
+
+        # Calculate Potential
+        self.potential = self.calc_pot(prob_dist)
+
+        # Calculate forces
+        forces = self.calculate_forces(prob_dist, deriv_prob_dist)
+
+        return forces
