@@ -642,6 +642,8 @@ class OPES(EnhancedSampling):
         cv_x: np.array,
         cv_y: np.array,
         cv_pot: np.array,
+        grid_x: np.array,
+        grid_y: np.array,
         hist_res: int = 10,
     ) -> np.array:
         """calculate weighted pmf history
@@ -664,8 +666,6 @@ class OPES(EnhancedSampling):
         dx2 = dx / 2.0
         dy2 = dy / 2.0
 
-        print("grid[0]",self.grid[0])
-        print("grid[1]",self.grid[1])
         n = int(len(cv_x)/hist_res)
         scattered_time = []
         pmf_weight_hist = []
@@ -677,8 +677,8 @@ class OPES(EnhancedSampling):
             n_sample = j * n + n
             scattered_time.append(n_sample)
             probability_hist = np.zeros((120,80))
-            for i,x in enumerate(self.grid[0]): # Loop over grid so that i are bin centers
-                for j,y in enumerate(self.grid[1]):
+            for i,x in enumerate(grid_x): # Loop over grid so that i are bin centers
+                for j,y in enumerate(grid_y):
                     indices_hist = np.where(np.logical_and(np.logical_and((cv_x[0:n_sample] >= x - dx2), (cv_x[0:n_sample] < x + dx2)), np.logical_and((cv_y[0:n_sample] >= y - dy2), (cv_y[0:n_sample] < y + dy2))))
                     probability_hist[i,j] = np.sum(np.exp(self.beta * cv_pot[indices_hist[0]])) /divisor
             probability_hist /= np.array(probability_hist).sum()
@@ -695,6 +695,7 @@ class OPES(EnhancedSampling):
         self,
         cv_x: np.array,
         cv_pot: np.array,
+        grid: np.array,
         hist_res: int = 100,
     ) -> np.array:
         """calculate weighted pmf history
@@ -724,9 +725,9 @@ class OPES(EnhancedSampling):
             print("Iteration ",j+1," of", hist_res, "started.")
             scattered_time.append(n_sample)
             probability_hist = np.zeros(100)
-            for i in range(70,170): # Loop over grid so that i are bin centers
-                indices_hist = np.where(np.logical_and((cv_x[0:n_sample] >= i - dx2), (cv_x[0:n_sample] < i + dx2)))
-                probability_hist[i-70] = np.sum(np.exp(self.beta * cv_pot[indices_hist])) / divisor
+            for i,x in enumerate(grid): # Loop over grid so that i are bin centers
+                indices_hist = np.where(np.logical_and((cv_x[0:n_sample] >= x - dx2), (cv_x[0:n_sample] < x + dx2)))
+                probability_hist[i] = np.sum(np.exp(self.beta * cv_pot[indices_hist])) / divisor
             probability_hist /= probability_hist.sum()
             potential_hist = (-np.log(probability_hist)/self.beta) /kJ_to_kcal
             potential_hist -= potential_hist.min()
@@ -749,7 +750,7 @@ class OPES(EnhancedSampling):
         Returns:
             bias_force: bias force on location in CV space in atomic units
         """
-
+        step = self.the_md.get_sampling_data().step
         # Unbiased estimation of sigma
         if self.sigma_estimate and self.md_state.step < self.adaptive_sigma_stride:
             self.adaptive_counter += 1
@@ -777,9 +778,13 @@ class OPES(EnhancedSampling):
             self.welford_mean, self.welford_m2, self.welford_var = welford_var(self.md_state.step, self.welford_mean, self.welford_m2, s_new, tau)
             factor = self.gamma if not self.explore else 1.0
             self.sigma_0 = np.sqrt(self.welford_var / factor)
-
+        
         # Call update function to place kernel
-        if self.md_state.step%self.update_freq == 0:
+        if step%self.update_freq == 0:
+            print(step)
+            print(self.kernel_center)
+            if self.verbose:
+                print("OPES update KDE started.")
             self.update_kde(s_new)
 
         # Calculate new probability and its derivative
