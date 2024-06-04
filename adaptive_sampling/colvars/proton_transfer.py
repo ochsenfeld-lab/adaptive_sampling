@@ -72,7 +72,7 @@ class PT:
         # sum over donors/acceptors
         for _, (idx_x, w_x) in enumerate(zip(heavy_idx, heavy_weights)): 
             self.cv -= w_x * torch.matmul(z[idx_x] - r_don, z_u)
-            
+        
         # mixed sum for modified CEC
         if modified:
             for _, idx_hi in enumerate(proton_idx):
@@ -80,7 +80,7 @@ class PT:
                 for _, idx_xj in enumerate(heavy_idx):
                     r_ij = r_hi - z[idx_xj]
                     self.cv -= self._f_sw(r_ij) * torch.matmul(r_ij, z_u)
-
+        
         # correction for coupled donor and acceptor 
         # (e.g. for glutamate, aspartate, histidine, ...)
         if bool(pair_def):
@@ -113,7 +113,7 @@ class PT:
                 m_k = nom_k / denom_k
                 m_l = nom_l / denom_l
                 self.cv += (w_pj / 2.0) * (m_k * r_kl - m_l * r_kl)
-
+        
         if self.requires_grad:
             self.gradient = torch.autograd.grad(
                 self.cv, coords, allow_unused=True

@@ -10,6 +10,7 @@ BOHR_to_NANOMETER = BOHR_to_ANGSTROM / 10.0
 DEGREES_per_RADIAN = 180.0 / math.pi
 atomic_to_kg = 1.66054e-27
 atomic_to_fs = 1.0327503e0
+atomic_to_bar = 2.9421912e8
 
 # constants
 kB_in_SI = 1.380648e-23

@@ -281,7 +281,7 @@ class FENEB:
         return tau.flatten()       
 
     @staticmethod
-    def tangent_vector_improved(image: list, potentials: list) -> np.ndarray:
+    def tangent_vector_improved(image: list, potentials: list, verbose: bool=False) -> np.ndarray:
         """ improved tangent estimate 
         
         See: Henkelmann, et al. JCP (2000): <https://doi.org/10.1063/1.1323224>
@@ -313,6 +313,8 @@ class FENEB:
                 tau = tau_plus*DeltaV_min + tau_minus*DeltaV_max
         else:
             # defaults to normal tangent estimate
+            if verbose:
+                print(" >>> WARNING: could not use improved tangent estimate by Henkelmann et al.")
             return FENEB.tangent_vector(image)
         
         tau /= np.linalg.norm(tau)
@@ -361,34 +363,60 @@ class FENEB:
             endpoints: list of ase molecules that represent endpoints of path
             idpp: if True, get improved path guess from IDPP method
         """
-        images = [self.initial]
-        images += [self.initial.copy() for _ in range(self.nimages)]
-        images += [self.final]
+        if len(self.active) != len(self.initial.get_positions()):
 
-        if len(self.active) != len(images[0].get_positions()):
-            
             if self.verbose:
                 print(" >>> FENEB: Fixing atom positions that are not `active` in path interpolation")
-            
-            apply_constraint = True
-            from ase.constraints import FixAtoms
-            c = FixAtoms(indices=np.delete(np.arange(len(images[0].get_positions())), self.active))
-            for img in images:
-                img.set_constraint(c)
-                
-        else:
-            apply_constraint = False
 
+            from ase.atoms import Atoms
+            
+            # reduce first image to active atoms
+            active_atom_types = ''
+            symbols = np.asarray(self.initial.get_chemical_symbols())
+            for atom in symbols[self.active]:
+                active_atom_types += atom
+            active_atom_coords = self.initial.get_positions()[self.active]
+            active_atom_coords = [tuple(atom) for atom in active_atom_coords]
+
+            # create NEB images as copy of initial image
+            images = [Atoms(active_atom_types, active_atom_coords)]
+            images += [images[0].copy() for _ in range(self.nimages)]
+
+            # reduce last image to active atoms
+            active_atom_types = ''
+            symbols = np.asarray(self.final.get_chemical_symbols())
+            for atom in symbols[self.active]:
+                active_atom_types += atom
+            active_atom_coords = self.final.get_positions()[self.active]
+            active_atom_coords = [tuple(atom) for atom in active_atom_coords]
+            images += [Atoms(active_atom_types, active_atom_coords)]
+
+        else:
+            images = [self.initial]
+            images += [self.initial.copy() for _ in range(self.nimages)]
+            images += [self.final]
+
+        # interpolate using ASE NEB tools
         neb = NEB(images)
         if idpp:
-            neb.interpolate('idpp', apply_constraint=apply_constraint)
+            neb.interpolate('idpp')
         else:
-            neb.interpolate(apply_constraint=apply_constraint)
+            neb.interpolate()
+
+        # get full list of coordinates from list of ASE Atoms objects
+        if len(self.active) != len(self.initial.get_positions()):
+            for i, c in enumerate([image.get_positions() for image in images]):
+                new_image = self.initial.get_positions()
+                new_image[self.active] = c
+                images[i] = new_image
+        else:
+            for i, c in enumerate([image.get_positions() for image in images]):
+                images[i] = c
 
         if self.convert_units:
-            return [image.get_positions() / BOHR_to_ANGSTROM for image in images]
+            return [image / BOHR_to_ANGSTROM for image in images]
         else:
-            return [image.get_positions() for image in images]
+            return [image for image in images]
 
     def calc_feg(self, startframe: int=0, move_nodes_to_mean: bool=True, active_relaxed: list=None, dim: int=3) -> np.ndarray:
         """Get free energy gradient for Umbrella Integration
