@@ -50,11 +50,15 @@ class OPESeABF(eABF, OPES, EnhancedSampling):
         self, 
         *args,
         enable_eabf: bool = True,
+        enable_opes: bool = True,
         **kwargs
     ):
         super().__init__(*args, **kwargs)
         self.abf_forces = np.zeros_like(self.bias)
         self.enable_eabf = enable_eabf
+        self.enable_opes = enable_opes
+        if self.enable_eabf == False and self.enable_opes == False:
+            raise ValueError(" >>> Error: At least one biasing method has to be enabled!")
 
     def step_bias(
         self, 
@@ -82,7 +86,7 @@ class OPESeABF(eABF, OPES, EnhancedSampling):
             bias_force: WTM-eABF biasing force of current step that has to be added to molecular forces
         """
 
-        md_state = self.the_md.get_sampling_data()
+        self.md_state = self.the_md.get_sampling_data()
         (xi, delta_xi) = self.get_cv(**kwargs)
 
         if stabilize and len(self.traj)>0:
@@ -90,7 +94,7 @@ class OPESeABF(eABF, OPES, EnhancedSampling):
 
         self._propagate()
 
-        mtd_forces = self.opes_bias(self.ext_coords)
+        mtd_forces = self.opes_bias(np.copy(self.ext_coords)) / atomic_to_kJmol / kJ_to_kcal
         bias_force = self._extended_dynamics(xi, delta_xi)  # , self.hill_std)
         force_sample = [0 for _ in range(2 * self.ncoords)]
 
@@ -122,12 +126,12 @@ class OPESeABF(eABF, OPES, EnhancedSampling):
                         self.m2_force[i][bin_la[1], bin_la[0]],
                         force_sample[i],
                     )
-                    self.ext_forces -= (
-                        ramp * self.abf_forces[i][bin_la[1], bin_la[0]] - mtd_forces[i]
-                    )
+                    if self.enable_opes:
+                        self.ext_forces -= (ramp * self.abf_forces[i][bin_la[1], bin_la[0]] - mtd_forces[i])
+                    else:
+                        self.ext_forces -= ramp * self.abf_forces[i][bin_la[1], bin_la[0]]
                 else:
-                    self.ext_forces -= mtd_forces[i]
-
+                    self.ext_forces += mtd_forces[i]
         # xi-conditioned accumulators for CZAR
         if self._check_boundaries(xi):
             bink = self.get_index(xi)
@@ -149,7 +153,7 @@ class OPESeABF(eABF, OPES, EnhancedSampling):
         self.epot.append(self.md_state.epot)
         self.temp.append(self.md_state.temp)
 
-        if md_state.step % self.out_freq == 0:
+        if self.md_state.step % self.out_freq == 0:
             # write output
 
             if write_traj:
@@ -167,8 +171,10 @@ class OPESeABF(eABF, OPES, EnhancedSampling):
                 output[f"opespot"] = self.potential
 
                 self.write_output(output, filename=output_file)
-                self.write_restart(filename=restart_file)
-
+                #self.write_restart(filename=restart_file)
+        #if self.md_state.step % self.update_freq == 0:
+        #print("mtd forces", mtd_forces)
+        #print(self.ext_forces+mtd_forces)
         return bias_force
 
 
@@ -240,7 +246,7 @@ class OPESeABF(eABF, OPES, EnhancedSampling):
             self.ext_coords = data["ext_coords"]
 
         if self.verbose:
-            print(f" >>> Info: Adaptive sampling restartet from {filename}!")
+            print(f" >>> Info: Adaptive sampling restarted from {filename}!")
 
     def write_traj(self, filename: str = 'CV_traj.dat'):
         """save trajectory for post-processing"""
