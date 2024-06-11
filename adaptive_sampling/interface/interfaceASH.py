@@ -229,7 +229,7 @@ class AshMD:
 
 
     def calc_etvp(self):
-        """ Calculation of kinetic energy, total energy, volume, and pressure """
+        """ Calculation of kinetic energy, temperature, volume, and pressure """
         # Ekin
         self.ekin = (np.power(self.momenta, 2)/self.masses).sum()
         self.ekin /= 2.0
@@ -289,6 +289,18 @@ class AshMD:
 
         else:
             self.momenta -= 0.5e0 * self.dt_atomic * self.forces
+
+
+    def rescale_mom(self, temperature: float=None):
+        """Rescales momenta to a certain temperature
+
+        Args:
+            temperature: temperature E_kin will be adjusted to
+        """
+        if temperature == None:
+            return
+        self.calc_etvp()
+        self.momenta *= np.sqrt(temperature/self.temp)
       
 
     def freeze_atoms(self):
