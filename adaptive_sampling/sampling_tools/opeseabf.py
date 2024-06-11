@@ -5,7 +5,7 @@ from .utils import welford_var, combine_welford_stats, diff
 from .eabf import eABF
 from .opes import OPES
 from ..units import *
-
+from adaptive_sampling.processing_tools.thermodynamic_integration import *
 
 class OPESeABF(eABF, OPES, EnhancedSampling):
     """Well-Tempered Metadynamics extended-system Adaptive Biasing Force method
@@ -35,6 +35,7 @@ class OPESeABF(eABF, OPES, EnhancedSampling):
         energy_barr: free energy barrier that the bias should help to overcome [kJ/mol]
         update_freq: interval of md steps in which new kernels should be 
         approximate_norm: enables approximation of norm factor
+        exact_norm: enables exact calculation of norm factor, if both are enabled, exact is used every 100 updates
         merge_threshold: threshold distance for kde-merging in units of std, "np.inf" disables merging
         recursion_merge: enables recursive merging
         bias_factor: allows setting a default bias factor instead of calculating it from energy barrier
@@ -262,3 +263,43 @@ class OPESeABF(eABF, OPES, EnhancedSampling):
         self.ext_traj = np.array([self.ext_traj[-1]])
         self.epot = [self.epot[-1]]
         self.temp = [self.temp[-1]]
+
+    def czar_pmf_history1d(
+        self,
+        grid: np.array,
+        cv_x: np.array,
+        cv_la: np.array,
+        ext_sigma: float,
+        pmf_hist_res: int = 100,
+    ):
+        """Calculate PMF history for CZAR
+        
+        Args:
+            grid: grid for CZAR
+            cv_x: CV trajectory
+            cv_la: extended system trajectory
+            ext_sigma: thermal width of coupling between CV and extended variable
+            pmf_hist_res: resolution of PMF history
+            
+        Returns:
+            pmf_hist: PMF history
+            scattered_time: scattered time points
+            rho_hist: density history
+        """
+        
+        dx = grid[1]-grid[0]
+        n = int(len(cv_x)/pmf_hist_res)
+        scattered_time = []
+        pmf_hist = []
+        rho_hist = []
+        print("Integrating CZAR...")
+        for j in range(pmf_hist_res):
+            n_sample = j * n + n
+            scattered_time.append(n_sample)
+            czar_grad = czar(grid, cv_x[0:n_sample], cv_la[0:n_sample], ext_sigma)
+            pmf, rho = integrate(czar_grad, dx)
+            pmf_hist.append(pmf)
+            rho_hist.append(rho)
+        print("Done!")
+
+        return pmf_hist, scattered_time, rho_hist

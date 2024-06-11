@@ -14,6 +14,7 @@ class OPES(EnhancedSampling):
         energy_barr: free energy barrier that the bias should help to overcome [kJ/mol]
         update_freq: interval of md steps in which new kernels should be 
         approximate_norm: enables approximation of norm factor
+        exact_norm: enables exact calculation of norm factor, if both are enabled, exact is used every 100 updates
         merge_threshold: threshold distance for kde-merging in units of std, "np.inf" disables merging
         recursion_merge: enables recursive merging
         bias_factor: allows setting a default bias factor instead of calculating it from energy barrier
@@ -30,6 +31,7 @@ class OPES(EnhancedSampling):
         energy_barr: float = 20.0,
         update_freq: int = 1000,
         approximate_norm: bool = True,
+        exact_norm: bool = False,
         merge_threshold: float = 1.0,
         recursion_merge: bool = False,
         bias_factor: float = None,
@@ -45,6 +47,9 @@ class OPES(EnhancedSampling):
         self.explore = explore
         self.update_freq = update_freq
         self.approx_norm = approximate_norm
+        self.exact_norm = exact_norm
+        if not self.approx_norm and not self.exact_norm:
+            raise ValueError(" >>> Error: Either approximate or exact norm factor calculation must be enabled!")
         self.adaptive_sigma = adaptive_sigma
         self.fixed_sigma = fixed_sigma
         if self.fixed_sigma and self.adaptive_sigma:
@@ -129,63 +134,10 @@ class OPES(EnhancedSampling):
         if self.kinetics:
             self._kinetics(delta_s_new)
 
+        # Calculate derivative of potential
         forces = self.opes_bias(s_new)
-        # Unbiased estimation of sigma
-        #if self.sigma_estimate and self.md_state.step < self.adaptive_sigma_stride:
-        #    self.adaptive_counter += 1
-        #    tau = self.adaptive_sigma_stride
-        #    if self.adaptive_counter < self.adaptive_sigma_stride:
-        #        tau = self.adaptive_counter
-        #    self.welford_mean, self.welford_m2, self.welford_var = welford_var(self.md_state.step, self.welford_mean, self.welford_m2, s_new, tau)
-        #    self.sigma_0 = np.sqrt(self.welford_var)
 
-        #    self.traj = np.append(self.traj, [s_new], axis=0)
-        #    self.epot.append(self.md_state.epot)
-        #    self.temp.append(self.md_state.temp)
-        #    self.output_bias_pot.append(0.0)
-        #    self.output_sum_weigths.append(self.sum_weights)
-        #    self.output_sum_weigths_square.append(self.sum_weights_square)
-        #    self.output_norm_factor.append(self.norm_factor)
-        #    return np.zeros_like(self.the_md.coords)
-
-        # Update sigma if adaptive sigma is enabled
-        #if self.adaptive_sigma:
-        #    self.adaptive_counter += 1
-        #    tau = self.adaptive_sigma_stride
-        #    if self.adaptive_counter < self.adaptive_sigma_stride:
-        #        tau = self.adaptive_counter
-        #    self.welford_mean, self.welford_m2, self.welford_var = welford_var(self.md_state.step, self.welford_mean, self.welford_m2, s_new, tau)
-        #    factor = self.gamma if not self.explore else 1.0
-        #    self.sigma_0 = np.sqrt(self.welford_var / factor)
-
-        # Call update function to place kernel
-        #if self.md_state.step%self.update_freq == 0:
-        #    self.update_kde(s_new)
-
-        # Calculate new probability and its derivative
-        #KDE_norm = self.sum_weights if not self.explore else self.n
-        #val_gaussians = self.get_val_gaussian(s_new)
-        #prob_dist = np.sum(val_gaussians) / KDE_norm
-
-        #s_diff = (s_new - np.asarray(self.kernel_center))
-        #for i in range(self.ncoords):
-        #    s_diff[:,i] = correct_periodicity(s_diff[:,i], self.periodicity[i])
-
-        #deriv_prob_dist = np.sum(-val_gaussians * np.divide(s_diff, np.asarray(self.kernel_sigma)).T, axis=1) / KDE_norm
-
-        #self.prob_dist = prob_dist
-        #self.deriv_prob_dist = deriv_prob_dist
-        #if self.verbose and self.md_state.step%(self.update_freq)==0:
-        #    self.show_kernels()
-        #    print("Probabiliy distribution: ", prob_dist, "and its derivative: ", deriv_prob_dist)
-        #    print("val gaussians =  ", val_gaussians)
-
-        # Calculate Potential
-        #self.potential = self.calc_pot(prob_dist)
-
-        # Calculate forces
-        #forces = self.calculate_forces(prob_dist, deriv_prob_dist)
-
+        # Calculate bias force
         bias_force = np.zeros_like(self.the_md.coords, dtype=float)
         for i in range(self.ncoords):
             bias_force += forces[i] * delta_s_new[i]
@@ -215,37 +167,80 @@ class OPES(EnhancedSampling):
         return bias_force
     
 
-    def get_val_gaussian(
+    def opes_bias(
         self,
-        s: np.array,
-    ) -> np.array: 
-        
-        """get the values of all gaussians at point s_new
+        s_new: np.array
+    ) -> np.array:
+        """calculate the bias force for a given location in CV space by the OPES algorithm e.g. for extended system usecase
         
         Args:
-            s = point of interest
-            
+            s_new: location in CV space for which the bias force is wanted, for extended system its cv position of fictional particle
+
         Returns:
-            val_gaussians: array of all values of all kernels at s
+            bias_force: bias force on location in CV space in atomic units
         """
-        if len(self.kernel_center) == 0:
-            return np.zeros(1)
+        if self.verbose and self.md_state.step%self.update_freq == 0:
+            print("OPES bias called at ", s_new)
 
-        s_diff = (s - np.asarray(self.kernel_center))
+        # Unbiased estimation of sigma
+        if self.sigma_estimate and self.md_state.step < self.adaptive_sigma_stride:
+            self.adaptive_counter += 1
+            tau = self.adaptive_sigma_stride
+            if self.adaptive_counter < self.adaptive_sigma_stride:
+                tau = self.adaptive_counter
+            self.welford_mean, self.welford_m2, self.welford_var = welford_var(self.md_state.step, self.welford_mean, self.welford_m2, s_new, tau)
+            self.sigma_0 = np.sqrt(self.welford_var)
 
-        # Correct Periodicity of spatial distances
+            self.traj = np.append(self.traj, [s_new], axis=0)
+            self.epot.append(self.md_state.epot)
+            self.temp.append(self.md_state.temp)
+            self.output_bias_pot.append(0.0)
+            self.output_sum_weigths.append(self.sum_weights)
+            self.output_sum_weigths_square.append(self.sum_weights_square)
+            self.output_norm_factor.append(self.norm_factor)
+            return np.zeros_like(self.the_md.coords)
+
+        # Update sigma if adaptive sigma is enabled
+        if self.adaptive_sigma:
+            self.adaptive_counter += 1
+            tau = self.adaptive_sigma_stride
+            if self.adaptive_counter < self.adaptive_sigma_stride:
+                tau = self.adaptive_counter
+            self.welford_mean, self.welford_m2, self.welford_var = welford_var(self.md_state.step, self.welford_mean, self.welford_m2, s_new, tau)
+            factor = self.gamma if not self.explore else 1.0
+            self.sigma_0 = np.sqrt(self.welford_var / factor)
+        
+        # Call update function to place kernel
+        if self.md_state.step%self.update_freq == 0:
+            if self.verbose:
+                print("OPES update KDE started.")
+            self.update_kde(s_new)
+
+        # Calculate new probability and its derivative
+        KDE_norm = self.sum_weights if not self.explore else self.n
+        val_gaussians = self.get_val_gaussian(s_new)
+        prob_dist = np.sum(val_gaussians) / KDE_norm
+
+        s_diff = (s_new - np.asarray(self.kernel_center))
         for i in range(self.ncoords):
             s_diff[:,i] = correct_periodicity(s_diff[:,i], self.periodicity[i])
-            
-        # Calculate values of Gaussians at center of kernel currently in loop and sum them
-        if False and self.verbose and self.md_state.step%self.update_freq ==0 and self.md_state.step > 0:
-            print("S_diff", s_diff)
-            print(np.asarray(self.kernel_sigma))
-        val_gaussians = np.asarray(self.kernel_height) * \
-            np.exp(-0.5 * np.sum(np.square(np.divide(s_diff, np.asarray(self.kernel_sigma))),axis=1))
 
-        return val_gaussians
+        deriv_prob_dist = np.sum(-val_gaussians * np.divide(s_diff, np.asarray(self.kernel_sigma)).T, axis=1) / KDE_norm
 
+        self.prob_dist = prob_dist
+        self.deriv_prob_dist = deriv_prob_dist
+        if self.verbose and self.md_state.step%self.update_freq==0:
+            print("Probabiliy distribution: ", prob_dist, "and its derivative: ", deriv_prob_dist)
+            print("val gaussians =  ", val_gaussians)
+
+        # Calculate Potential
+        self.potential = self.calc_pot(prob_dist)
+
+        # Calculate forces
+        forces = self.calculate_forces(prob_dist, deriv_prob_dist)
+        
+        return forces
+    
 
     def update_kde(
         self, 
@@ -294,11 +289,49 @@ class OPES(EnhancedSampling):
         self.compression_check(height, s_new, sigma_i)
 
         # Calculate normalization factor
-        self.norm_factor = self.calc_norm_factor(approximate = self.approx_norm)
+        if self.exact_norm and self.approx_norm:
+            if self.n % 100 == 0:
+                self.norm_factor = self.calc_norm_factor(approximate = False)
+            self.norm_factor = self.calc_norm_factor(approximate = True)
+        else:
+            self.norm_factor = self.calc_norm_factor(approximate = self.approx_norm)
+
 
         # Calculate pmf on the fly if enabled
         if self.print_pmf:
             self.pmf = self.get_pmf()
+
+
+    def get_val_gaussian(
+        self,
+        s: np.array,
+    ) -> np.array: 
+        
+        """get the values of all gaussians at point s_new
+        
+        Args:
+            s = point of interest
+            
+        Returns:
+            val_gaussians: array of all values of all kernels at s
+        """
+        if len(self.kernel_center) == 0:
+            return np.zeros(1)
+
+        s_diff = (s - np.asarray(self.kernel_center))
+
+        # Correct Periodicity of spatial distances
+        for i in range(self.ncoords):
+            s_diff[:,i] = correct_periodicity(s_diff[:,i], self.periodicity[i])
+            
+        # Calculate values of Gaussians at center of kernel currently in loop and sum them
+        if False and self.verbose and self.md_state.step%self.update_freq ==0 and self.md_state.step > 0:
+            print("S_diff", s_diff)
+            print(np.asarray(self.kernel_sigma))
+        val_gaussians = np.asarray(self.kernel_height) * \
+            np.exp(-0.5 * np.sum(np.square(np.divide(s_diff, np.asarray(self.kernel_sigma))),axis=1))
+
+        return val_gaussians
 
 
     def calc_pot(
@@ -747,77 +780,3 @@ class OPES(EnhancedSampling):
         print("Done.")
 
         return pmf_bin_hist, scattered_time
-
-
-    def opes_bias(
-        self,
-        s_new: np.array
-    ) -> np.array:
-        """calculate the bias force for a given location in CV space by the OPES algorithm e.g. for extended system usecase
-        
-        Args:
-            s_new: location in CV space for which the bias force is wanted, for extended system its cv position of fictional particle
-
-        Returns:
-            bias_force: bias force on location in CV space in atomic units
-        """
-        if self.verbose and self.md_state.step%self.update_freq == 0:
-            print("OPES bias called at ", s_new)
-
-        # Unbiased estimation of sigma
-        if self.sigma_estimate and self.md_state.step < self.adaptive_sigma_stride:
-            self.adaptive_counter += 1
-            tau = self.adaptive_sigma_stride
-            if self.adaptive_counter < self.adaptive_sigma_stride:
-                tau = self.adaptive_counter
-            self.welford_mean, self.welford_m2, self.welford_var = welford_var(self.md_state.step, self.welford_mean, self.welford_m2, s_new, tau)
-            self.sigma_0 = np.sqrt(self.welford_var)
-
-            self.traj = np.append(self.traj, [s_new], axis=0)
-            self.epot.append(self.md_state.epot)
-            self.temp.append(self.md_state.temp)
-            self.output_bias_pot.append(0.0)
-            self.output_sum_weigths.append(self.sum_weights)
-            self.output_sum_weigths_square.append(self.sum_weights_square)
-            self.output_norm_factor.append(self.norm_factor)
-            return np.zeros_like(self.the_md.coords)
-
-        # Update sigma if adaptive sigma is enabled
-        if self.adaptive_sigma:
-            self.adaptive_counter += 1
-            tau = self.adaptive_sigma_stride
-            if self.adaptive_counter < self.adaptive_sigma_stride:
-                tau = self.adaptive_counter
-            self.welford_mean, self.welford_m2, self.welford_var = welford_var(self.md_state.step, self.welford_mean, self.welford_m2, s_new, tau)
-            factor = self.gamma if not self.explore else 1.0
-            self.sigma_0 = np.sqrt(self.welford_var / factor)
-        
-        # Call update function to place kernel
-        if self.md_state.step%self.update_freq == 0:
-            if self.verbose:
-                print("OPES update KDE started.")
-            self.update_kde(s_new)
-
-        # Calculate new probability and its derivative
-        KDE_norm = self.sum_weights if not self.explore else self.n
-        val_gaussians = self.get_val_gaussian(s_new)
-        prob_dist = np.sum(val_gaussians) / KDE_norm
-
-        s_diff = (s_new - np.asarray(self.kernel_center))
-        for i in range(self.ncoords):
-            s_diff[:,i] = correct_periodicity(s_diff[:,i], self.periodicity[i])
-
-        deriv_prob_dist = np.sum(-val_gaussians * np.divide(s_diff, np.asarray(self.kernel_sigma)).T, axis=1) / KDE_norm
-
-        self.prob_dist = prob_dist
-        self.deriv_prob_dist = deriv_prob_dist
-        if self.verbose and self.md_state.step%self.update_freq==0:
-            print("Probabiliy distribution: ", prob_dist, "and its derivative: ", deriv_prob_dist)
-            print("val gaussians =  ", val_gaussians)
-
-        # Calculate Potential
-        self.potential = self.calc_pot(prob_dist)
-
-        # Calculate forces
-        forces = self.calculate_forces(prob_dist, deriv_prob_dist)
-        return forces

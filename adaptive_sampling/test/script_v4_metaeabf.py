@@ -3,6 +3,7 @@ from adaptive_sampling.sampling_tools.metaeabf import WTMeABF
 from adaptive_sampling.interface.interfaceMD_2D import *
 from adaptive_sampling.units import *
 
+
 ################# Imput Section ####################
 # MD
 seed = 42
