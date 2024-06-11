@@ -64,7 +64,8 @@ class AshMD:
         self.forces   = np.zeros_like(self.coords)
         self.momenta  = np.zeros_like(self.coords)
         self.bias_forces = np.zeros_like(self.forces)
-        
+        self.biaspots = []
+
         # active and frozen atoms
         if len(active_atoms):
             self.active_atoms = np.asarray(active_atoms)
@@ -182,7 +183,7 @@ class AshMD:
             self.propagate()
             self.calc()
             
-            if self.biaspots != None:
+            if bool(self.biaspots):
                 self.bias_forces = np.zeros_like(self.forces)
                 for bias in self.biaspots:
                     self.bias_forces += bias.step_bias(**kwargs)
