@@ -7,6 +7,7 @@ from .metadynamics import *
 from .metaeabf import *
 from .reference import *
 from .feneb import *
+from .harmonic_constraint import *
 from .utils import *
 
 __all__ = [
@@ -19,4 +20,5 @@ __all__ = [
     "WTMeABF",
     "FENEB",
     "Reference",
+    "Harmonic_Constaint",
 ]

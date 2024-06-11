@@ -1,6 +1,6 @@
 import os
 import numpy as np
-from typing import List
+from typing import List, Tuple
 from ..units import *
 
 try:
@@ -510,7 +510,7 @@ def confine_md_to_node(
     reference_coords: np.ndarray, 
     k: float,
     convert_units: bool=True,
-) -> tuple[float, np.ndarray]:
+) -> Tuple[float, np.ndarray]:
     """Harmonic confinement of `coords` to `reference_coords`
 
     Args:

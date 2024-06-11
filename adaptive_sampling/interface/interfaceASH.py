@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-import os
+import os, time
 import numpy as np
 import random
 
@@ -14,11 +14,10 @@ class AshMD:
     The ASH program: https://github.com/RagnarB83/ash
 
     Args:
-        fragment: Fragment object
-        calculator: Calculator object
-        biaspot: list of bias potentials from `adaptive_bias/sampling_tools`
+        fragment: Fragment object from ASH
+        calculator: Calculator object from ASH
         dt: timestep in fs
-        langevin: if True apply langevin thermostat
+        thermostat: if True apply langevin thermostat
         target_temp: target temperature in Kelvin
         friction: friction constant for langevin thermostat in 1/fs
         seed: random seed for MD
@@ -92,6 +91,7 @@ class AshMD:
         self.vol    = 0.e0
         self.pres   = 0.e0
         self.dcd    = None
+        self.time_per_step = []
 
         # self.calc() is run in `scratch_dir` to redirect input and output files of the `calculator`
         self.scratch_dir = scratch_dir
@@ -114,8 +114,6 @@ class AshMD:
             restart_file: filename for restart file, if init_momenta='read'
             init_temp: initial temperature, if init_momenta='random'
         """
-        self.calc()
-
         if hasattr(biaspots, "__len__"):
             self.biaspots = biaspots
         else:
@@ -151,7 +149,9 @@ class AshMD:
 
         else:
             print(' >>> AshMD: Illegal selection of init_momenta!')
-        
+       
+        # take initial step
+        self.calc()
         self.calc_etvp()
 
 
@@ -165,7 +165,7 @@ class AshMD:
         prefix: str="ashMD",
         **kwargs,
     ):
-        """Run MD simulation using an Verlocity Verlete langevin integrator
+        """Run MD simulation using an Verlocity Verlete integrator and langevin thermostat
         
         Args:
             nsteps: number of MD steps
@@ -173,8 +173,10 @@ class AshMD:
             restart_freq: frequncy of writing restart file
             dcd_freq: frequency of writing coords to DCD trajectory
             remove_rotation: if True, remove center of mass translation and rotation
+            prefix: prefix for output files
         """
         for step in range(nsteps):
+            start_time = time.perf_counter()
             self.step += 1
             
             self.propagate()
@@ -195,14 +197,15 @@ class AshMD:
             self.up_momenta()
             self.calc_etvp()
 
-            if out_freq != None and step%out_freq == 0:
-                self.print_energy(prefix=prefix)
-
             if restart_freq!=None and step%restart_freq == 0:
                 self.write_restart(prefix=prefix)
             
             if dcd_freq!=None and step%dcd_freq == 0:
                 self.print_dcd(prefix=prefix)
+
+            self.time_per_step.append(time.perf_counter() - start_time)
+            if out_freq != None and step%out_freq == 0:
+                self.print_energy(prefix=prefix)
 
 
     def calc(self):
@@ -223,13 +226,14 @@ class AshMD:
         if self.scratch_dir != ".":
             os.chdir("../")
 
+
     def calc_etvp(self):
         """ Calculation of kinetic energy, total energy, volume, and pressure """
         # Ekin
         self.ekin = (np.power(self.momenta, 2)/self.masses).sum()
         self.ekin /= 2.0
 
-        # T
+        # Temperature
         self.temp  = self.ekin*2.e0/(3.e0*self.n_active*units.kB_in_atomic)
 
         # Volume
@@ -291,7 +295,6 @@ class AshMD:
         self.momenta[3*self.frozen_atoms+0] = 0.e0
         self.momenta[3*self.frozen_atoms+1] = 0.e0
         self.momenta[3*self.frozen_atoms+2] = 0.e0
-
         self.forces[3*self.frozen_atoms+0] = 0.e0
         self.forces[3*self.frozen_atoms+1] = 0.e0
         self.forces[3*self.frozen_atoms+2] = 0.e0
@@ -354,11 +357,14 @@ class AshMD:
         """
         if self.step == 0:
             with open(f"{prefix}.out", "w") as f:
-                f.write("# TimeStep[fs]  PotentialEnergy[Eh]    KineticEnergy[Eh]      TotalEnergy[Eh]      Temperature [K]      \n")
-        
-        with open(f"{prefix}.out", "a") as f:
-            f.write(str("%14.4e %20.10e %20.10e %20.10e %20.10e\n") % (self.step*self.dt,self.epot,self.ekin,self.epot+self.ekin, self.temp))
+                f.write("# TimeStep[fs]  PotentialEnergy[Eh]    KineticEnergy[Eh]      TotalEnergy[Eh]      Temperature [K]    Wall time [s]      \n")
 
+        wall_time = sum(self.time_per_step)
+        with open(f"{prefix}.out", "a") as f:
+            f.write(str("%14.4e %20.10e %20.10e %20.10e %20.10e %20.10e \n") % (
+                self.step*self.dt,self.epot,self.ekin,self.epot+self.ekin, self.temp, wall_time)
+            )
+        self.time_per_step = []
     
     def write_restart(self, prefix: str="ashMD", write_xyz: bool=True, refpdb: str=None):
         '''Prints all necessary files for a restart
@@ -390,7 +396,11 @@ class AshMD:
                     f.write(string)
         
         if refpdb != None:
-            import mdtraj
+            try:
+                import mdtraj
+            except ImportError as e:
+                raise ImportError(" >>> AshMD needs `mdtraj` to write pdb file") from e
+
             topology = mdtraj.load(refpdb).topology
             pdbout = mdtraj.formats.PDBTrajectoryFile(prefix+"_restart_geom.pdb", mode='w', force_overwrite=True)
             pdbout.write(units.BOHR_to_ANGSTROM*self.coords.reshape(self.natoms, 3), topology)
@@ -423,5 +433,5 @@ class AshMD:
                                 self.dt)
         
         except ImportError as e:
-            raise NotImplementedError(" >>> PyFermiONs: `get_sampling_data()` is missing `adaptive_sampling` package") from e
+            raise NotImplementedError(" >>> AshMD: `get_sampling_data()` is missing `adaptive_sampling` package") from e
 
