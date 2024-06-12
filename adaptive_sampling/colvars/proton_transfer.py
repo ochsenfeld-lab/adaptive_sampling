@@ -194,13 +194,10 @@ class PT:
                     f_l = self._f_sw(r_li)
 
                     # for heavy atoms sum over all protons contributes to gradient
-                    if f_k > 1.e-6:
-                        nom_k   += torch.pow(f_k, self.n_pair + 1)
-                        denom_k += torch.pow(f_k, self.n_pair)
-
-                    if f_l > 1.e-6:
-                        nom_l   += torch.pow(f_l, self.n_pair + 1)
-                        denom_l += torch.pow(f_l, self.n_pair)
+                    nom_k   += torch.pow(f_k, self.n_pair + 1)
+                    denom_k += torch.pow(f_k, self.n_pair)
+                    nom_l   += torch.pow(f_l, self.n_pair + 1)
+                    denom_l += torch.pow(f_l, self.n_pair)
 
                 # add coupled term to xi
                 m_k = nom_k / denom_k
