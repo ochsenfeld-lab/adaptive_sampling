@@ -68,19 +68,21 @@ class PT:
         # sum over protons
         for _, idx_h in enumerate(proton_idx):
             self.cv += torch.matmul(z[idx_h] - r_don, z_u)
-
+        
         # sum over donors/acceptors
         for _, (idx_x, w_x) in enumerate(zip(heavy_idx, heavy_weights)): 
             self.cv -= w_x * torch.matmul(z[idx_x] - r_don, z_u)
-        
+
         # mixed sum for modified CEC
         if modified:
             for _, idx_hi in enumerate(proton_idx):
                 r_hi = z[idx_hi]
                 for _, idx_xj in enumerate(heavy_idx):
                     r_ij = r_hi - z[idx_xj]
-                    self.cv -= self._f_sw(r_ij) * torch.matmul(r_ij, z_u)
-        
+                    f_switch = self._f_sw(r_ij)
+                    if f_switch > 1.e-6: # for numeric stability of `torch.autograd`
+                        self.cv -= f_switch * torch.matmul(r_ij, z_u)
+
         # correction for coupled donor and acceptor 
         # (e.g. for glutamate, aspartate, histidine, ...)
         if bool(pair_def):
@@ -94,8 +96,8 @@ class PT:
                 r_kl = torch.matmul(r_l - r_k, z_u)
 
                 # accumulators for m_k and m_l
-                denom_k, nom_k = 0.0, 0.0
-                denom_l, nom_l = 0.0, 0.0
+                denom_k, nom_k = 1.0, 1.0
+                denom_l, nom_l = 1.0, 1.0
 
                 # compute m_k and m_l as sum over protons
                 for _, idx_hi in enumerate(proton_idx):
@@ -104,16 +106,19 @@ class PT:
                     f_l = self._f_sw(r_hi - r_l)
 
                     # for heavy atoms sum over all protons contributes to gradient
-                    nom_k   += torch.pow(f_k, self.n_pair + 1)
-                    nom_l   += torch.pow(f_l, self.n_pair + 1)
-                    denom_k += torch.pow(f_k, self.n_pair)
-                    denom_l += torch.pow(f_l, self.n_pair)
+                    if f_k > 1.e-6:
+                        nom_k   += torch.pow(f_k, self.n_pair + 1)
+                        denom_k += torch.pow(f_k, self.n_pair)
+
+                    if f_l > 1.e-6:
+                        nom_l   += torch.pow(f_l, self.n_pair + 1)
+                        denom_l += torch.pow(f_l, self.n_pair)
 
                 # add coupled term to xi
                 m_k = nom_k / denom_k
                 m_l = nom_l / denom_l
                 self.cv += (w_pj / 2.0) * (m_k * r_kl - m_l * r_kl)
-        
+                               
         if self.requires_grad:
             self.gradient = torch.autograd.grad(
                 self.cv, coords, allow_unused=True
@@ -164,7 +169,9 @@ class PT:
             r_hi = z[idx_h]
             for _, idx_x in enumerate(heavy_idx):
                 r_ij = (r_hi - z[idx_x])
-                xi -= self._f_sw(r_ij) * r_ij
+                f_switch = self._f_sw(r_ij)
+                if f_switch > 1.e-6: # for numeric stability of `torch.autograd`
+                    xi -= f_switch * r_ij
 
         # correction for coupled donor and acceptor 
         # (e.g. for glutamate, aspartate, histidine, ...)
@@ -178,8 +185,8 @@ class PT:
                 r_kl = r_l - r_k
 
                 # accumulators for m_k and m_l
-                denom_k, num_k = 0.0, 0.0
-                denom_l, num_l = 0.0, 0.0
+                denom_k, nom_k = 0.0, 0.0
+                denom_l, nom_l = 0.0, 0.0
 
                 # compute m_k, m_l and their derivatives
                 for _, r_hi in enumerate(proton_idx):
@@ -189,14 +196,17 @@ class PT:
                     f_l = self._f_sw(r_li)
 
                     # for heavy atoms sum over all protons contributes to gradient
-                    denom_k += torch.pow(f_k, self.n_pair)
-                    denom_l += torch.pow(f_l, self.n_pair)
-                    num_k   += torch.pow(f_k, self.n_pair + 1)
-                    num_l   += torch.pow(f_l, self.n_pair + 1)
+                    if f_k > 1.e-6:
+                        nom_k   += torch.pow(f_k, self.n_pair + 1)
+                        denom_k += torch.pow(f_k, self.n_pair)
+
+                    if f_l > 1.e-6:
+                        nom_l   += torch.pow(f_l, self.n_pair + 1)
+                        denom_l += torch.pow(f_l, self.n_pair)
 
                 # add coupled term to xi
-                m_k = num_k / denom_k
-                m_l = num_l / denom_l
+                m_k = nom_k / denom_k
+                m_l = nom_l / denom_l
                 xi +=  (w_pj / 2.0) * (m_k * r_kl - m_l * r_kl)
 
         # mapping to 1D
