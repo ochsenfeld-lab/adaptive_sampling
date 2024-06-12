@@ -4,8 +4,18 @@ from typing import List, Tuple
 from adaptive_sampling.colvars import CV
 from adaptive_sampling import units
 
-class Harmonic_Constaint():
-    """ Harmonic constraint for collective variables
+class Harmonic_Constraint():
+    """ Harmonic constraint of collective variables
+
+    Args:
+        the_md: MD object from `adaptive_sampling.interface`
+        force_constants: list of force constants for confinements in kJ/mol/(CV unit)^2, can also be float 
+        equil_positions: list of centers of harmonic confinements in the unit of the CV, can also be float
+                         distances given in Angstrom and angles in degree
+        colvars: dict of confined collective variables from `adaptive_sampling.colvars`, 
+                 example: {"distance": [idx0, idx1], "angle": [idx0, idx1, idx2], ...} 
+        outputfile: output filename
+        outputstride: every `outputstride` step is written to outputfile 
     """
     def __init__(
         self, 
@@ -30,11 +40,11 @@ class Harmonic_Constaint():
             raise(" >>> Harmonic_Constraint: Number of colvars does not match number of constraints")
 
 
-    def step_bias(self, **kwargs):
+    def step_bias(self, **kwargs) -> np.array:
         """ Applies harmonic constraint to `colvars`
 
         Returns:
-            bias_force: bias force array with shape(Natoms,)
+            bias_force: bias force array of len(self.natoms*3)
         """
         cvs, grad_cvs, cv_types = self.get_cvs(**kwargs)
         conf_energy = []
@@ -66,7 +76,7 @@ class Harmonic_Constaint():
         for cv, cv_def in self.colvars.items():
             cv, grad_cv = self.the_cv.get_cv(cv, cv_def, **kwargs)
             cvs.append(cv)
-            grad_cvs.append(grad_cv)
+            grad_cvs.append(np.asarray(grad_cv))
             cv_types.append(self.the_cv.type)
         
         return cvs, grad_cvs, cv_types
@@ -97,6 +107,31 @@ class Harmonic_Constaint():
         return k, x0
 
 
+    def unit_conversion_back(self, k: float, x0: float, type: str) -> Tuple[float, float]:
+        """Units conversion for angles and distances
+        
+        Args:
+            k: force constant
+            x0: equilibrium position
+            type: type of CV
+        
+        Returns:
+            k: force constant in atomic units
+            x0: equilibrium position in atomic units
+        """
+        if type == "distance":
+            x0_bohr = x0 * units.BOHR_to_ANGSTROM
+            k_bohr = k / units.BOHR_to_ANGSTROM / units.BOHR_to_ANGSTROM
+            return k_bohr, x0_bohr
+        
+        elif type == "angle":
+            x0_rad = x0 * units.DEGREES_per_RADIAN
+            k_rad = k / units.DEGREES_per_RADIAN / units.DEGREES_per_RADIAN
+            return k_rad, x0_rad
+        
+        return k, x0
+    
+
     def print_conf(self, md_step, cvs, epots, cv_types):
         """ print confinments of current step to `self.outputfile` """
         if md_step==0:
@@ -108,7 +143,8 @@ class Harmonic_Constaint():
 
         with open(self.outputfile, "a") as f:
             f.write(f"  {md_step}\t")
-            for i, (cv, epot) in enumerate(zip(cvs, epots)):
-                f.write(f"{cv:12.6f} {epot:12.6f}")
+            for i, (cv, epot, type) in enumerate(zip(cvs, epots, cv_types)):
+                _, cv_conf = self.unit_conversion_back(0, cv, type)
+                f.write(f"{cv_conf:12.6f} {epot:12.6f}")
             f.write("\n")
 

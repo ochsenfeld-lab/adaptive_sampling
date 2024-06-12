@@ -20,5 +20,5 @@ __all__ = [
     "WTMeABF",
     "FENEB",
     "Reference",
-    "Harmonic_Constaint",
+    "Harmonic_Constraint",
 ]

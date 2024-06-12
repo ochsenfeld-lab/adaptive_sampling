@@ -5,7 +5,12 @@ import random
 
 from adaptive_sampling import units
 
-import ash
+try:
+    import ash
+except ImportError:
+    import sys as _sys
+    print(">>> adaptive-sampling: Module 'ash' not found, will not import 'InterfaceASH'", file=_sys.stderr)
+    del _sys
 
 
 class AshMD:

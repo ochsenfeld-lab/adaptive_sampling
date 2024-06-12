@@ -1,5 +1,3 @@
-
-
 from .interfaceASH import *
 from .interfaceMD_2D import *
 from .interface_openmm import *

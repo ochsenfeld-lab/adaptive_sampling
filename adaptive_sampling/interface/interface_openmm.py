@@ -1,9 +1,16 @@
 from ..units import atomic_to_kJmol, BOHR_to_ANGSTROM, BOHR_to_NANOMETER, kB_in_atomic
-import openmm 
-from openmm import unit
 import numpy as np
 
 from .sampling_data import SamplingData
+
+try:
+    import openmm
+    from openmm import unit
+except ImportError:
+    import sys as _sys
+    print(">>> adaptive-sampling: Module 'openmm' not found, will not import 'interface_openmm'", file=_sys.stderr)
+    del _sys
+
 
 class AdaptiveSamplingOpenMM():
     """ Perform enhanced sampling with OpenMM
