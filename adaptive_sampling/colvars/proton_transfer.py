@@ -85,6 +85,7 @@ class PT:
 
         # correction for coupled donor and acceptor 
         # (e.g. for glutamate, aspartate, histidine, ...)
+        # TODO: make calculation of m_k and m_l numerically more stable
         if bool(pair_def):
             w_pair = [j[0] for j in pair_def]
             ind_pair = [[j[1], j[2]] for j in pair_def]
@@ -96,8 +97,8 @@ class PT:
                 r_kl = torch.matmul(r_l - r_k, z_u)
 
                 # accumulators for m_k and m_l
-                denom_k, nom_k = 1.0, 1.0
-                denom_l, nom_l = 1.0, 1.0
+                denom_k, nom_k = 0.0, 0.0
+                denom_l, nom_l = 0.0, 0.0
 
                 # compute m_k and m_l as sum over protons
                 for _, idx_hi in enumerate(proton_idx):
@@ -106,13 +107,10 @@ class PT:
                     f_l = self._f_sw(r_hi - r_l)
 
                     # for heavy atoms sum over all protons contributes to gradient
-                    if f_k > 1.e-6:
-                        nom_k   += torch.pow(f_k, self.n_pair + 1)
-                        denom_k += torch.pow(f_k, self.n_pair)
-
-                    if f_l > 1.e-6:
-                        nom_l   += torch.pow(f_l, self.n_pair + 1)
-                        denom_l += torch.pow(f_l, self.n_pair)
+                    nom_k   += torch.pow(f_k, self.n_pair + 1)
+                    denom_k += torch.pow(f_k, self.n_pair)
+                    nom_l   += torch.pow(f_l, self.n_pair + 1)
+                    denom_l += torch.pow(f_l, self.n_pair)
 
                 # add coupled term to xi
                 m_k = nom_k / denom_k
