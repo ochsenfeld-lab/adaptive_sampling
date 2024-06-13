@@ -79,9 +79,9 @@ class PT:
                 r_hi = z[idx_hi]
                 for _, idx_xj in enumerate(heavy_idx):
                     r_ij = r_hi - z[idx_xj]
-                    f_switch = self._f_sw(r_ij)
-                    if f_switch > 1.e-6: # for numeric stability of `torch.autograd`
-                        self.cv -= f_switch * torch.matmul(r_ij, z_u)
+                    mod = self._f_sw(r_ij) * torch.matmul(r_ij, z_u)
+                    if mod > 1.e-6: # for numeric stability of `torch.autograd`
+                        self.cv -= mod
 
         # correction for coupled donor and acceptor 
         # (e.g. for glutamate, aspartate, histidine, ...)
@@ -107,14 +107,19 @@ class PT:
                     f_l = self._f_sw(r_hi - r_l)
 
                     # for heavy atoms sum over all protons contributes to gradient
-                    nom_k   += torch.pow(f_k, self.n_pair + 1)
-                    denom_k += torch.pow(f_k, self.n_pair)
-                    nom_l   += torch.pow(f_l, self.n_pair + 1)
-                    denom_l += torch.pow(f_l, self.n_pair)
+                    nom_k_i = torch.pow(f_k, self.n_pair + 1)
+                    if nom_k_i > 1.e-6:
+                        nom_k   += nom_k_i
+                        denom_k += torch.pow(f_k, self.n_pair)
 
-                # add coupled term to xi
-                m_k = nom_k / denom_k
-                m_l = nom_l / denom_l
+                    nom_l_i = torch.pow(f_l, self.n_pair + 1)
+                    if nom_l_i > 1.e-6:
+                        nom_l   += nom_l_i
+                        denom_l += torch.pow(f_l, self.n_pair)
+
+                # add coupled term to the cv
+                m_k = nom_k / denom_k if denom_k > 0.0 else 0.0
+                m_l = nom_l / denom_l if denom_l > 0.0 else 0.0
                 self.cv += (w_pj / 2.0) * (m_k * r_kl - m_l * r_kl)
                                
         if self.requires_grad:
@@ -167,9 +172,9 @@ class PT:
             r_hi = z[idx_h]
             for _, idx_x in enumerate(heavy_idx):
                 r_ij = (r_hi - z[idx_x])
-                f_switch = self._f_sw(r_ij)
-                if f_switch > 1.e-6: # for numeric stability of `torch.autograd`
-                    xi -= f_switch * r_ij
+                mod = self._f_sw(r_ij) * r_ij
+                if mod > 1.e-6: # for numeric stability of `torch.autograd`
+                    xi -= mod
 
         # correction for coupled donor and acceptor 
         # (e.g. for glutamate, aspartate, histidine, ...)
@@ -194,14 +199,19 @@ class PT:
                     f_l = self._f_sw(r_li)
 
                     # for heavy atoms sum over all protons contributes to gradient
-                    nom_k   += torch.pow(f_k, self.n_pair + 1)
-                    denom_k += torch.pow(f_k, self.n_pair)
-                    nom_l   += torch.pow(f_l, self.n_pair + 1)
-                    denom_l += torch.pow(f_l, self.n_pair)
+                    nom_k_i = torch.pow(f_k, self.n_pair + 1)
+                    if nom_k_i > 1.e-6:
+                        nom_k   += nom_k_i
+                        denom_k += torch.pow(f_k, self.n_pair)
+
+                    nom_l_i = torch.pow(f_l, self.n_pair + 1)
+                    if nom_l_i > 1.e-6:
+                        nom_l   += nom_l_i
+                        denom_l += torch.pow(f_l, self.n_pair)
 
                 # add coupled term to xi
-                m_k = nom_k / denom_k
-                m_l = nom_l / denom_l
+                m_k = nom_k / denom_k if denom_k > 0.0 else 0.0
+                m_l = nom_l / denom_l if denom_l > 0.0 else 0.0
                 xi +=  (w_pj / 2.0) * (m_k * r_kl - m_l * r_kl)
 
         # mapping to 1D
