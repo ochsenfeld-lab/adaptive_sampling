@@ -85,7 +85,6 @@ class PT:
 
         # correction for coupled donor and acceptor 
         # (e.g. for glutamate, aspartate, histidine, ...)
-        # TODO: make calculation of m_k and m_l numerically more stable
         if bool(pair_def):
             w_pair = [j[0] for j in pair_def]
             ind_pair = [[j[1], j[2]] for j in pair_def]
@@ -126,7 +125,7 @@ class PT:
             self.gradient = torch.autograd.grad(
                 self.cv, coords, allow_unused=True
             )[0]
-            self.gradient.detach().numpy()
+            self.gradient = self.gradient.detach().numpy()
 
         return self.cv
 
@@ -232,7 +231,7 @@ class PT:
             self.gradient = torch.autograd.grad(
                 self.cv, coords, allow_unused=True
             )[0]
-            self.gradient.detach().numpy()
+            self.gradient = self.gradient.detach().numpy()
 
         return self.cv
 

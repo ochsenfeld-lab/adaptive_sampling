@@ -29,16 +29,23 @@ class Harmonic_Constraint():
         self.the_md = the_md
         self.equil_positions = np.asarray(equil_position) if hasattr(equil_position, "__len__") else np.asarray([equil_position])
         self.force_constants = np.asarray(force_constants) if hasattr(force_constants, "__len__") else np.asarray([force_constants])
-        self.force_constants /= units.atomic_to_kJmol # convert kJ/mol to atomic units
         self.outputfile = outputfile
         self.output_stride = output_stride
 
         # init collective variable
         self.the_cv = CV(self.the_md, requires_grad=True)
         self.colvars = colvars 
-        if len(self.colvars) != len(self.force_constants):
+        if len(self.colvars) != len(self.force_constants) or len(self.colvars) != len(self.equil_positions):
             raise(" >>> Harmonic_Constraint: Number of colvars does not match number of constraints")
-
+        
+        # unit conversion to atomic units
+        self.force_constants /= units.atomic_to_kJmol # convert kJ/mol to atomic units
+        _, _, cv_types = self.get_cvs()
+        for i, (k, cv_0, cv_type) in enumerate(zip(self.force_constants, self.equil_positions, cv_types)):
+            k, cv_0 = self.unit_conversion(k, cv_0, cv_type)
+            self.force_constants[i] = k
+            self.equil_positions[i] = cv_0
+            
 
     def step_bias(self, **kwargs) -> np.array:
         """ Applies harmonic constraint to `colvars`
@@ -49,8 +56,7 @@ class Harmonic_Constraint():
         cvs, grad_cvs, cv_types = self.get_cvs(**kwargs)
         conf_energy = []
         conf_forces = np.zeros_like(grad_cvs[0])
-        for k, cv_0, cv, grad_cv, cv_type in zip(self.force_constants, self.equil_positions, cvs, grad_cvs, cv_types):
-            k, cv_0 = self.unit_conversion(k, cv_0, cv_type)
+        for k, cv_0, cv, grad_cv in zip(self.force_constants, self.equil_positions, cvs, grad_cvs):
             d = cv - cv_0
             conf_energy.append(0.5 * k * d * d)
             conf_forces += k * d * grad_cv
@@ -107,31 +113,6 @@ class Harmonic_Constraint():
         return k, x0
 
 
-    def unit_conversion_back(self, k: float, x0: float, type: str) -> Tuple[float, float]:
-        """Units conversion for angles and distances
-        
-        Args:
-            k: force constant
-            x0: equilibrium position
-            type: type of CV
-        
-        Returns:
-            k: force constant in atomic units
-            x0: equilibrium position in atomic units
-        """
-        if type == "distance":
-            x0_bohr = x0 * units.BOHR_to_ANGSTROM
-            k_bohr = k / units.BOHR_to_ANGSTROM / units.BOHR_to_ANGSTROM
-            return k_bohr, x0_bohr
-        
-        elif type == "angle":
-            x0_rad = x0 * units.DEGREES_per_RADIAN
-            k_rad = k / units.DEGREES_per_RADIAN / units.DEGREES_per_RADIAN
-            return k_rad, x0_rad
-        
-        return k, x0
-    
-
     def print_conf(self, md_step, cvs, epots, cv_types):
         """ print confinments of current step to `self.outputfile` """
         if md_step==0:
@@ -144,7 +125,10 @@ class Harmonic_Constraint():
         with open(self.outputfile, "a") as f:
             f.write(f"  {md_step}\t")
             for i, (cv, epot, type) in enumerate(zip(cvs, epots, cv_types)):
-                _, cv_conf = self.unit_conversion_back(0, cv, type)
-                f.write(f"{cv_conf:12.6f} {epot:12.6f}")
+                if type == 'distance':
+                    cv *= units.BOHR_to_ANGSTROM
+                elif type == 'angle':
+                    cv *= units.DEGREES_per_RADIAN
+                f.write(f"{cv:12.6f} {epot:12.6f}")
             f.write("\n")
 

@@ -100,6 +100,7 @@ class AshMD:
         self.time_per_step = []
 
         # self.calc() is run in `scratch_dir` to redirect input and output files of the `calculator`
+        self.cwd = os.getcwd()
         self.scratch_dir = scratch_dir
         if not os.path.isdir(self.scratch_dir):
             os.mkdir(self.scratch_dir)
@@ -120,6 +121,8 @@ class AshMD:
             restart_file: filename for restart file, if init_momenta='read'
             init_temp: initial temperature, if init_momenta='random'
         """
+        self.calc()
+
         if hasattr(biaspots, "__len__"):
             self.biaspots = biaspots
         else:
@@ -156,8 +159,6 @@ class AshMD:
         else:
             print(' >>> AshMD: Illegal selection of init_momenta!')
        
-        # take initial step
-        self.calc()
         self.calc_etvp()
 
 
@@ -216,7 +217,7 @@ class AshMD:
 
     def calc(self):
         """ Calculation of energy, forces 
-        Excecuted in `self.scratch_dir` to avoid crowding the input directory with input and output files of `theory`
+        Excecuted in `self.scratch_dir` to avoid crowding the input directory with input and output files of `calculator`
         """
         os.chdir(self.scratch_dir)
         self.molecule.replace_coords(self.molecule.elems, self.coords.reshape((self.natoms,3)) * units.BOHR_to_ANGSTROM)
@@ -229,8 +230,7 @@ class AshMD:
         )
         self.forces = results.gradient.flatten() 
         self.epot = results.energy
-        if self.scratch_dir != ".":
-            os.chdir("../")
+        os.chdir(self.cwd)
 
 
     def calc_etvp(self):
