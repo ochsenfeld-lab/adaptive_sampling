@@ -5,14 +5,13 @@ import random
 
 from adaptive_sampling import units
 
-class AshMD:
-    """Class for biased MD using the ASH program 
+class AseMD:
+    """Class for biased MD using the Atomic Simulation Environment (ASE)  
 
-    The ASH program: https://github.com/RagnarB83/ash
+    The ASE program: 
 
     Args:
-        fragment: Fragment object from ASH
-        calculator: Calculator object from ASH
+        atoms: `Atoms` object from ASE with attached `Calculator`
         dt: timestep in fs
         thermostat: if True apply langevin thermostat
         target_temp: target temperature in Kelvin
@@ -24,8 +23,7 @@ class AshMD:
     """
     def __init__(
         self,
-        fragment:     object=None,
-        calculator:   object=None,
+        atoms:        object=None,
         dt:           float=0.5e0,
         thermostat:   bool=True,
         target_temp:  float=298.15e0,
@@ -35,14 +33,11 @@ class AshMD:
         mute:         bool=True,
         scratch_dir:  str="scratch/",
     ):
-        if fragment == None:
-            raise ValueError(' >>> ERROR: AshMD needs fragment object!')
-        if calculator == None:
-            raise ValueError(' >>> ERROR: AshMD needs calculator object!')
+        if atoms == None:
+            raise ValueError(' >>> ERROR: AseMD needs atoms object!')
 
         self.step = -1 # first iteration is 0th step
-        self.molecule = fragment
-        self.calculator = calculator
+        self.molecule = atoms
         self.mute = mute
         self.dt = dt
         self.dt_atomic = dt / units.atomic_to_fs # timestep in atomic units
@@ -51,12 +46,11 @@ class AshMD:
         self.friction = friction
 
         # molecule
-        self.coords   = np.asarray(self.molecule.coords).flatten() / units.BOHR_to_ANGSTROM
-        self.charge   = self.molecule.charge
-        self.mult     = self.molecule.mult
-        self.mass     = np.asarray(self.molecule.masses)
+        from ase.units import Bohr
+        self.coords   = self.molecule.get_positions().flatten() / Bohr
+        self.mass     = self.molecule.get_masses()
         self.masses   = np.repeat(self.mass, 3)
-        self.natoms   = int(len(self.coords) / 3)
+        self.natoms   = len(self.mass)
         self.ndegrees = 3.e0*self.natoms-6.e0
         self.forces   = np.zeros_like(self.coords)
         self.momenta  = np.zeros_like(self.coords)
@@ -75,7 +69,7 @@ class AshMD:
         self.seed_in = seed    
         if type(seed) is int:
             random.seed(seed)
-            print(" >>> INFO: The random number seed for AshMD was: %i" % (seed))
+            print(" >>> INFO: The random number seed for AseMD was: %i" % (seed))
         else:
             try:
                 random.setstate(seed)
@@ -139,17 +133,17 @@ class AshMD:
             try:
                 restart = np.load(restart_file, allow_pickle=True)
             except:
-                raise ValueError(" >>> AshMD: Could not find restart_file!")
+                raise ValueError(" >>> AseMD: Could not find restart_file!")
             self.momenta      = restart["momenta"]
             self.coords       = restart["coords"]
             self.active_atoms = restart["active"]
             self.n_active     = len(self.active_atoms)
             self.frozen_atoms = np.delete(np.arange(self.natoms), self.active_atoms)
 
-            print(f' >>> AshMD: Restarted MD from {restart_file}!')
+            print(f' >>> AseMD: Restarted MD from {restart_file}!')
 
         else:
-            print(' >>> AshMD: Illegal selection of init_momenta!')
+            print(' >>> AseMD: Illegal selection of init_momenta!')
        
         self.calc_etvp()
 
@@ -161,7 +155,7 @@ class AshMD:
         restart_freq: int=None,
         dcd_freq: int=None,
         remove_rotation: bool=False,
-        prefix: str="ashMD",
+        prefix: str="aseMD",
         **kwargs,
     ):
         """Run MD simulation using an Verlocity Verlete integrator and langevin thermostat
@@ -209,28 +203,20 @@ class AshMD:
 
     def calc(self):
         """ Calculation of energy, forces 
-        Excecuted in `self.scratch_dir` to avoid crowding the input directory with input and output files of `calculator`
         """
-        import ash
         os.chdir(self.scratch_dir)
-        self.molecule.replace_coords(self.molecule.elems, self.coords.reshape((self.natoms,3)) * units.BOHR_to_ANGSTROM)
-        results = ash.Singlepoint(
-            theory=self.calculator, 
-            fragment=self.molecule, 
-            charge=self.charge, 
-            mult=self.mult, 
-            Grad=True
-        )
-        self.forces = results.gradient.flatten() 
-        self.epot = results.energy
+        # ASE base units are eV and Angstrom
+        from ase.units import Bohr, Hartree
+        self.molecule.positions = self.coords.reshape((self.natoms,3)) * Bohr
+        self.epot = self.molecule.get_potential_energy() / Hartree
+        self.forces = -self.molecule.get_forces().flatten() / Hartree * Bohr
         os.chdir(self.cwd)
 
 
     def calc_etvp(self):
         """ Calculation of kinetic energy, temperature, volume, and pressure """
         # Ekin
-        self.ekin = (np.power(self.momenta, 2)/self.masses).sum()
-        self.ekin /= 2.0
+        self.ekin = (np.power(self.momenta, 2)/self.masses).sum() / 2.
 
         # Temperature
         self.temp  = self.ekin*2.e0/(3.e0*self.n_active*units.kB_in_atomic)
@@ -360,7 +346,7 @@ class AshMD:
             self.momenta[i*3+2] -= v_ext[2] * self.mass[i]
 
 
-    def print_energy(self, prefix: str="ashMD"):
+    def print_energy(self, prefix: str="aseMD"):
         """Print/add energy to file 
       
         Args:
@@ -377,7 +363,7 @@ class AshMD:
             )
         self.time_per_step = []
     
-    def write_restart(self, prefix: str="ashMD", write_xyz: bool=True, refpdb: str=None):
+    def write_restart(self, prefix: str="aseMD", write_xyz: bool=True, refpdb: str=None):
         '''Prints all necessary files for a restart
       
         Args:
@@ -398,11 +384,12 @@ class AshMD:
 
         if write_xyz:
             with open(prefix+"_restart_geom.xyz", "w+") as f:
+                elements = self.molecule.get_chemical_symbols()
                 f.write(str("%i\nTIME: %14.7f\n") % (self.natoms,self.step*self.dt))
-                
+                 
                 for i in range(self.natoms):
                     string = str("%s %20.10e %20.10e %20.10e\n") % (
-                        self.molecule.elems[i],self.coords[3*i+0]*units.BOHR_to_ANGSTROM,self.coords[3*i+1]*units.BOHR_to_ANGSTROM,self.coords[3*i+2]*units.BOHR_to_ANGSTROM
+                        elements[i],self.coords[3*i+0]*units.BOHR_to_ANGSTROM,self.coords[3*i+1]*units.BOHR_to_ANGSTROM,self.coords[3*i+2]*units.BOHR_to_ANGSTROM
                     )
                     f.write(string)
         
@@ -410,7 +397,7 @@ class AshMD:
             try:
                 import mdtraj
             except ImportError as e:
-                raise ImportError(" >>> AshMD needs `mdtraj` to write pdb file") from e
+                raise ImportError(" >>> AseMD needs `mdtraj` to write pdb file") from e
 
             topology = mdtraj.load(refpdb).topology
             pdbout = mdtraj.formats.PDBTrajectoryFile(prefix+"_restart_geom.pdb", mode='w', force_overwrite=True)
@@ -418,7 +405,7 @@ class AshMD:
             pdbout.close()
 
 
-    def print_dcd(self, prefix: str="ashMD"):
+    def print_dcd(self, prefix: str="aseMD"):
         """saves coordinates to binary dcd format
       
         Args:
@@ -444,5 +431,5 @@ class AshMD:
                                 self.dt)
         
         except ImportError as e:
-            raise NotImplementedError(" >>> AshMD: `get_sampling_data()` is missing `adaptive_sampling` package") from e
+            raise NotImplementedError(" >>> AseMD: `get_sampling_data()` is missing `adaptive_sampling` package") from e
 
