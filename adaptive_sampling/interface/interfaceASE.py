@@ -8,7 +8,7 @@ from adaptive_sampling import units
 class AseMD:
     """Class for biased MD using the Atomic Simulation Environment (ASE)  
 
-    The ASE program: 
+    The ASE program: https://wiki.fysik.dtu.dk/ase/about.html
 
     Args:
         atoms: `Atoms` object from ASE with attached `Calculator`
@@ -34,7 +34,7 @@ class AseMD:
         scratch_dir:  str="scratch/",
     ):
         if atoms == None:
-            raise ValueError(' >>> ERROR: AseMD needs atoms object!')
+            raise ValueError(' >>> ERROR: AseMD needs `Atoms` object!')
 
         self.step = -1 # first iteration is 0th step
         self.molecule = atoms
@@ -50,7 +50,7 @@ class AseMD:
         self.coords   = self.molecule.get_positions().flatten() / Bohr
         self.mass     = self.molecule.get_masses()
         self.masses   = np.repeat(self.mass, 3)
-        self.natoms   = len(self.mass)
+        self.natoms   = int(len(self.coords) / 3)
         self.ndegrees = 3.e0*self.natoms-6.e0
         self.forces   = np.zeros_like(self.coords)
         self.momenta  = np.zeros_like(self.coords)
@@ -155,7 +155,7 @@ class AseMD:
         restart_freq: int=None,
         dcd_freq: int=None,
         remove_rotation: bool=False,
-        prefix: str="aseMD",
+        prefix: str="aseMD_production",
         **kwargs,
     ):
         """Run MD simulation using an Verlocity Verlete integrator and langevin thermostat
@@ -168,7 +168,7 @@ class AseMD:
             remove_rotation: if True, remove center of mass translation and rotation
             prefix: prefix for output files
         """
-        for step in range(nsteps):
+        for _ in range(nsteps):
             start_time = time.perf_counter()
             self.step += 1
             
@@ -190,26 +190,73 @@ class AseMD:
             self.up_momenta()
             self.calc_etvp()
 
-            if restart_freq!=None and step%restart_freq == 0:
+            if restart_freq!=None and self.step%restart_freq == 0:
                 self.write_restart(prefix=prefix)
             
-            if dcd_freq!=None and step%dcd_freq == 0:
+            if dcd_freq!=None and self.step%dcd_freq == 0:
                 self.print_dcd(prefix=prefix)
 
             self.time_per_step.append(time.perf_counter() - start_time)
-            if out_freq != None and step%out_freq == 0:
+            if out_freq != None and self.step%out_freq == 0:
                 self.print_energy(prefix=prefix)
+
+
+    def heat(
+        self, 
+        nsteps: int=0, 
+        start_temp: float=1.0,
+        target_temp: float=300.0,
+        stages: int=100,
+        out_freq: int=None,
+        restart_freq: int=None,
+        dcd_freq: int=None,
+        remove_rotation: bool=False,
+        prefix: str="ashMD_heating",
+        **kwargs,
+    ):
+        """Heating of MD simulation from current temperature to target temperature 
+        The temperature is slowly increased by rescaling momenta to the new temperature over discrete stages
+
+        Args:
+            nsteps: number of MD steps
+            target_temp: target temperature
+            start_temp: initial temperature
+            stages: number of equilibrium stages (number of times momenta a rescaled to new temperatures)
+            out_freq: frequency of writing outputs
+            restart_freq: frequncy of writing restart file
+            dcd_freq: frequency of writing coords to DCD trajectory
+            remove_rotation: if True, remove center of mass translation and rotation
+            prefix: prefix for output files
+        """
+        self.rescale_mom(temperature=start_temp)
+        temp_diff = target_temp - start_temp
+        deltaT_per_stage = temp_diff / stages
+        steps_per_stage = int(nsteps / stages)
+        self.target_temp = start_temp
+        for _ in range(stages):
+            self.run(
+                nsteps=steps_per_stage,
+                out_freq=out_freq,
+                restart_freq=restart_freq,
+                dcd_freq=dcd_freq,
+                remove_rotation=remove_rotation,
+                prefix=prefix,
+                **kwargs,
+            )
+            self.target_temp = self.target_temp + deltaT_per_stage
+            self.rescale_mom(temperature=self.target_temp)
 
 
     def calc(self):
         """ Calculation of energy, forces 
+        Excecuted in `self.scratch_dir` to avoid crowding the input directory with input and output files of `calculator`
         """
         os.chdir(self.scratch_dir)
         # ASE base units are eV and Angstrom
         from ase.units import Bohr, Hartree
         self.molecule.positions = self.coords.reshape((self.natoms,3)) * Bohr
         self.epot = self.molecule.get_potential_energy() / Hartree
-        self.forces = -self.molecule.get_forces().flatten() / Hartree * Bohr
+        self.forces = -self.molecule.get_forces().flatten() * (Bohr / Hartree) 
         os.chdir(self.cwd)
 
 
@@ -264,7 +311,7 @@ class AseMD:
     ):
         """ Update momenta with Velocity Verlet """
 
-        if self.langevin==True:
+        if self.langevin:
             prefac = (2.0e0 - self.friction*self.dt)/(2.0e0 + self.friction*self.dt)
             rand_push = np.sqrt(self.target_temp*self.friction*self.dt*units.kB_in_atomic/2.0e0)
             self.momenta *= prefac
@@ -283,9 +330,9 @@ class AseMD:
         """
         if temperature == None:
             return
-        self.calc_etvp()
-        self.momenta *= np.sqrt(temperature/self.temp)
-      
+        temp  = (np.power(self.momenta, 2)/self.masses).sum() / (3.e0*self.n_active*units.kB_in_atomic)
+        self.momenta *= np.sqrt(temperature/temp)
+    
 
     def freeze_atoms(self):
         """ Freeze self.frozen_atoms """
@@ -374,11 +421,11 @@ class AseMD:
            -
         '''
         restart_data = {
-          "momenta": self.momenta,
-          "coords": self.coords,
-          "step": self.step,
-          "active": self.active_atoms,
-          "seed": self.seed_in,
+            "momenta": self.momenta,
+            "coords": self.coords,
+            "step": self.step,
+            "active": self.active_atoms,
+            "seed": self.seed_in,
         }
         np.savez(prefix+"_restart", **restart_data)
 
@@ -386,7 +433,7 @@ class AseMD:
             with open(prefix+"_restart_geom.xyz", "w+") as f:
                 elements = self.molecule.get_chemical_symbols()
                 f.write(str("%i\nTIME: %14.7f\n") % (self.natoms,self.step*self.dt))
-                 
+                
                 for i in range(self.natoms):
                     string = str("%s %20.10e %20.10e %20.10e\n") % (
                         elements[i],self.coords[3*i+0]*units.BOHR_to_ANGSTROM,self.coords[3*i+1]*units.BOHR_to_ANGSTROM,self.coords[3*i+2]*units.BOHR_to_ANGSTROM
