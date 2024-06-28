@@ -577,7 +577,7 @@ class OPES(EnhancedSampling):
 
     def restart(
         self, 
-        filename: str = "restart_wtmeabf"
+        filename: str = "restart_opes"
     ):
         """restart from restart file
 
@@ -593,7 +593,7 @@ class OPES(EnhancedSampling):
         self.sum_weights = float(data["sum_weigths"])
         self.sum_weights_square = float(data["sum_weigths_square"])
         self.norm_factor = float(data["norm_factor"])
-        self.kernel_height = data["height"]
+        self.kernel_height = data["heigth"]
         self.kernel_center = data["center"]
         self.kernel_sigma = data["sigma"]
         self.explore = data["explore"]
@@ -768,7 +768,7 @@ class OPES(EnhancedSampling):
             n_sample = j * n + n
             print("Iteration ",j+1," of", hist_res, "started.")
             scattered_time.append(n_sample)
-            probability_hist = np.zeros(100)
+            probability_hist = np.zeros(len(grid))
             for i,x in enumerate(grid): # Loop over grid so that i are bin centers
                 indices_hist = np.where(np.logical_and((cv_x[0:n_sample] >= x - dx2), (cv_x[0:n_sample] < x + dx2)))
                 probability_hist[i] = np.sum(np.exp(self.beta * cv_pot[indices_hist])) / divisor

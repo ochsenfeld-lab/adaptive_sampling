@@ -9,6 +9,7 @@ from .reference import *
 from .feneb import *
 from .utils import *
 from .opes import *
+from .opeseabf import *
 
 __all__ = [
     "ABF",
@@ -21,4 +22,5 @@ __all__ = [
     "FENEB",
     "Reference",
     "OPES",
+    "OPESeABF",
 ]

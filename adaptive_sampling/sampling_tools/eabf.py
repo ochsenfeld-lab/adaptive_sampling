@@ -464,14 +464,15 @@ class eABF(ABF, EnhancedSampling):
             dxi = diff(self.ext_coords[i], xi[i], self.periodicity[i])
             self.ext_forces[i] = self.ext_k[i] * dxi
             bias_force -= self.ext_k[i] * dxi * delta_xi[i]
-            
+        
             # harmonic walls for confinement to range of interest
             if self.f_conf[i] > 0.0:
-                if self.ext_coords[i] > (self.maxx[i] - margin[i]) and self.periodicity[i]:
+                #print("ext coords", self.ext_coords[i], "minx", self.minx[i], "maxx", self.maxx[i], "margin", margin[i])
+                if self.ext_coords[i] > (self.maxx[i] - margin[i]):# and self.periodicity[i]:
                     r = diff(self.maxx[i] - margin[i], self.ext_coords[i], self.periodicity[i])
                     self.ext_forces[i] -= self.f_conf[i] * r
 
-                elif self.ext_coords[i] < (self.minx[i] + margin[i]) and self.periodicity[i]:
+                elif self.ext_coords[i] < (self.minx[i] + margin[i]):# and self.periodicity[i]:
                     r = diff(self.minx[i] + margin[i], self.ext_coords[i], self.periodicity[i])
                     self.ext_forces[i] -= self.f_conf[i] * r
 
