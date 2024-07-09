@@ -45,7 +45,7 @@ the_abm = aWTMeABF(
     f_conf=100,
     equil_temp=300.0,
 )
-#the_abm.restart(filename="restart_gawtmeabf")
+# the_abm.restart(filename="restart_gawtmeabf")
 
 the_md.calc_init()
 the_abm.step_bias()
@@ -79,7 +79,7 @@ while step_count < nsteps:
 
     the_md.forces += the_abm.step_bias()
 
-    #print(the_abm.k0)
+    # print(the_abm.k0)
     the_md.up_momenta(langevin=True)
     the_md.calc_etvp()
 

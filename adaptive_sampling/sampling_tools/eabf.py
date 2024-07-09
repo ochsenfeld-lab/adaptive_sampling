@@ -3,7 +3,13 @@ import numpy as np
 from typing import Union
 from .enhanced_sampling import EnhancedSampling
 from .abf import ABF
-from .utils import diff, correct_periodicity, welford_var, combine_welford_stats, cond_avg
+from .utils import (
+    diff,
+    correct_periodicity,
+    welford_var,
+    combine_welford_stats,
+    cond_avg,
+)
 from ..processing_tools.thermodynamic_integration import integrate
 from ..units import *
 
@@ -44,8 +50,16 @@ class eABF(ABF, EnhancedSampling):
     ):
         super().__init__(*args, **kwargs)
 
-        ext_sigma = [ext_sigma for _ in range(self.ncoords)] if not hasattr(ext_sigma, "__len__") else ext_sigma
-        ext_mass = [ext_mass for _ in range(self.ncoords)] if not hasattr(ext_mass, "__len__") else ext_mass
+        ext_sigma = (
+            [ext_sigma for _ in range(self.ncoords)]
+            if not hasattr(ext_sigma, "__len__")
+            else ext_sigma
+        )
+        ext_mass = (
+            [ext_mass for _ in range(self.ncoords)]
+            if not hasattr(ext_mass, "__len__")
+            else ext_mass
+        )
 
         (xi, _) = self.get_cv()
 
@@ -81,36 +95,36 @@ class eABF(ABF, EnhancedSampling):
         self.reinit_ext_system(xi)
 
     def step_bias(
-        self, 
-        write_output: bool = True, 
-        write_traj: bool = True, 
-        stabilize: bool = False, 
+        self,
+        write_output: bool = True,
+        write_traj: bool = True,
+        stabilize: bool = False,
         stabilizer_threshold: float = None,
-        **kwargs
+        **kwargs,
     ) -> np.ndarray:
         """Apply eABF to MD simulation
 
-        Args:
-            write_output: if on-the-fly free energy estimate and restart files should be written
-            write_traj: if CV and extended system trajectory file should be written
-            stabilize: if stabilisation algorithm should be applied for discontinous CVs
-            stabilizer_threshold: treshold for stabilisation of extended system
+         Args:
+             write_output: if on-the-fly free energy estimate and restart files should be written
+             write_traj: if CV and extended system trajectory file should be written
+             stabilize: if stabilisation algorithm should be applied for discontinous CVs
+             stabilizer_threshold: treshold for stabilisation of extended system
 
-       Returns:
-            bias_force: Adaptive biasing force of current step that has to be added to molecular forces
+        Returns:
+             bias_force: Adaptive biasing force of current step that has to be added to molecular forces
         """
 
         md_state = self.the_md.get_sampling_data()
         (xi, delta_xi) = self.get_cv(**kwargs)
 
-        if stabilize and len(self.traj)>0:
+        if stabilize and len(self.traj) > 0:
             self.stabilizer(xi, threshold=stabilizer_threshold)
 
         self._propagate()
 
         bias_force = self._extended_dynamics(xi, delta_xi)  # , self.ext_sigma)
         force_sample = [0 for _ in range(2 * self.ncoords)]
-        
+
         if self._check_boundaries(self.ext_coords):
 
             bin_la = self.get_index(self.ext_coords)
@@ -126,7 +140,9 @@ class eABF(ABF, EnhancedSampling):
                 )
 
                 # apply bias force on extended system
-                force_sample[i] = self.ext_k[i] * diff(self.ext_coords[i], xi[i], self.periodicity[i])
+                force_sample[i] = self.ext_k[i] * diff(
+                    self.ext_coords[i], xi[i], self.periodicity[i]
+                )
                 (
                     self.bias[i][bin_la[1], bin_la[0]],
                     self.m2_force[i][bin_la[1], bin_la[0]],
@@ -146,16 +162,18 @@ class eABF(ABF, EnhancedSampling):
             self.histogram[bink[1], bink[0]] += 1
 
             for i in range(self.ncoords):
-                force_sample[self.ncoords+i] = self.ext_k[i] * diff(
+                force_sample[self.ncoords + i] = self.ext_k[i] * diff(
                     self.ext_coords[i], self.grid[i][bink[i]], self.periodicity[i]
                 )
-                self.correction_czar[i][bink[1], bink[0]] += force_sample[self.ncoords+i]
+                self.correction_czar[i][bink[1], bink[0]] += force_sample[
+                    self.ncoords + i
+                ]
 
         # shared-bias eABF
-        if self.shared:                 
+        if self.shared:
             self.shared_bias(
                 xi,
-                force_sample, 
+                force_sample,
                 **kwargs,
             )
 
@@ -225,12 +243,12 @@ class eABF(ABF, EnhancedSampling):
                 )
 
     def shared_bias(
-        self, 
+        self,
         xi,
         force_sample,
-        sync_interval: int=50,
-        mw_file: str="../shared_bias",
-        n_trials: int=10,
+        sync_interval: int = 50,
+        mw_file: str = "../shared_bias",
+        n_trials: int = 10,
     ):
         """syncs eABF bias with other walkers
 
@@ -244,11 +262,13 @@ class eABF(ABF, EnhancedSampling):
             n_trials: number of attempts to access of buffer file before throwing an error
         """
         md_state = self.the_md.get_sampling_data()
-        if md_state.step == 0:        
+        if md_state.step == 0:
             if self.verbose:
                 print(" >>> Info: Creating a new instance for shared-bias eABF.")
-                print(" >>> Info: Data of local walker stored in `restart_eabf_local.npz`.")
-            
+                print(
+                    " >>> Info: Data of local walker stored in `restart_eabf_local.npz`."
+                )
+
             # create seperate restart file with local data only
             self._write_restart(
                 filename="restart_eabf_local",
@@ -263,9 +283,11 @@ class eABF(ABF, EnhancedSampling):
             self.last_samples_xi = np.zeros(shape=(sync_interval, len(xi)))
             self.last_samples_la = np.zeros(shape=(sync_interval, len(self.ext_coords)))
 
-            if not os.path.isfile(mw_file+".npz"):
+            if not os.path.isfile(mw_file + ".npz"):
                 if self.verbose:
-                    print(f" >>> Info: Creating buffer file for shared-bias eABF: `{mw_file}.npz`.")
+                    print(
+                        f" >>> Info: Creating buffer file for shared-bias eABF: `{mw_file}.npz`."
+                    )
                 self._write_restart(
                     filename=mw_file,
                     hist=self.histogram,
@@ -277,24 +299,26 @@ class eABF(ABF, EnhancedSampling):
                 )
                 os.chmod(mw_file + ".npz", 0o444)
             elif self.verbose:
-                print(f" >>> Info: Syncing with existing buffer file for shared-bias eABF: `{mw_file}.npz`.")
-        
+                print(
+                    f" >>> Info: Syncing with existing buffer file for shared-bias eABF: `{mw_file}.npz`."
+                )
+
         count = md_state.step % sync_interval
         self.update_samples[count] = force_sample
         self.last_samples_xi[count] = xi
         self.last_samples_la[count] = self.ext_coords
 
-        if count == sync_interval-1:
-            
+        if count == sync_interval - 1:
+
             # calculate progress since last sync from new samples
             hist = np.zeros_like(self.histogram)
             m2 = np.zeros_like(self.m2_force)
             bias = np.zeros_like(self.bias)
             ext_hist = np.zeros_like(self.ext_hist)
             czar_corr = np.zeros_like(self.correction_czar)
-            
+
             for i, sample in enumerate(self.update_samples):
-                if self._check_boundaries(self.last_samples_la[i]):                   
+                if self._check_boundaries(self.last_samples_la[i]):
                     bin_la = self.get_index(self.last_samples_la[i])
                     ext_hist[bin_la[1], bin_la[0]] += 1
                     for j in range(self.ncoords):
@@ -308,19 +332,18 @@ class eABF(ABF, EnhancedSampling):
                             m2[j][bin_la[1], bin_la[0]],
                             sample[j],
                         )
-                
+
                 if self._check_boundaries(self.last_samples_xi[i]):
                     bin_xi = self.get_index(self.last_samples_xi[i])
-                    hist[bin_xi[1], bin_xi[0]] += 1 
+                    hist[bin_xi[1], bin_xi[0]] += 1
                     for j in range(self.ncoords):
-                        czar_corr[j][bin_xi[1], bin_xi[0]] += sample[self.ncoords+j]
-            
-            
+                        czar_corr[j][bin_xi[1], bin_xi[0]] += sample[self.ncoords + j]
+
             self._update_eabf(
                 "restart_eabf_local",
-                hist, 
+                hist,
                 ext_hist,
-                bias, 
+                bias,
                 m2,
                 czar_corr,
             )
@@ -329,34 +352,35 @@ class eABF(ABF, EnhancedSampling):
             while trial < n_trials:
                 trial += 1
                 if not os.access(mw_file + ".npz", os.W_OK):
-                    
+
                     # grant write access only to one walker during sync
-                    os.chmod(mw_file + ".npz", 0o666) 
+                    os.chmod(mw_file + ".npz", 0o666)
                     self._update_eabf(
                         mw_file,
-                        hist, 
+                        hist,
                         ext_hist,
-                        bias, 
+                        bias,
                         m2,
                         czar_corr,
                     )
                     self.restart(filename=mw_file, restart_ext_sys=False)
                     os.chmod(mw_file + ".npz", 0o444)  # other walkers can access again
-                    
-                    self.get_pmf()  # get new global pmf   
-                    break                     
+
+                    self.get_pmf()  # get new global pmf
+                    break
 
                 elif trial < n_trials:
                     if self.verbose:
-                        print(f" >>> Warning: Retry to open shared buffer file after {trial} failed attempts.")
+                        print(
+                            f" >>> Warning: Retry to open shared buffer file after {trial} failed attempts."
+                        )
                     time.sleep(0.1)
                 else:
-                    raise Exception(f" >>> Fatal Error: Failed to sync bias with `{mw_file}.npz`.")
+                    raise Exception(
+                        f" >>> Fatal Error: Failed to sync bias with `{mw_file}.npz`."
+                    )
 
-    def reinit_ext_system(
-        self, 
-        xi: np.ndarray
-    ):
+    def reinit_ext_system(self, xi: np.ndarray):
         """Initialize extended-system dynamics with random momenta"""
         self.ext_coords = np.copy(xi)
         for i in range(self.ncoords):
@@ -367,11 +391,7 @@ class eABF(ABF, EnhancedSampling):
             ttt /= self.ncoords
             self.ext_momenta *= np.sqrt(self.equil_temp / (ttt * atomic_to_K))
 
-    def stabilizer(
-        self, 
-        xi: np.ndarray, 
-        threshold: float=None
-    ):
+    def stabilizer(self, xi: np.ndarray, threshold: float = None):
         """Stabilize extended dynamics in case of discontiouity in Collective Variable
 
         see: Hulm et al., J. Chem. Theory Comput. (2023)
@@ -384,16 +404,15 @@ class eABF(ABF, EnhancedSampling):
             threshold = self.ext_sigma
 
         for i in range(self.ncoords):
-            if abs(xi[i]-self.traj[-1][i]) > threshold[i]:
+            if abs(xi[i] - self.traj[-1][i]) > threshold[i]:
                 delta = diff(self.ext_coords[i], self.traj[-1][i], self.periodicity[i])
                 self.ext_coords[i] = xi[i] + delta
                 if self.verbose:
-                    print(f" >>> INFO: extended system corrected after discontinuity of CV{i}!")
+                    print(
+                        f" >>> INFO: extended system corrected after discontinuity of CV{i}!"
+                    )
 
-    def _propagate(
-        self, 
-        langevin: bool = True
-    ):
+    def _propagate(self, langevin: bool = True):
         """Propagate momenta/coords of extended variable in time with Velocity Verlet
 
         Args:
@@ -410,19 +429,20 @@ class eABF(ABF, EnhancedSampling):
 
             self.ext_momenta += np.sqrt(self.ext_mass) * rand_push * self.ext_rand_gauss
             self.ext_momenta -= 0.5e0 * self.the_md.dt * self.ext_forces
-            self.ext_coords  += prefac * self.the_md.dt * self.ext_momenta / self.ext_mass
+            self.ext_coords += (
+                prefac * self.the_md.dt * self.ext_momenta / self.ext_mass
+            )
 
         else:
             self.ext_momenta -= 0.5e0 * self.the_md.dt * self.ext_forces
             self.ext_coords += self.the_md.dt * self.ext_momenta / self.ext_mass
-        
-        for i in range(self.ncoords):
-            self.ext_coords[i] = correct_periodicity(self.ext_coords[i], self.periodicity[i])
 
-    def _up_momenta(
-        self, 
-        langevin: bool = True
-    ):
+        for i in range(self.ncoords):
+            self.ext_coords[i] = correct_periodicity(
+                self.ext_coords[i], self.periodicity[i]
+            )
+
+    def _up_momenta(self, langevin: bool = True):
         """Update momenta of extended variables with Velocity Verlet
 
         Args:
@@ -464,48 +484,51 @@ class eABF(ABF, EnhancedSampling):
             dxi = diff(self.ext_coords[i], xi[i], self.periodicity[i])
             self.ext_forces[i] = self.ext_k[i] * dxi
             bias_force -= self.ext_k[i] * dxi * delta_xi[i]
-            
+
             # harmonic walls for confinement to range of interest
             if self.f_conf[i] > 0.0:
                 if self.ext_coords[i] > (self.maxx[i] - margin[i]):
-                    r = diff(self.maxx[i] - margin[i], self.ext_coords[i], self.periodicity[i])
+                    r = diff(
+                        self.maxx[i] - margin[i],
+                        self.ext_coords[i],
+                        self.periodicity[i],
+                    )
                     self.ext_forces[i] -= self.f_conf[i] * r
 
                 elif self.ext_coords[i] < (self.minx[i] + margin[i]):
-                    r = diff(self.minx[i] + margin[i], self.ext_coords[i], self.periodicity[i])
+                    r = diff(
+                        self.minx[i] + margin[i],
+                        self.ext_coords[i],
+                        self.periodicity[i],
+                    )
                     self.ext_forces[i] -= self.f_conf[i] * r
 
         return bias_force
 
     def _update_eabf(
-        self, 
+        self,
         filename: str,
-        hist, 
+        hist,
         ext_hist,
-        bias, 
+        bias,
         m2,
         czar_corr,
     ):
-        with np.load(f"{filename}.npz") as data:  
+        with np.load(f"{filename}.npz") as data:
 
             new_hist = data["ext_hist"] + hist
             new_czar_corr = data["czar_corr"] + czar_corr
             new_ext_hist = np.zeros_like(self.histogram).flatten()
             new_m2 = np.zeros_like(self.m2_force).flatten()
-            new_bias = np.zeros_like(self.bias).flatten() 
+            new_bias = np.zeros_like(self.bias).flatten()
 
             for i in range(len(new_ext_hist)):
-                (
-                    new_ext_hist[i],
-                    new_bias[i],
-                    new_m2[i],
-                    _,
-                ) = combine_welford_stats(
-                    data["ext_hist"].flatten()[i], 
-                    data["force"].flatten()[i], 
-                    data["m2"].flatten()[i], 
-                    ext_hist.flatten()[i], 
-                    bias.flatten()[i], 
+                (new_ext_hist[i], new_bias[i], new_m2[i], _,) = combine_welford_stats(
+                    data["ext_hist"].flatten()[i],
+                    data["force"].flatten()[i],
+                    data["m2"].flatten()[i],
+                    ext_hist.flatten()[i],
+                    bias.flatten()[i],
                     m2.flatten()[i],
                 )
 
@@ -516,7 +539,7 @@ class eABF(ABF, EnhancedSampling):
             m2=new_m2.reshape(self.m2_force.shape),
             ext_hist=new_ext_hist.reshape(self.ext_hist.shape),
             czar_corr=new_czar_corr,
-        ) 
+        )
 
     def write_restart(self, filename: str = "restart_abf"):
         """write restart file

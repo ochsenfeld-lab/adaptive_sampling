@@ -2,6 +2,7 @@ import numpy as np
 from ..units import *
 from .utils import *
 
+
 def integrate(
     mean_force: np.ndarray,
     dx: float,
@@ -70,13 +71,13 @@ def czar(
     Returns:
         mean_force: thermodynamic force (gradient of PMF)
     """
-    from ..sampling_tools.utils import diff 
+    from ..sampling_tools.utils import diff
 
     RT = R_in_SI * equil_temp / 1000.0
 
     # assumes that periodic boundary can only be at bin edges
     dx2 = (grid[1] - grid[0]) / 2.0
-    grid_local = grid + dx2 
+    grid_local = grid + dx2
 
     # get force constant from sigma
     k = RT / (sigma * sigma)
@@ -87,19 +88,20 @@ def czar(
         la_x = la[np.where(np.logical_and(cv >= x - dx2, cv < x + dx2))]
         hist[i] = len(la_x)
         if hist[i] > 0:
-            diff_la_x = diff(la_x, x, periodicity)            
+            diff_la_x = diff(la_x, x, periodicity)
             f_corr[i] = k * np.average(diff_la_x)
 
     log_hist = np.log(hist, out=np.zeros_like(hist), where=(hist != 0))
 
-    return -RT * np.gradient(log_hist, grid_local) + f_corr 
+    return -RT * np.gradient(log_hist, grid_local) + f_corr
+
 
 def force_error(
     grid: np.ndarray,
     xi: np.ndarray,
     la: np.ndarray,
     sigma: float,
-    n_bins_tau: int=5,
+    n_bins_tau: int = 5,
     equil_temp: float = 300.0,
     full_output: bool = False,
 ):
@@ -115,43 +117,43 @@ def force_error(
         full_output: if True return dict with full information
 
     returns:
-        err_pmf: error estimate for PMF 
+        err_pmf: error estimate for PMF
     """
     RT = R_in_SI * equil_temp / 1000.0
     k = RT / (sigma * sigma)
 
     F = -harmonic_force(xi, la, k)
 
-    delta = (xi.max()-xi.min()) / n_bins_tau
-    edges = np.arange(xi.min(), xi.max()+delta/2, delta)
+    delta = (xi.max() - xi.min()) / n_bins_tau
+    edges = np.arange(xi.min(), xi.max() + delta / 2, delta)
     corr = []
-    tau  = np.zeros(n_bins_tau)
+    tau = np.zeros(n_bins_tau)
     for i in range(n_bins_tau):
-        frames = np.where(np.logical_and(xi>=edges[i], xi<edges[i+1]))
+        frames = np.where(np.logical_and(xi >= edges[i], xi < edges[i + 1]))
         corr.append(autocorr(F[frames]))
-        tau[i] = ipce(corr[-1])   
+        tau[i] = ipce(corr[-1])
 
-    edges_pmf = np.zeros(len(grid)+1)
-    edges_pmf[:-1] = grid - (grid[1] - grid[0]) / 2.
-    edges_pmf[-1] = edges_pmf[-2] + (grid[1] - grid[0]) / 2.
-    
-    force     = np.zeros_like(grid)   
+    edges_pmf = np.zeros(len(grid) + 1)
+    edges_pmf[:-1] = grid - (grid[1] - grid[0]) / 2.0
+    edges_pmf[-1] = edges_pmf[-2] + (grid[1] - grid[0]) / 2.0
+
+    force = np.zeros_like(grid)
     err_force = np.zeros_like(grid)
-    tau_pmf   = np.repeat(tau, len(force)//n_bins_tau)
-    if (len(force)//n_bins_tau) % 2 != 0:
+    tau_pmf = np.repeat(tau, len(force) // n_bins_tau)
+    if (len(force) // n_bins_tau) % 2 != 0:
         tau_pmf = np.append(tau_pmf, tau_pmf[:-1])
 
     for i in range(len(grid)):
-        frames = np.where(np.logical_and(xi>=edges_pmf[i], xi<edges_pmf[i+1]))
+        frames = np.where(np.logical_and(xi >= edges_pmf[i], xi < edges_pmf[i + 1]))
         force[i] = F[frames].mean()
-        err_force[i] = np.sqrt(tau_pmf[i]/len(F[frames]) * F[frames].var()) 
-    
-    err_pmf = integrate(err_force, grid[1]-grid[0], normalize=False)
+        err_force[i] = np.sqrt(tau_pmf[i] / len(F[frames]) * F[frames].var())
+
+    err_pmf = integrate(err_force, grid[1] - grid[0], normalize=False)
 
     if full_output:
         return {
             "tau": tau,
-            "tau_grid": edges[:-1] + delta/2.,
+            "tau_grid": edges[:-1] + delta / 2.0,
             "autocorr": corr,
             "force": force,
             "err_force": err_force,
@@ -159,5 +161,3 @@ def force_error(
         }
     else:
         return err_pmf
-
-

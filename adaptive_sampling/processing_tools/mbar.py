@@ -8,12 +8,12 @@ import torch
 
 def run_mbar(
     exp_U: np.ndarray,
-    frames_per_traj: np.ndarray, 
+    frames_per_traj: np.ndarray,
     max_iter: int = 10000,
     conv: float = 1.0e-7,
     conv_errvec: float = None,
     outfreq: int = 100,
-    device = 'cpu'
+    device="cpu",
 ) -> np.ndarray:
     """Self-consistent Multistate Bannett Acceptance Ratio (MBAR)
 
@@ -39,13 +39,13 @@ def run_mbar(
     num_trajs = len(frames_per_traj)
     beta_Ai = torch.zeros(size=(num_trajs,))
     beta_Ai = beta_Ai.to(device=device)
-    #Ai_overtime = [beta_Ai]
-    
+    # Ai_overtime = [beta_Ai]
+
     # First denominator with all zero Ai guess
     denominator = 1.0 / torch.matmul(frames_per_traj * torch.exp(beta_Ai), exp_U)
     expU_dot_denom = torch.matmul(exp_U, denominator)
 
-    #print("All ready!\n")
+    # print("All ready!\n")
     print("Start of the self-consistent iteration.")
     print("========================================================================")
     sys.stdout.flush()
@@ -55,16 +55,16 @@ def run_mbar(
 
         beta_Ai_new = -torch.log(expU_dot_denom)
         beta_Ai_new -= torch.clone(beta_Ai_new[0])
-        #Ai_overtime.append(beta_Ai_new)
+        # Ai_overtime.append(beta_Ai_new)
 
         delta_Ai = torch.abs(beta_Ai - beta_Ai_new)
         beta_Ai = torch.clone(beta_Ai_new)
-        
+
         prefac = frames_per_traj * torch.exp(beta_Ai)
         denominator = 1.0 / torch.matmul(prefac, exp_U)
         expU_dot_denom = torch.matmul(exp_U, denominator)
 
-        error_v = (frames_per_traj - prefac * expU_dot_denom)
+        error_v = frames_per_traj - prefac * expU_dot_denom
         max_err_vec = torch.abs(error_v).max()
 
         if count % outfreq == 0 or count == 1:
@@ -113,16 +113,16 @@ def run_mbar(
 
 
 def build_boltzmann(
-    traj_list: List, 
-    meta_f: np.ndarray, 
-    dU_list: List=None,
-    equil_temp: float=300.0,
-    periodicity: Union[List, np.ndarray]=None,
-    constraints: List[Dict]=None,
-    progress_bar: bool=False,
+    traj_list: List,
+    meta_f: np.ndarray,
+    dU_list: List = None,
+    equil_temp: float = 300.0,
+    periodicity: Union[List, np.ndarray] = None,
+    constraints: List[Dict] = None,
+    progress_bar: bool = False,
 ) -> Tuple[np.ndarray, np.ndarray]:
     """Build Boltzmann factores for MBAR
-    
+
     Args:
         traj_list: list of trajectories
         meta_f: definition of simulation with force constants and cv grid
@@ -146,8 +146,8 @@ def build_boltzmann(
     # adding an extra axis to 1D sims, for compatibility with x-D eABF
     if len(all_frames.shape) == 1:
         all_frames = all_frames[:, np.newaxis]
-    
-    # Reshape periodicity to list with len(ndims) 
+
+    # Reshape periodicity to list with len(ndims)
     ndims = len(all_frames[0])
     if not periodicity:
         periodicity = [None for _ in range(ndims)]
@@ -159,51 +159,54 @@ def build_boltzmann(
         all_dU, dU_num, dU_per_traj = join_frames(dU_list)
         all_dU *= atomic_to_kJmol  # kJ/mol
         if (dU_num != num_frames) or (frames_per_traj != dU_per_traj).all():
-            raise ValueError(" >>> Error: Frames of external potential have to match CV frames!")
+            raise ValueError(
+                " >>> Error: Frames of external potential have to match CV frames!"
+            )
         if len(all_dU.shape) == 1:
             all_dU = all_dU[:, np.newaxis]
 
     # additional constraints
     if constraints:
         for const_dict in constraints:
-            const_frames, _ , _ = join_frames(const_dict['traj_list'])
-            diffs = const_frames - const_dict['eq_value']
-            if 'period' in const_dict.keys():
-                const_lb = const_dict['period'][0]
-                const_ub = const_dict['period'][1]
+            const_frames, _, _ = join_frames(const_dict["traj_list"])
+            diffs = const_frames - const_dict["eq_value"]
+            if "period" in const_dict.keys():
+                const_lb = const_dict["period"][0]
+                const_ub = const_dict["period"][1]
                 const_period = const_ub - const_lb
                 diffs[diffs > const_ub] -= const_period
                 diffs[diffs < const_lb] += const_period
             if const_energy:
-                const_energy += 0.5 * const_dict['k'] * np.power(diffs, 2)
+                const_energy += 0.5 * const_dict["k"] * np.power(diffs, 2)
             else:
-                const_energy = 0.5 * const_dict['k'] * np.power(diffs, 2)
+                const_energy = 0.5 * const_dict["k"] * np.power(diffs, 2)
 
-    # build boltzmann factors  
+    # build boltzmann factors
     if progress_bar:
         from tqdm import tqdm
+
         meta_f = tqdm(meta_f)
 
     exp_U = []
     for line in meta_f:
         diffs = np.asarray(all_frames - line[1])
         for ii, bounds in enumerate(periodicity):
-            diffs[:,ii] = correct_periodicity(diffs[:,ii], bounds)
+            diffs[:, ii] = correct_periodicity(diffs[:, ii], bounds)
 
         exp_U.append(
             np.exp(
                 -beta * 0.5 * (line[2] * np.power(diffs, 2)).sum(axis=1),
                 dtype=np.float64,
             )
-        )    
-        
+        )
+
         if dU_list:
             exp_U[-1] *= np.exp(-beta * all_dU.sum(axis=1))
-            
+
         if constraints:
             exp_U[-1] *= np.exp(-beta * const_energy, dtype=np.float64)
 
-    exp_U = np.asarray(exp_U, dtype=np.float64) # this is a num_trajs x num_frames list
+    exp_U = np.asarray(exp_U, dtype=np.float64)  # this is a num_trajs x num_frames list
     return exp_U, frames_per_traj
 
 
@@ -216,7 +219,7 @@ def get_windows(
     dx: np.ndarray = None,
 ) -> Tuple[List[np.ndarray], np.ndarray, np.ndarray]:
     """generate mixture distribution of Gaussian shaped windows from eABF trajectory
-       
+
        see: J. Chem. Phys. 157, 024110 (2022); https://doi.org/10.1063/5.0095554
 
     Args:
@@ -225,7 +228,7 @@ def get_windows(
         la: Trajectory of the extended variable
         sigma: Thermal width of coupling of xi and la
         equil_temp: equillibrium temperature
-        
+
     Returns:
         traj_list: list of window trajectories,
         index_list: list of frame indices in original trajectory,
@@ -237,27 +240,30 @@ def get_windows(
     if dx is None:
         dx = centers[1] - centers[0]
     dx2 = dx / 2.0
-    
+
     # assumes if true for one then true for all
     if len(xi.shape) == 1:
         xi = xi[:, np.newaxis]
         la = la[:, np.newaxis]
         centers = centers[:, np.newaxis]
-        
+
     traj_list = []
     index_list = np.array([])
 
     for center in centers:
-        indices = np.where(np.logical_and((la >= center - dx2).all(axis=-1), 
-                              (la < center + dx2).all(axis=-1)))
+        indices = np.where(
+            np.logical_and(
+                (la >= center - dx2).all(axis=-1), (la < center + dx2).all(axis=-1)
+            )
+        )
         index_list = np.append(index_list, indices[0])
         traj_list += [xi[indices]]
 
     meta_f = np.zeros(shape=(3, *centers.shape))
     meta_f[1] = centers
     meta_f[2] = k
-    
-    meta_f = meta_f.transpose((1,0,2))
+
+    meta_f = meta_f.transpose((1, 0, 2))
 
     return traj_list, index_list.astype(np.int32), meta_f
 
@@ -270,11 +276,11 @@ def pmf_from_weights(
     dx: np.ndarray = None,
 ) -> Tuple[np.ndarray, np.ndarray]:
     """Get Potential of Mean Force (PMF) from statistical weigths obtained by MBAR
-       Note: for higher dimensional PMFs, they need to be reshaped, 
+       Note: for higher dimensional PMFs, they need to be reshaped,
        this function returns a flattened version
 
     Args:
-        grid: centroids of grid along cv, 
+        grid: centroids of grid along cv,
               shape=(N, d) for N centroids of d-dimension
         cv: trajectory of cv shape=(#frames, d)
         weights: boltzmann weights of frames in trajectory
@@ -293,11 +299,14 @@ def pmf_from_weights(
     if len(grid.shape) == 1:
         cv = cv[:, np.newaxis]
         grid = grid[:, np.newaxis]
-    
+
     rho = np.zeros(shape=(len(grid),), dtype=float)
     for ii, center in enumerate(grid):
-        indices = np.where(np.logical_and((cv >= center - dx2).all(axis=-1),
-                              (cv < center + dx2).all(axis=-1)))
+        indices = np.where(
+            np.logical_and(
+                (cv >= center - dx2).all(axis=-1), (cv < center + dx2).all(axis=-1)
+            )
+        )
         rho[ii] = weights[indices].sum()
 
     rho /= rho.sum() * np.prod(dx)

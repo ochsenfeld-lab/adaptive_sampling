@@ -55,15 +55,15 @@ class aWTMeABF(WTMeABF, aMD, EnhancedSampling):
         self.qm_boost = qm_boost
 
     def step_bias(
-        self, 
-        write_output: bool = True, 
-        write_traj: bool = True, 
+        self,
+        write_output: bool = True,
+        write_traj: bool = True,
         stabilize: bool = False,
         stabilizer_threshold: float = None,
-        output_file: str = 'awtmeabf.out',
-        traj_file: str = 'CV_traj.dat', 
-        restart_file: str = 'restart_awtmeabf',
-        **kwargs
+        output_file: str = "awtmeabf.out",
+        traj_file: str = "CV_traj.dat",
+        restart_file: str = "restart_awtmeabf",
+        **kwargs,
     ) -> np.ndarray:
         """Apply accelerated WTM-eABF to MD simulations
 
@@ -90,8 +90,8 @@ class aWTMeABF(WTMeABF, aMD, EnhancedSampling):
             self.amd_forces = np.copy(md_state.forces)
 
         (xi, delta_xi) = self.get_cv(**kwargs)
-        
-        if stabilize and len(self.traj)>0:
+
+        if stabilize and len(self.traj) > 0:
             self.stabilizer(xi, threshold=stabilizer_threshold)
 
         self._propagate()
@@ -155,7 +155,9 @@ class aWTMeABF(WTMeABF, aMD, EnhancedSampling):
 
             # CZAR
             for i in range(self.ncoords):
-                dx = diff(self.ext_coords[i], self.grid[i][bink[i]], self.periodicity[i])
+                dx = diff(
+                    self.ext_coords[i], self.grid[i][bink[i]], self.periodicity[i]
+                )
                 self.correction_czar[i][bink[1], bink[0]] += self.ext_k[i] * dx
 
             # aMD
@@ -278,9 +280,9 @@ class aWTMeABF(WTMeABF, aMD, EnhancedSampling):
             pot_min=self.pot_min,
             pot_max=self.pot_max,
             k0=self.k0,
-        )   
+        )
 
-    def restart(self, filename: str="restart_gaabf", restart_ext_sys: bool=False):
+    def restart(self, filename: str = "restart_gaabf", restart_ext_sys: bool = False):
         """restart from restart file
         Args:
             filename: name of restart file
@@ -290,34 +292,34 @@ class aWTMeABF(WTMeABF, aMD, EnhancedSampling):
         except:
             raise OSError(f" >>> fatal error: restart file {filename}.npz not found!")
 
-        self.histogram       = data["hist"]
-        self.bias            = data["force"]
-        self.var_force       = data["var"]
-        self.m2_force        = data["m2"]
-        self.ext_hist        = data["ext_hist"]
+        self.histogram = data["hist"]
+        self.bias = data["force"]
+        self.var_force = data["var"]
+        self.m2_force = data["m2"]
+        self.ext_hist = data["ext_hist"]
         self.correction_czar = data["czar_corr"]
-        self.abf_forces      = data["abf_force"]
-        self.center          = data["center"].tolist()
-        self.metapot         = data["metapot"]
-        self.amd_c1          = data["amd_c1"]
-        self.amd_m2          = data["amd_m2"]
-        self.amd_corr        = data["corr"]
-        self.pot_count       = data["pot_count"]
-        self.pot_var         = data["pot_var"]
-        self.pot_std         = data["pot_std"]
-        self.pot_m2          = data["pot_m2"]
-        self.pot_avg         = data["pot_avg"]
-        self.pot_min         = data["pot_min"]
-        self.pot_max         = data["pot_max"]
-        self.k0              = data["k0"]
+        self.abf_forces = data["abf_force"]
+        self.center = data["center"].tolist()
+        self.metapot = data["metapot"]
+        self.amd_c1 = data["amd_c1"]
+        self.amd_m2 = data["amd_m2"]
+        self.amd_corr = data["corr"]
+        self.pot_count = data["pot_count"]
+        self.pot_var = data["pot_var"]
+        self.pot_std = data["pot_std"]
+        self.pot_m2 = data["pot_m2"]
+        self.pot_avg = data["pot_avg"]
+        self.pot_min = data["pot_min"]
+        self.pot_max = data["pot_max"]
+        self.k0 = data["k0"]
         if restart_ext_sys:
             self.ext_momenta = data["ext_momenta"]
-            self.ext_coords  = data["ext_coords"]
+            self.ext_coords = data["ext_coords"]
 
         if self.verbose:
             print(f" >>> Info: Adaptive sampling restartet from {filename}!")
 
-    def write_traj(self, filename: str = 'CV_traj.dat'):
+    def write_traj(self, filename: str = "CV_traj.dat"):
         """save trajectory for post-processing"""
 
         data = self._write_ext_traj()

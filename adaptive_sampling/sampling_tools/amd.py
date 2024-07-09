@@ -6,7 +6,7 @@ from ..units import *
 
 class aMD(EnhancedSampling):
     """Accelerated Molecular Dynamics
-    
+
         see:
             aMD: Hamelberg et. al., J. Chem. Phys. 120, 11919 (2004); https://doi.org/10.1063/1.1755656
             GaMD: Miao et. al., J. Chem. Theory Comput. (2015); https://doi.org/10.1021/acs.jctc.5b00436
@@ -32,7 +32,7 @@ class aMD(EnhancedSampling):
         kinetice: calculate necessary data to obtain kinetics of reaction
         f_conf: force constant for confinement of system to the range of interest in CV space
         output_freq: frequency in steps for writing outputs
-        samd_c0: c0 constant for SaMD 
+        samd_c0: c0 constant for SaMD
     """
 
     def __init__(
@@ -55,7 +55,9 @@ class aMD(EnhancedSampling):
         self.confine = confine
 
         if self.verbose and amd_method.lower() == "amd":
-            print(f" >>> Warning: Please use GaMD or SaMD to obtain accurate free energy estimates!\n")
+            print(
+                f" >>> Warning: Please use GaMD or SaMD to obtain accurate free energy estimates!\n"
+            )
 
         self.pot_count = 0
         self.pot_var = 0.0
@@ -69,7 +71,7 @@ class aMD(EnhancedSampling):
         self.k = 0.0
         self.E = 0.0
         self.c0 = samd_c0
-        self.c = 1/self.c0 - 1
+        self.c = 1 / self.c0 - 1
 
         self.amd_pot = 0.0
         self.amd_pot_traj = []
@@ -217,27 +219,38 @@ class aMD(EnhancedSampling):
             if (self.pot_std / self.parameter) <= 1.0:
                 self.k = self.k0
             else:
-                self.k1 = np.max([0,(np.log(self.c) + np.log((self.pot_std)/(self.parameter) - 1))/(self.pot_avg - self.pot_min)])
-                self.k = np.max([self.k0,self.k1])
+                self.k1 = np.max(
+                    [
+                        0,
+                        (np.log(self.c) + np.log((self.pot_std) / (self.parameter) - 1))
+                        / (self.pot_avg - self.pot_min),
+                    ]
+                )
+                self.k = np.max([self.k0, self.k1])
 
         elif self.amd_method.lower() == "amd":
             self.E = self.pot_max
- 
+
         else:
             raise ValueError(f" >>> Error: unknown aMD method {self.amd_method}!")
 
     def _apply_boost(self, epot):
-        """Apply boost potential to forces
-        """
+        """Apply boost potential to forces"""
         if self.amd_method.lower() not in ["amd", "gamd_lower", "gamd_upper", "samd"]:
             raise ValueError(f" >>> Error: unknown aMD method {self.amd_method}!")
 
         if epot < self.E:
             if self.amd_method.lower() == "amd":
-                self.amd_pot = np.square(self.E - epot) / (self.parameter + (self.E - epot))
-                boost_force = -(
-                    ((epot - self.E) * (epot - 2.0 * self.parameter - self.E)) / np.square(epot - self.parameter - self.E)
-                ) * self.amd_forces
+                self.amd_pot = np.square(self.E - epot) / (
+                    self.parameter + (self.E - epot)
+                )
+                boost_force = (
+                    -(
+                        ((epot - self.E) * (epot - 2.0 * self.parameter - self.E))
+                        / np.square(epot - self.parameter - self.E)
+                    )
+                    * self.amd_forces
+                )
 
             elif self.amd_method.lower() in ["gamd_lower", "gamd_upper"]:
                 prefac = self.k0 / (self.pot_max - self.pot_min)
@@ -248,12 +261,27 @@ class aMD(EnhancedSampling):
             self.amd_pot = 0.0
 
         if self.amd_method.lower() == "samd":
-            self.amd_pot = self.pot_max - epot - 1/self.k * np.log((self.c + np.exp(self.k * (self.pot_max - self.pot_min))) 
-               / (self.c + np.exp(self.k * (epot - self.pot_min))))
-            boost_force = (1.0/(np.exp(-self.k * (epot - self.pot_min) + np.log((1/self.c0) - 1)) + 1) - 1) * self.amd_forces
+            self.amd_pot = (
+                self.pot_max
+                - epot
+                - 1
+                / self.k
+                * np.log(
+                    (self.c + np.exp(self.k * (self.pot_max - self.pot_min)))
+                    / (self.c + np.exp(self.k * (epot - self.pot_min)))
+                )
+            )
+            boost_force = (
+                1.0
+                / (
+                    np.exp(-self.k * (epot - self.pot_min) + np.log((1 / self.c0) - 1))
+                    + 1
+                )
+                - 1
+            ) * self.amd_forces
 
         return boost_force
-    
+
     def write_restart(self, filename: str = "restart_amd"):
         """write restart file
         TODO: fix me
@@ -290,18 +318,18 @@ class aMD(EnhancedSampling):
             raise OSError(f" >>> fatal error: restart file {filename}.npz not found!")
 
         self.histogram = data["hist"]
-        self.pmf       = data["pmf"]
-        self.amd_c1    = data["c1"]
-        self.amd_m2    = data["m2"]
-        self.amd_corr  = data["corr"]
+        self.pmf = data["pmf"]
+        self.amd_c1 = data["c1"]
+        self.amd_m2 = data["m2"]
+        self.amd_corr = data["corr"]
         self.pot_count = data["pot_count"]
-        self.pot_var   = data["pot_var"]
-        self.pot_std   = data["pot_std"]
-        self.pot_m2    = data["pot_m2"]
-        self.pot_avg   = data["pot_avg"]
-        self.pot_min   = data["pot_min"]
-        self.pot_max   = data["pot_max"]
-        self.k0        = data["k0"]
+        self.pot_var = data["pot_var"]
+        self.pot_std = data["pot_std"]
+        self.pot_m2 = data["pot_m2"]
+        self.pot_avg = data["pot_avg"]
+        self.pot_min = data["pot_min"]
+        self.pot_max = data["pot_max"]
+        self.k0 = data["k0"]
 
         if self.verbose:
             print(f" >>> Info: Adaptive sampling restartet from {filename}!")

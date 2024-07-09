@@ -11,7 +11,7 @@ class MD:
 
     def __init__(
         self,
-        mass_in=1.,
+        mass_in=1.0,
         coords_in=[0.0, 0.0],
         potential="1",
         dt_in=0.1e0,
@@ -128,25 +128,28 @@ class MD:
 
         elif potential == "3":
 
-            B     = 1.0 / atomic_to_kJmol
-            A     = B * torch.tensor([-40.0, -10.0, -34.0, 3.0])
+            B = 1.0 / atomic_to_kJmol
+            A = B * torch.tensor([-40.0, -10.0, -34.0, 3.0])
             alpha = torch.tensor([-1.00, -1.00, -6.50, 0.7])
-            beta  = torch.tensor([ 0.00,  0.00, 11.00, 0.6])
+            beta = torch.tensor([0.00, 0.00, 11.00, 0.6])
             gamma = torch.tensor([-10.0, -10.0, -6.50, 0.7])
-            x0    = torch.tensor([1.0, 0.0, -0.5, -1.0])
-            y0    = torch.tensor([0.0, 0.5,  1.5,  1.0])
-    
+            x0 = torch.tensor([1.0, 0.0, -0.5, -1.0])
+            y0 = torch.tensor([0.0, 0.5, 1.5, 1.0])
+
             self.epot = (
-                A * torch.exp(alpha*(x-x0)*(x-x0) + beta*(x-x0)*(y-y0) + gamma*(y-y0)*(y-y0))
+                A
+                * torch.exp(
+                    alpha * (x - x0) * (x - x0)
+                    + beta * (x - x0) * (y - y0)
+                    + gamma * (y - y0) * (y - y0)
+                )
             ).sum()
 
         else:
             return (0.0, np.zeros(2))
-            #raise ValueError(" >>> Invalid Potential!")
-                
-        self.forces = torch.autograd.grad(
-            self.epot, coords, allow_unused=True
-        )[0]
+            # raise ValueError(" >>> Invalid Potential!")
+
+        self.forces = torch.autograd.grad(self.epot, coords, allow_unused=True)[0]
         self.forces = self.forces.detach().numpy()
 
         return (float(self.epot), self.forces)
@@ -163,7 +166,7 @@ class MD:
         """
         self.ekin = (np.square(self.momenta) / self.masses).sum()
         self.ekin /= 2.0
-        self.temp = (self.ekin*2.0) / kB_in_atomic
+        self.temp = (self.ekin * 2.0) / kB_in_atomic
 
     # -----------------------------------------------------------------------------------------------------
     def propagate(self, langevin=True, friction=1.0e-3):
@@ -184,11 +187,11 @@ class MD:
 
             self.momenta += np.sqrt(self.masses) * rand_push * self.rand_gauss
             self.momenta -= 0.5e0 * self.dt * self.forces
-            self.coords  += prefac * self.dt * self.momenta / self.masses
+            self.coords += prefac * self.dt * self.momenta / self.masses
 
         else:
             self.momenta -= 0.5e0 * self.dt * self.forces
-            self.coords  += self.dt * self.momenta / self.masses
+            self.coords += self.dt * self.momenta / self.masses
 
     # -----------------------------------------------------------------------------------------------------
     def up_momenta(self, langevin=True, friction=1.0e-3):
@@ -214,15 +217,15 @@ class MD:
         """Confine atom to collective variable (CV)
 
         Args:
-            ats (list): list of lists with definition of confinement 
+            ats (list): list of lists with definition of confinement
                 [cv, grad_cv, r_0, k in kJ/mol]]
- 
+
         Returns:
             -
         """
         self.conf_forces = np.zeros_like(self.forces)
         for cv in ats:
-            d = (cv[0] - cv[2])
+            d = cv[0] - cv[2]
             k = cv[3] / atomic_to_kJmol
             conf_energy = 0.5 * k * d * d
             self.epot += conf_energy
@@ -232,19 +235,19 @@ class MD:
 
     # -----------------------------------------------------------------------------------------------------
     def print_confine(self, name):
-        '''Saves the current value of the confinements and their energy contributions to a file
+        """Saves the current value of the confinements and their energy contributions to a file
 
         Args:
             name (str): name of output file
 
         Returns:
             -
-        '''
+        """
         if self.step == 0:
-            f = open(name,"w")
+            f = open(name, "w")
         else:
-            f = open(name,"a")
-        string = str("%20.10e  " % (self.step*self.dt_fs))
+            f = open(name, "a")
+        string = str("%20.10e  " % (self.step * self.dt_fs))
         for conf in self.conf_traj[-1]:
             string += str("%20.10e  " % (conf))
         string += "\n"

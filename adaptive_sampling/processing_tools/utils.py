@@ -51,13 +51,13 @@ def autocorr(x: np.ndarray) -> np.ndarray:
 
     # Compute the FFT and then (from that) the auto-correlation function
     f = np.fft.fft(x - np.mean(x), n=2 * n)
-    acf = np.fft.ifft(f * np.conjugate(f))[:len(x)].real
+    acf = np.fft.ifft(f * np.conjugate(f))[: len(x)].real
     acf /= acf[0]
     return acf
 
 
 def ipce(corr_x: np.ndarray):
-    """ The initial positive correlation time estimator for the autocorrelation time, as proposed by Geyer et al.
+    """The initial positive correlation time estimator for the autocorrelation time, as proposed by Geyer et al.
 
     args
         corr_x: autocorrelation function of time series of which to calculate the autocorrelation time.
@@ -267,11 +267,11 @@ def DeltaF_fromweights(
     RT = (R_in_SI * T) / 1000.0
 
     R_min = cv_thresh[0]
-    TS    = cv_thresh[1]
+    TS = cv_thresh[1]
     P_max = cv_thresh[2]
 
-    in_R  = np.where((xi_traj > R_min) & (xi_traj < TS))
-    in_P  = np.where((xi_traj > TS) & (xi_traj < P_max))
+    in_R = np.where((xi_traj > R_min) & (xi_traj < TS))
+    in_P = np.where((xi_traj > TS) & (xi_traj < P_max))
 
     P_R = weights[in_R].sum()
     P_P = weights[in_P].sum()
@@ -282,11 +282,8 @@ def DeltaF_fromweights(
 
 
 def DeltaE_fromweights(
-    xi_traj: np.ndarray,
-    Epot: np.ndarray,
-    weights: np.ndarray,
-    cv_thresh: List
-    ) -> float:
+    xi_traj: np.ndarray, Epot: np.ndarray, weights: np.ndarray, cv_thresh: List
+) -> float:
     """calculate reaction internal energy
        see: Dietschreit et al., whenever wherever
 
@@ -303,14 +300,14 @@ def DeltaE_fromweights(
     """
 
     R_min = cv_thresh[0]
-    TS    = cv_thresh[1]
+    TS = cv_thresh[1]
     P_max = cv_thresh[2]
 
-    in_R  = np.where((xi_traj > R_min) & (xi_traj < TS))
-    in_P  = np.where((xi_traj > TS) & (xi_traj < P_max))
+    in_R = np.where((xi_traj > R_min) & (xi_traj < TS))
+    in_P = np.where((xi_traj > TS) & (xi_traj < P_max))
 
-    U_R   = np.average(Epot[in_R], weights=weights[in_R])
-    U_P   = np.average(Epot[in_P], weights=weights[in_P])
+    U_R = np.average(Epot[in_R], weights=weights[in_R])
+    U_P = np.average(Epot[in_P], weights=weights[in_P])
     dE = U_P - U_R
 
     return dE
@@ -365,7 +362,7 @@ def activation_freeE(
 
 def DeltaFact_fromweights(
     xi_traj: np.ndarray,
-    mxi_inv:  np.ndarray,
+    mxi_inv: np.ndarray,
     weights: np.ndarray,
     cv_thresh: List,
     tol: float,
@@ -389,22 +386,25 @@ def DeltaFact_fromweights(
     RT = (R_in_SI * T) / 1000.0
 
     a_min = cv_thresh[0]
-    TS    = cv_thresh[1]
+    TS = cv_thresh[1]
     b_max = cv_thresh[2]
-    dxi2  = tol/2
+    dxi2 = tol / 2
 
-    lam_xi = np.sqrt(h_in_SI * h_in_SI * mxi_inv /
-                    (2.0 * np.pi * atomic_to_kg * kB_in_SI * T)
-                   ) * 1.0e10
+    lam_xi = (
+        np.sqrt(
+            h_in_SI * h_in_SI * mxi_inv / (2.0 * np.pi * atomic_to_kg * kB_in_SI * T)
+        )
+        * 1.0e10
+    )
 
-    in_a  = np.where((xi_traj >= a_min) & (xi_traj < TS))
-    in_all= np.where((xi_traj >= a_min) & (xi_traj <= b_max))
-    in_TS = np.where((xi_traj > TS-dxi2) & (xi_traj < TS+dxi2))
+    in_a = np.where((xi_traj >= a_min) & (xi_traj < TS))
+    in_all = np.where((xi_traj >= a_min) & (xi_traj <= b_max))
+    in_TS = np.where((xi_traj > TS - dxi2) & (xi_traj < TS + dxi2))
 
-    allW  = weights[in_all].sum()
-    P_a   = weights[in_a].sum() / allW
-    rho_TS= (weights[in_TS].sum() / allW) / tol
-    lam_TS= np.average(lam_xi[in_TS], weights=weights[in_TS])
+    allW = weights[in_all].sum()
+    P_a = weights[in_a].sum() / allW
+    rho_TS = (weights[in_TS].sum() / allW) / tol
+    lam_TS = np.average(lam_xi[in_TS], weights=weights[in_TS])
 
     dF_act = -RT * np.log(rho_TS * lam_TS / P_a)
 
@@ -414,7 +414,7 @@ def DeltaFact_fromweights(
 def DeltaEact_fromweights(
     xi_traj: np.ndarray,
     Epot: np.ndarray,
-    mxi_inv:  np.ndarray,
+    mxi_inv: np.ndarray,
     weights: np.ndarray,
     cv_thresh: List,
     tol: float,
@@ -439,33 +439,32 @@ def DeltaEact_fromweights(
     RT = (R_in_SI * T) / 1000.0
 
     a_min = cv_thresh[0]
-    TS    = cv_thresh[1]
-    dxi2  = tol/2
+    TS = cv_thresh[1]
+    dxi2 = tol / 2
 
+    in_a = np.where((xi_traj >= a_min) & (xi_traj < TS))
+    in_TS = np.where((xi_traj > TS - dxi2) & (xi_traj < TS + dxi2))
 
-    in_a  = np.where((xi_traj >= a_min) & (xi_traj < TS))
-    in_TS = np.where((xi_traj > TS-dxi2) & (xi_traj < TS+dxi2))
+    absgrad_TS = np.average(np.sqrt(mxi_inv)[in_TS], weights=weights[in_TS])
+    Uabsgrad_TS = np.average((Epot * np.sqrt(mxi_inv))[in_TS], weights=weights[in_TS])
+    U_R = np.average(Epot[in_a], weights=weights[in_a])
 
-    absgrad_TS  = np.average(np.sqrt(mxi_inv)[in_TS], weights=weights[in_TS])
-    Uabsgrad_TS = np.average((Epot*np.sqrt(mxi_inv))[in_TS], weights=weights[in_TS])
-    U_R         = np.average(Epot[in_a], weights=weights[in_a])
-
-    dE_act = (Uabsgrad_TS / absgrad_TS ) -RT/2 - U_R
+    dE_act = (Uabsgrad_TS / absgrad_TS) - RT / 2 - U_R
 
     return dE_act
 
 
 def pmf_reweighting(
-    grid: List[np.ndarray], 
-    cv: List[np.ndarray], 
-    la: List[np.ndarray], 
-    ext_sigmas: List[float], 
-    grid_new: np.ndarray, 
+    grid: List[np.ndarray],
+    cv: List[np.ndarray],
+    la: List[np.ndarray],
+    ext_sigmas: List[float],
+    grid_new: np.ndarray,
     cv_new: List[np.ndarray],
-    U_conf: List[np.ndarray]=None, 
-    equil_temp: float=300.0,
-    read_weights: bool=False,
-    filename: str="weights.npy",
+    U_conf: List[np.ndarray] = None,
+    equil_temp: float = 300.0,
+    read_weights: bool = False,
+    filename: str = "weights.npy",
     **kwargs,
 ) -> Tuple[np.ndarray, np.ndarray]:
     """Get PMF along new CV from multiple simulations with different CVs,
@@ -478,41 +477,41 @@ def pmf_reweighting(
         grid_new: grid for PMF along new CV
         cv_new: trajectory of new CV
         U_conf: Optional adiational potential for calculation of Boltzmann factors
-        equil_temp: equilibrium temperature 
+        equil_temp: equilibrium temperature
 
     Returns:
         pmf: Potential of mean force along grid_new
         rho: probability density along grid_new
     """
     from .mbar import get_windows, build_boltzmann, run_mbar, pmf_from_weights
-    
-    all_trajs  = []
+
+    all_trajs = []
     all_metafs = []
-    all_idx    = []
+    all_idx = []
     frames_start = 0
-    
+
     if not len(grid) == len(cv) and len(cv) == len(la) and len(la) == len(ext_sigmas):
         raise ValueError(" ERROR: Dimensions of input lists have to match!")
 
     for (ext_sigma, grid_i, cv_i, la_i) in zip(ext_sigmas, grid, cv, la):
-        
+
         traj_list, indices, meta_f = get_windows(
             grid_i,
-            cv_i, 
-            la_i, 
-            ext_sigma, 
+            cv_i,
+            la_i,
+            ext_sigma,
             equil_temp=equil_temp,
         )
 
         all_trajs.append(traj_list)
         all_metafs.append(meta_f)
-        all_idx.append(indices+frames_start)
+        all_idx.append(indices + frames_start)
         frames_start += len(cv_i)
-    
-    all_trajs   = [item for sublist in all_trajs for item in sublist]
+
+    all_trajs = [item for sublist in all_trajs for item in sublist]
     all_indices = [item for sublist in all_idx for item in sublist]
-    all_metafs  = np.concatenate(all_metafs)
-    
+    all_metafs = np.concatenate(all_metafs)
+
     all_dU = None
     if U_conf != None:
 
@@ -520,31 +519,31 @@ def pmf_reweighting(
         for (ext_sigma, grid_i, dU_i, la_i) in zip(ext_sigmas, grid, U_conf, la):
             dU, _, _ = get_windows(
                 grid_i,
-                dU_i, 
-                la_i, 
-                ext_sigma, 
+                dU_i,
+                la_i,
+                ext_sigma,
                 equil_temp=equil_temp,
             )
             all_dU.append(dU)
         all_dU = [item for sublist in all_dU for item in sublist]
 
     exp_U, frames_per_traj = build_boltzmann(
-        all_trajs, 
-        all_metafs, 
+        all_trajs,
+        all_metafs,
         dU_list=all_dU,
         equil_temp=equil_temp,
     )
-    
+
     if read_weights:
         weights = np.load(filename)
     else:
         weights = run_mbar(
             exp_U,
-            frames_per_traj, 
+            frames_per_traj,
             **kwargs,
         )
         np.save(filename, weights)
-    
+
     cv_new = np.hstack(cv_new)[all_indices]
     pmf, rho = pmf_from_weights(
         grid_new,

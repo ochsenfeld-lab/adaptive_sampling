@@ -75,10 +75,10 @@ class ABF(EnhancedSampling):
                 )
 
                 bias_force -= ramp * self.bias[i][bink[1], bink[0]] * delta_xi[i]
-            
+
             if self.shared:
                 self.shared_bias(list(itertools.chain(*[bink, force_sample])), **kwargs)
-        
+
         else:
             bias_force += self.harmonic_walls(xi, delta_xi)
 
@@ -121,14 +121,14 @@ class ABF(EnhancedSampling):
             print(" >>> Info: On-the-fly integration only available for 1D coordinates")
 
     def shared_bias(
-        self, 
+        self,
         force_sample,
-        sync_interval: int=5,
-        mw_file: str="../shared_bias",
-        n_trials: int=10,
+        sync_interval: int = 5,
+        mw_file: str = "../shared_bias",
+        n_trials: int = 10,
     ):
         """Syncs ABF bias with buffer file. Excecuted if multiple_walker=True
-        
+
         TODO: 2D collective variables
 
         Args:
@@ -138,11 +138,13 @@ class ABF(EnhancedSampling):
             n_trials: number of attempts to access of buffer file before throwing an error
         """
         md_state = self.the_md.get_sampling_data()
-        if md_state.step == 0:        
+        if md_state.step == 0:
             if self.verbose:
                 print(" >>> Info: Creating a new instance for shared-bias ABF.")
-                print(" >>> Info: Data of local walker stored in `restart_abf_local.npz`.")
-            
+                print(
+                    " >>> Info: Data of local walker stored in `restart_abf_local.npz`."
+                )
+
             # create seperate restart file with local data only
             self._write_restart(
                 filename="restart_abf_local",
@@ -150,12 +152,14 @@ class ABF(EnhancedSampling):
                 force=self.bias,
                 m2=self.m2_force,
             )
-            
+
             self.update_samples = np.zeros(shape=(sync_interval, len(force_sample)))
-            
-            if not os.path.isfile(mw_file+".npz"):
+
+            if not os.path.isfile(mw_file + ".npz"):
                 if self.verbose:
-                    print(f" >>> Info: Creating buffer file for shared-bias ABF: `{mw_file}.npz`.")
+                    print(
+                        f" >>> Info: Creating buffer file for shared-bias ABF: `{mw_file}.npz`."
+                    )
                 self._write_restart(
                     filename=mw_file,
                     hist=self.histogram,
@@ -164,13 +168,15 @@ class ABF(EnhancedSampling):
                 )
                 os.chmod(mw_file + ".npz", 0o444)
             elif self.verbose:
-                print(f" >>> Info: Syncing with existing buffer file for shared-bias ABF: `{mw_file}.npz`.")
-        
+                print(
+                    f" >>> Info: Syncing with existing buffer file for shared-bias ABF: `{mw_file}.npz`."
+                )
+
         count = md_state.step % sync_interval
         self.update_samples[count] = force_sample
-            
-        if count == sync_interval-1:
-            
+
+        if count == sync_interval - 1:
+
             hist = np.zeros_like(self.histogram)
             m2 = np.zeros_like(self.m2_force)
             bias = np.zeros_like(self.bias)
@@ -179,44 +185,48 @@ class ABF(EnhancedSampling):
                 bink = (int(sample[1]), int(sample[0]))
                 hist[bink] += 1
                 for i in range(self.ncoords):
-                    (
-                        bias[i][bink],
-                        m2[i][bink],
-                        _,
-                    ) = welford_var(
+                    (bias[i][bink], m2[i][bink], _,) = welford_var(
                         hist[bink],
                         bias[i][bink],
                         m2[i][bink],
-                        sample[2+i],
-                    )              
+                        sample[2 + i],
+                    )
             # write data of local walker
             self._update_abf(
-                "restart_abf_local", 
-                hist, bias, m2,
-            )             
-            
+                "restart_abf_local",
+                hist,
+                bias,
+                m2,
+            )
+
             trial = 0
             while trial < n_trials:
                 trial += 1
                 if not os.access(mw_file + ".npz", os.W_OK):
-                    
+
                     # grant write access only to local walker during sync
-                    os.chmod(mw_file + ".npz", 0o666) 
+                    os.chmod(mw_file + ".npz", 0o666)
                     self._update_abf(
-                        mw_file, 
-                        hist, bias, m2,
-                    ) 
+                        mw_file,
+                        hist,
+                        bias,
+                        m2,
+                    )
                     self.restart(filename=mw_file)
-                    os.chmod(mw_file + ".npz", 0o444)                      
-                    self.get_pmf()  
-                    break                     
+                    os.chmod(mw_file + ".npz", 0o444)
+                    self.get_pmf()
+                    break
 
                 elif trial < n_trials:
                     if self.verbose:
-                        print(f" >>> Warning: Retry to open shared buffer file after {trial} failed attempts.")
+                        print(
+                            f" >>> Warning: Retry to open shared buffer file after {trial} failed attempts."
+                        )
                     time.sleep(0.1)
                 else:
-                    raise Exception(f" >>> Fatal Error: Failed to sync bias with `{mw_file}.npz`.")
+                    raise Exception(
+                        f" >>> Fatal Error: Failed to sync bias with `{mw_file}.npz`."
+                    )
 
     def _divergence_xi(self, xi, cv):
         """Calculate divergence of collective variable"""
@@ -227,39 +237,36 @@ class ABF(EnhancedSampling):
         elif cv.lower() in ["torsion", "2d"]:
             div = 0.0
         else:
-            raise NotImplementedError(f" >>> Fatal Error: ABF not implemented for `{cv}`.")
+            raise NotImplementedError(
+                f" >>> Fatal Error: ABF not implemented for `{cv}`."
+            )
 
         return div
 
     def _update_abf(
-        self, 
-        filename: str, 
-        hist: np.ndarray, 
-        bias: np.ndarray, 
+        self,
+        filename: str,
+        hist: np.ndarray,
+        bias: np.ndarray,
         m2: np.ndarray,
     ):
 
         new_hist = np.zeros_like(self.histogram).flatten()
         new_m2 = np.zeros_like(self.m2_force).flatten()
-        new_bias = np.zeros_like(self.bias).flatten() 
+        new_bias = np.zeros_like(self.bias).flatten()
 
         with np.load(f"{filename}.npz") as local_data:
             for i in range(len(new_hist)):
                 # overwriting global arrays with local data
-                (
-                    new_hist[i],
-                    new_bias[i],
-                    new_m2[i],
-                    _,
-                ) = combine_welford_stats(
-                    local_data["hist"].flatten()[i], 
-                    local_data["force"].flatten()[i], 
-                    local_data["m2"].flatten()[i], 
-                    hist.flatten()[i], 
-                    bias.flatten()[i], 
+                (new_hist[i], new_bias[i], new_m2[i], _,) = combine_welford_stats(
+                    local_data["hist"].flatten()[i],
+                    local_data["force"].flatten()[i],
+                    local_data["m2"].flatten()[i],
+                    hist.flatten()[i],
+                    bias.flatten()[i],
                     m2.flatten()[i],
                 )
-                        
+
         self._write_restart(
             filename=filename,
             hist=new_hist.reshape(self.histogram.shape),
