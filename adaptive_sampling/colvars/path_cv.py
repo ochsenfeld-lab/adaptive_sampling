@@ -152,7 +152,9 @@ class PathCV:
         )
 
         if not hasattr(self, "la"):
-            self.la = self._calc_lambda()        
+            self.la = self._calc_lambda()
+            if self.verbose:
+                print(f" >>> INFO: Setting lambda parameter for arithmetic path to {self.la}")
 
         sm = torch.softmax(-self.la * rmsds, dim=0)
         self.path_cv = (
@@ -488,7 +490,7 @@ class PathCV:
         sumlen = 0.0
         for i, coords in enumerate(self.path[1:]):
             sumlen += self.get_distance(coords, self.path[i], metric=self.metric)
-        return 1. / (sumlen / (self.nnodes - 1))
+        return 1.0 / (sumlen / (self.nnodes - 1))
 
     def _get_distance_to_path(self, z: torch.tensor) -> list:
         """Calculates distance according to chosen metric
