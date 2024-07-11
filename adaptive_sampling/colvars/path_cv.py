@@ -154,7 +154,6 @@ class PathCV:
         if not hasattr(self, "la"):
             self.la = self._calc_lambda()        
 
-        self.la = 1.0 / torch.min(rmsds)
         sm = torch.softmax(-self.la * rmsds, dim=0)
         self.path_cv = (
             1.0 / (self.nnodes - 1) * torch.sum(torch.arange(self.nnodes) * sm)
