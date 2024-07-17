@@ -27,6 +27,7 @@ class PathCV:
             `KMSD`: Mean square deviation of optimally fitted coords
             `distance`: Absolute distance
         reduce_path: if Cartesian input path should be translated into CV space
+        selected_nodes: list of indices of path nodes that should be selected
         adaptive: if adaptive, path converges to average CV density perpendicular to path
         update_interval: number of steps between updates of adaptive path
         half_life: number of steps til weight of original path is half due to updates
@@ -49,6 +50,7 @@ class PathCV:
         coordinate_system: str = "Cartesian",
         metric: str = "RMSD",
         reduce_path: bool = True,
+        selected_nodes: list = None,
         adaptive: bool = False,
         update_interval: int = 100,
         half_life: float = -1,
@@ -86,6 +88,13 @@ class PathCV:
             self.guess_path,
             ndim=self.ndim,
         )
+
+        # only use selected path nodes for PathCV
+        if selected_nodes:
+            self.path = [self.path[i] for i in selected_nodes]
+            self.nnodes = len(self.path)
+            if self.verbose:
+                print(f" >>> INFO: Selected path nodes are {selected_nodes}")
 
         # translates cartesian input path into CV space
         if reduce_path:
