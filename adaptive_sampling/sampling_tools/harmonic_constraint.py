@@ -1,9 +1,6 @@
 import numpy as np
 from typing import List, Tuple
-
-from adaptive_sampling.colvars import CV
-from adaptive_sampling import units
-
+from ..units import *
 
 class Harmonic_Constraint:
     """Harmonic constraint of collective variables
@@ -43,6 +40,7 @@ class Harmonic_Constraint:
         self.output_stride = output_stride
 
         # init collective variable
+        from ..colvars import CV
         self.the_cv = CV(self.the_md, requires_grad=True)
         self.colvars = colvars
         if len(self.colvars) != len(self.force_constants) or len(self.colvars) != len(
@@ -53,7 +51,7 @@ class Harmonic_Constraint:
             )
 
         # unit conversion to atomic units
-        self.force_constants /= units.atomic_to_kJmol  # convert kJ/mol to atomic units
+        self.force_constants /= atomic_to_kJmol  # convert kJ/mol to atomic units
         _, _, cv_types = self.get_cvs()
         for i, (k, cv_0, cv_type) in enumerate(
             zip(self.force_constants, self.equil_positions, cv_types)
@@ -116,13 +114,13 @@ class Harmonic_Constraint:
             x0: equilibrium position in atomic units
         """
         if type == "distance":
-            x0_bohr = x0 / units.BOHR_to_ANGSTROM
-            k_bohr = k * units.BOHR_to_ANGSTROM * units.BOHR_to_ANGSTROM
+            x0_bohr = x0 / BOHR_to_ANGSTROM
+            k_bohr = k * BOHR_to_ANGSTROM * BOHR_to_ANGSTROM
             return k_bohr, x0_bohr
 
         elif type == "angle":
-            x0_rad = x0 / units.DEGREES_per_RADIAN
-            k_rad = k * units.DEGREES_per_RADIAN * units.DEGREES_per_RADIAN
+            x0_rad = x0 / DEGREES_per_RADIAN
+            k_rad = k * DEGREES_per_RADIAN * DEGREES_per_RADIAN
             return k_rad, x0_rad
 
         return k, x0
@@ -140,8 +138,8 @@ class Harmonic_Constraint:
             f.write(f"  {md_step}\t")
             for i, (cv, epot, type) in enumerate(zip(cvs, epots, cv_types)):
                 if type == "distance":
-                    cv *= units.BOHR_to_ANGSTROM
+                    cv *= BOHR_to_ANGSTROM
                 elif type == "angle":
-                    cv *= units.DEGREES_per_RADIAN
+                    cv *= DEGREES_per_RADIAN
                 f.write(f"{cv:12.6f} {epot:12.6f}")
             f.write("\n")
