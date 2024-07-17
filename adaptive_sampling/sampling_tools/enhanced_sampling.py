@@ -47,8 +47,6 @@ class EnhancedSampling(ABC):
         self.verbose = verbose
         self.shared = multiple_walker
 
-        print("f_conf aus init",f_conf)
-
         # definition of CVs
         self.ncoords = len(cv_def)
         self.cv = np.array([item[0] for item in cv_def], dtype=str)
@@ -57,8 +55,6 @@ class EnhancedSampling(ABC):
         self.maxx = np.array([item[3] for item in cv_def], dtype=float)
         self.dx = np.array([item[4] for item in cv_def], dtype=float)
         self.f_conf = np.array([f_conf for _ in range(self.ncoords)], dtype=float)
-
-        print("f_conf",self.f_conf)
 
         self.cv_type = ["" for _ in range(self.ncoords)]
         (xi, delta_xi) = self.get_cv(**kwargs)
@@ -71,8 +67,6 @@ class EnhancedSampling(ABC):
             self.minx, self.maxx, self.dx
         )
         self.f_conf, = self.unit_conversion_force(self.f_conf)
-
-        print("f_conf nach unit conversion",self.f_conf)
 
         # store trajectories of CVs and temperature and epot between outputs
         md_state = self.the_md.get_sampling_data()

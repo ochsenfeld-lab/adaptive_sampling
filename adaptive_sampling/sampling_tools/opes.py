@@ -191,13 +191,13 @@ class OPES(EnhancedSampling):
             self.welford_mean, self.welford_m2, self.welford_var = welford_var(self.md_state.step, self.welford_mean, self.welford_m2, s_new, tau)
             self.sigma_0 = np.sqrt(self.welford_var)
 
-            self.traj = np.append(self.traj, [s_new], axis=0)
-            self.epot.append(self.md_state.epot)
-            self.temp.append(self.md_state.temp)
-            self.output_bias_pot.append(0.0)
-            self.output_sum_weigths.append(self.sum_weights)
-            self.output_sum_weigths_square.append(self.sum_weights_square)
-            self.output_norm_factor.append(self.norm_factor)
+            #self.traj = np.append(self.traj, [s_new], axis=0)
+            #self.epot.append(self.md_state.epot)
+            #self.temp.append(self.md_state.temp)
+            #self.output_bias_pot.append(0.0)
+            #self.output_sum_weigths.append(self.sum_weights)
+            #self.output_sum_weigths_square.append(self.sum_weights_square)
+            #self.output_norm_factor.append(self.norm_factor)
             return np.zeros_like(self.the_md.coords)
 
         # Update sigma if adaptive sigma is enabled
@@ -702,7 +702,7 @@ class OPES(EnhancedSampling):
             scattered_time: time points of history
         """
 
-        if self.ncoords != 2:
+        if self.ncoords > 2:
             raise ValueError(" >>> Error: 2D weighted pmf history can only be calculated for two-dimensional CV spaces!")
 
         dx = 1.0 # Bin size x dimension
@@ -720,7 +720,7 @@ class OPES(EnhancedSampling):
             print("Iteration ",j+1," of", hist_res, "started.")
             n_sample = j * n + n
             scattered_time.append(n_sample)
-            probability_hist = np.zeros((120,80))
+            probability_hist = np.zeros((len(grid_x),len(grid_y)))
             for i,x in enumerate(grid_x): # Loop over grid so that i are bin centers
                 for j,y in enumerate(grid_y):
                     indices_hist = np.where(np.logical_and(np.logical_and((cv_x[0:n_sample] >= x - dx2), (cv_x[0:n_sample] < x + dx2)), np.logical_and((cv_y[0:n_sample] >= y - dy2), (cv_y[0:n_sample] < y + dy2))))

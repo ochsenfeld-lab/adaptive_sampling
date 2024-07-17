@@ -63,7 +63,7 @@ class OPESeABF(eABF, OPES, EnhancedSampling):
 
     def step_bias(
         self, 
-        write_output: bool = True, 
+        write_output: bool = False, 
         write_traj: bool = True, 
         stabilize: bool = False,
         stabilizer_threshold: float = None,
@@ -153,6 +153,7 @@ class OPESeABF(eABF, OPES, EnhancedSampling):
         self.traj = np.append(self.traj, [xi], axis=0)
         self.epot.append(self.md_state.epot)
         self.temp.append(self.md_state.temp)
+        self._up_momenta()
 
         if self.md_state.step % self.out_freq == 0:
             # write output
