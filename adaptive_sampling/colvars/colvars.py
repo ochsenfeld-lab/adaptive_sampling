@@ -441,9 +441,8 @@ class CV:
         Args:
             cv_def: path to xyz file with reference structure
                     definition: 'path to xyz' or
-                                ['path to reference xyz', [atom indices]]
-            method: 'kabsch', 'quaternion' or 'kearsley' algorithm for optimal alignment
-                    gradient of kabsch algorithm numerical unstable!
+                                ['path to reference xyz', [atom indices], method]
+                    method can be 'kabsch' or 'quaternion' algorithm for optimal alignment or 'absolute' 
 
         Returns:
             cv: root-mean-square deviation to reference structure
@@ -453,16 +452,20 @@ class CV:
         if isinstance(cv_def, list):
             atom_indices = cv_def[1]
             cv_def = cv_def[0]
+            method = cv_def[2]
         else:
             atom_indices = None
+            method = 'kabsch'
 
         if self.reference == None:
             self.reference = read_xyz(cv_def)
 
         if method.lower() == "kabsch":
             self.cv = kabsch_rmsd(self.coords, self.reference, indices=atom_indices)
-        else:  # 'quaternion':
+        elif method.lower() == 'quaternion':
             self.cv = quaternion_rmsd(self.coords, self.reference, indices=atom_indices)
+        else:
+            self.cv = get_rmsd(self.coords, self.reference, indices=atom_indices)
 
         if self.requires_grad:
             self.gradient = torch.autograd.grad(
