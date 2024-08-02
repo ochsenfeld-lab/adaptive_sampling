@@ -462,10 +462,12 @@ class CV:
 
         if method.lower() == "kabsch":
             self.cv = kabsch_rmsd(self.coords, self.reference, indices=atom_indices)
-        elif method.lower() == 'quaternion':
+        elif method.lower() == "quaternion":
             self.cv = quaternion_rmsd(self.coords, self.reference, indices=atom_indices)
-        else:
+        elif method.lower() == "absolute":
             self.cv = get_rmsd(self.coords, self.reference, indices=atom_indices)
+        else:
+            raise ValueError(" >>> ERROR: invalid method for calculation of RMSD, valid options are 'kabsch', 'quaternion' or 'absolute'")
 
         if self.requires_grad:
             self.gradient = torch.autograd.grad(
