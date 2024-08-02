@@ -434,7 +434,6 @@ class CV:
     def rmsd(
         self,
         cv_def: Union[str, list],
-        method: str = "quaternion",
     ) -> float:
         """rmsd to reference structure
 
@@ -451,8 +450,8 @@ class CV:
 
         if isinstance(cv_def, list):
             atom_indices = cv_def[1]
-            cv_def = cv_def[0]
             method = cv_def[2]
+            cv_def = cv_def[0]
         else:
             atom_indices = None
             method = 'kabsch'
