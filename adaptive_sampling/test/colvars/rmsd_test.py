@@ -25,6 +25,7 @@ class MD:
             0.0,
         )
 
+
 @pytest.mark.parametrize(
     "a, b, expected_nofit, expected_fit",
     [
@@ -203,4 +204,3 @@ def test_rmsd(coords1, coords2, rmsd_fit):
     assert f1 == pytest.approx(rmsd_fit, abs=1e-3)
     assert f2 == pytest.approx(rmsd_fit, abs=1e-3)
     assert np.allclose(grad1, grad2)
-

@@ -3,6 +3,7 @@ from adaptive_sampling.sampling_tools.utils import correct_periodicity
 from adaptive_sampling.sampling_tools.opes import *
 from adaptive_sampling.interface.sampling_data import SamplingData
 
+
 class MD:
     def __init__(self, mass, coords):
         self.masses = np.array(mass)
@@ -21,7 +22,8 @@ class MD:
             0,
             0.0,
         )
-    
+
+
 def four_particles():
     masses = [2, 1, 1, 10]
     coords = [0, 0, 0, 1, 0, 0, 1, 1, 0, 1, 1, 1]
@@ -35,38 +37,70 @@ def four_particles2():
 
 
 def test_kde_1D_2():
-    OPES_test1_2 = OPES(four_particles(), [["distance", [0,1], 0,0,0]], kernel_location=np.ones(1),kernel_var=np.ones(1))
-    OPES_test1_2.compression_check(1.,np.array([1.0]),np.array([1.0]))
-    OPES_test1_2.compression_check(1.,np.array([2.0]),np.array([1.0]))
-    assert OPES_test1_2.kernels_h == [2.0,1.]
-    assert OPES_test1_2.kernels_s == [1.,2.]
-    assert OPES_test1_2.kernels_var == [1.,1.]
+    OPES_test1_2 = OPES(
+        four_particles(),
+        [["distance", [0, 1], 0, 0, 0]],
+        kernel_location=np.ones(1),
+        kernel_var=np.ones(1),
+    )
+    OPES_test1_2.compression_check(1.0, np.array([1.0]), np.array([1.0]))
+    OPES_test1_2.compression_check(1.0, np.array([2.0]), np.array([1.0]))
+    assert OPES_test1_2.kernels_h == [2.0, 1.0]
+    assert OPES_test1_2.kernels_s == [1.0, 2.0]
+    assert OPES_test1_2.kernels_var == [1.0, 1.0]
+
 
 def test_kde_1D():
-    OPES_test1 = OPES(four_particles(), [["distance", [0,1], 0,0,0]], kernel_location=np.ones(1),kernel_var=np.ones(1))
-    OPES_test1.compression_check(1.,np.array([1.0]),np.array([1.0]))
-    OPES_test1.compression_check(1.,np.array([2.0]),np.array([1.0]))
-    OPES_test1.compression_check(1.0,np.array([2.5]),np.array([1.0]))
-    assert OPES_test1.kernels_h == [2.0,2.]
-    assert OPES_test1.kernels_s == [1.,2.25]
-    assert OPES_test1.kernels_var == [1.,np.sqrt(1.0625)]
+    OPES_test1 = OPES(
+        four_particles(),
+        [["distance", [0, 1], 0, 0, 0]],
+        kernel_location=np.ones(1),
+        kernel_var=np.ones(1),
+    )
+    OPES_test1.compression_check(1.0, np.array([1.0]), np.array([1.0]))
+    OPES_test1.compression_check(1.0, np.array([2.0]), np.array([1.0]))
+    OPES_test1.compression_check(1.0, np.array([2.5]), np.array([1.0]))
+    assert OPES_test1.kernels_h == [2.0, 2.0]
+    assert OPES_test1.kernels_s == [1.0, 2.25]
+    assert OPES_test1.kernels_var == [1.0, np.sqrt(1.0625)]
+
 
 def test_kde_2D():
-    OPES_test2 = OPES(four_particles(), [["distance", [0,1], 0,0,0]], kernel_location=np.ones(2),kernel_var=np.ones(2))
-    OPES_test2.compression_check(1.,np.array([1.0,1.0]),np.array([1.0,1.0]))
-    OPES_test2.compression_check(1.,np.array([2.0,1.0]),np.array([1.0,1.0]))
-    OPES_test2.compression_check(1.0,np.array([2.5,1.0]),np.array([1.0,1.0]))
-    assert OPES_test2.kernels_h == [2.0,2.0]
-    assert np.allclose(np.array(OPES_test2.kernels_s), np.array([np.array([1.0,1.0]),np.array([2.25,1.0])]))
-    assert np.allclose(np.array(OPES_test2.kernels_var), np.array([np.array([1.0,1.0]),np.array([np.sqrt(1.0625),1.0])]))
+    OPES_test2 = OPES(
+        four_particles(),
+        [["distance", [0, 1], 0, 0, 0]],
+        kernel_location=np.ones(2),
+        kernel_var=np.ones(2),
+    )
+    OPES_test2.compression_check(1.0, np.array([1.0, 1.0]), np.array([1.0, 1.0]))
+    OPES_test2.compression_check(1.0, np.array([2.0, 1.0]), np.array([1.0, 1.0]))
+    OPES_test2.compression_check(1.0, np.array([2.5, 1.0]), np.array([1.0, 1.0]))
+    assert OPES_test2.kernels_h == [2.0, 2.0]
+    assert np.allclose(
+        np.array(OPES_test2.kernels_s),
+        np.array([np.array([1.0, 1.0]), np.array([2.25, 1.0])]),
+    )
+    assert np.allclose(
+        np.array(OPES_test2.kernels_var),
+        np.array([np.array([1.0, 1.0]), np.array([np.sqrt(1.0625), 1.0])]),
+    )
 
-#print("2D Test")
-#OPES2 = OPES(four_particles(), [["distance", [0,1], 0,0,0]])
-#OPES2.update_kde(np.array([2.0,1.5]))
-#print("2D Test successful")
+
+# print("2D Test")
+# OPES2 = OPES(four_particles(), [["distance", [0,1], 0,0,0]])
+# OPES2.update_kde(np.array([2.0,1.5]))
+# print("2D Test successful")
 
 print("initiate 1D Test")
-OPES1 = OPES([0.1,0.1], four_particles(), [["distance", [0,1], 0,0,0]], merge_kernels=True, merge_threshold = 1.0, approximate_norm=False,verbose=True)
+OPES1 = OPES(
+    [0.1, 0.1],
+    four_particles(),
+    [["distance", [0, 1], 0, 0, 0]],
+    merge_kernels=True,
+    merge_threshold=1.0,
+    approximate_norm=False,
+    verbose=True,
+)
 OPES1.update_kde(np.array([1.1]))
 OPES1.md_step = 1
 print(OPES1.md_step)

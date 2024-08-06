@@ -20,7 +20,7 @@ class CV:
                                 and saved to self.gradient
     """
 
-    def __init__(self, the_mol: MDInterface, requires_grad: bool = False, device='cpu'):
+    def __init__(self, the_mol: MDInterface, requires_grad: bool = False, device="cpu"):
 
         self.the_mol = the_mol
         self.requires_grad = requires_grad
@@ -35,7 +35,7 @@ class CV:
         self.coords = torch.from_numpy(md_state.coords.ravel()).float()
         self.mass = self.mass.to(device)
         self.coords = self.coords.to(device)
-        
+
         self.natoms = len(self.mass)
         self.requires_grad = requires_grad
         self.gradient = None
@@ -213,7 +213,7 @@ class CV:
         n2 = q34 - torch.dot(q34, q23_u) * q23_u
 
         self.cv = torch.atan2(torch.dot(torch.cross(q23_u, n1), n2), torch.dot(n1, n2))
-        
+
         # get forces
         if self.requires_grad:
             self.gradient = torch.autograd.grad(
@@ -243,19 +243,19 @@ class CV:
 
         for cv in cv_def:
 
-            if cv[0].lower() == 'distance':
+            if cv[0].lower() == "distance":
                 x = self.distance(cv[2])
 
-            elif cv[0].lower() == 'distance_min':
+            elif cv[0].lower() == "distance_min":
                 x = self.distance_min(cv[2])
 
-            elif cv[0].lower() == 'angle':
+            elif cv[0].lower() == "angle":
                 x = self.angle(cv[2])
 
-            elif cv[0].lower() == 'torsion':
+            elif cv[0].lower() == "torsion":
                 x = self.torsion(cv[2])
 
-            elif cv[0].lower() == 'coordination_number':
+            elif cv[0].lower() == "coordination_number":
                 x = self.coordination_number(cv[2])
 
             else:
@@ -322,10 +322,10 @@ class CV:
         """Coordination Number
 
         Args:
-            cv_def (list): 
+            cv_def (list):
                 [[idx0, idxA], [idx1, idxA], ..., r_eq, exp_nom, exp_denom]
-                with indices of cordinated atoms ind0, ind1, ..., 
-                distance r_0 in Angstrom (bonds smaller than r_0 are coordinated), 
+                with indices of cordinated atoms ind0, ind1, ...,
+                distance r_0 in Angstrom (bonds smaller than r_0 are coordinated),
                 and exponent of the nominator and denominator exp_nom and exp_denom
         """
         exp_denom = int(cv_def[-1])
@@ -339,13 +339,13 @@ class CV:
             r12 = torch.linalg.norm(p2 - p1)
 
             # for numerical stability
-            if abs(r12-r_0) < 1.e-6:
+            if abs(r12 - r_0) < 1.0e-6:
                 r = r12 / (r_0 * 1.000001)
             else:
                 r = r12 / r_0
 
-            nom   = 1. - torch.pow(r, exp_nom)
-            denom = 1. - torch.pow(r, exp_denom)     
+            nom = 1.0 - torch.pow(r, exp_nom)
+            denom = 1.0 - torch.pow(r, exp_denom)
             self.cv += nom / denom
 
         # get forces
@@ -368,7 +368,7 @@ class CV:
             distorted distance (float): computed distance
         """
         self.update_coords()
-        
+
         p1 = self._get_com(cv_def[0])
         p2 = self._get_com(cv_def[1])
 
@@ -389,14 +389,14 @@ class CV:
             self.gradient = self.gradient.detach().numpy()
 
         return float(self.cv)
-    
+
     def electrostatic_potential(
-        self, 
+        self,
         cv_def: list,
     ):
-        """Electrostatic potential on spezific Atom. Environmental CV to treat reorganization of polar solvent or protein sites  
+        """Electrostatic potential on spezific Atom. Environmental CV to treat reorganization of polar solvent or protein sites
         needs a file called `charges.npy` that contains the charges of all atoms in cv_def
- 
+
         Args:
             cv_def: list with involved atoms, the first element defines the atom where the potential is calculated
 
@@ -406,9 +406,11 @@ class CV:
         try:
             charges = np.load("charges.npy")
         except:
-            raise ValueError("CV ERROR: Could not find charges for electrostatic potential in charges.npy")
+            raise ValueError(
+                "CV ERROR: Could not find charges for electrostatic potential in charges.npy"
+            )
 
-        if len(cv_def) != len(charges)+1:
+        if len(cv_def) != len(charges) + 1:
             raise ValueError(
                 "CV ERROR: Number of charges for electrostatic potential has to match number of Atoms!"
             )
@@ -419,14 +421,14 @@ class CV:
         for i, atom in enumerate(cv_def[1:]):
             if atom != cv_def[0]:
                 B = self._get_com(atom)
-                self.cv += charges[i] / torch.linalg.norm(B-A, dtype=torch.float)
+                self.cv += charges[i] / torch.linalg.norm(B - A, dtype=torch.float)
 
         if self.requires_grad:
             self.gradient = torch.autograd.grad(
                 self.cv, self.coords, allow_unused=True
             )[0]
             self.gradient = self.gradient.detach().numpy()
-        
+
         return float(self.cv)
 
     def rmsd(
@@ -470,23 +472,24 @@ class CV:
 
         return float(self.cv)
 
-    def path(self, cv_def: dict, method: str="gpath") -> float:
+    def path(self, cv_def: dict, method: str = "gpath") -> float:
         """Adaptive path collective variable
 
         Args:
             cv_def: dictionary of parameters for PathCV
         """
-        if not hasattr(self, 'pathcv'):
+        if not hasattr(self, "pathcv"):
             from .path_cv import PathCV
+
             self.pathcv = PathCV(**cv_def)
-        
+
         self.update_coords()
 
-        if method == 'gpath':
+        if method == "gpath":
             self.cv = self.pathcv.calculate_gpath(self.coords)
         else:
             self.cv = self.pathcv.calculate_path(self.coords)
-       
+
         if self.requires_grad:
             self.gradient = torch.autograd.grad(
                 self.cv, self.coords, allow_unused=True
@@ -499,34 +502,35 @@ class CV:
         only available if `self.path` was called first to calculate PathCV
 
         Args:
-            pathcv: PathCV object that contains path_z 
+            pathcv: PathCV object that contains path_z
         """
         if not hasattr(pathcv, "path_z"):
             raise ValueError(" >>> ERROR: `pathcv` has to `requires_z`!")
-        
+
         self.cv = pathcv.path_z
         self.gradient = pathcv.grad_z
         return float(self.cv)
 
     def cec(self, pt_def: dict) -> float:
-        """ Modified Center of Excess Charge for Proton Transfer
+        """Modified Center of Excess Charge for Proton Transfer
 
-        Args: 
+        Args:
             pt_def: definition of proton transfer coordinate,
                 must contain `cv_def`, which specifies indices of contributing atoms
         """
-        if not hasattr(self, 'pt_cv'):
+        if not hasattr(self, "pt_cv"):
             from .proton_transfer import PT
+
             pt_cv = PT(
-                r_sw   = pt_def.get("r_sw", 1.4),
-                d_sw   = pt_def.get("d_sw", 0.05),
-                n_pair = pt_def.get("n_pair", 15), 
+                r_sw=pt_def.get("r_sw", 1.4),
+                d_sw=pt_def.get("d_sw", 0.05),
+                n_pair=pt_def.get("n_pair", 15),
                 requires_grad=self.requires_grad,
             )
-            
+
         self.update_coords()
         self.cv = pt_cv.cec(
-            self.coords, 
+            self.coords,
             pt_def["proton_idx"],
             pt_def["heavy_idx"],
             pt_def["heavy_weights"],
@@ -538,26 +542,27 @@ class CV:
             self.gradient = pt_cv.gradient
 
         return float(self.cv)
-        
-    def gmcec(self, pt_def: dict) -> float:
-        """ Generalized Modified Center of Excess Charge for Proton Transfer
 
-        Args: 
+    def gmcec(self, pt_def: dict) -> float:
+        """Generalized Modified Center of Excess Charge for Proton Transfer
+
+        Args:
             pt_def: dict with definition of proton transfer coordinate,
-                must contain `proton_idx`, `heavy_idx`, `heavy_weights` and `ref_idx` 
+                must contain `proton_idx`, `heavy_idx`, `heavy_weights` and `ref_idx`
         """
-        if not hasattr(self, 'pt_cv'):
+        if not hasattr(self, "pt_cv"):
             from .proton_transfer import PT
+
             pt_cv = PT(
-                r_sw   = pt_def.get("r_sw", 1.4),
-                d_sw   = pt_def.get("d_sw", 0.05),
-                n_pair = pt_def.get("n_pair", 15), 
-                requires_grad = self.requires_grad,
+                r_sw=pt_def.get("r_sw", 1.4),
+                d_sw=pt_def.get("d_sw", 0.05),
+                n_pair=pt_def.get("n_pair", 15),
+                requires_grad=self.requires_grad,
             )
-        
+
         self.update_coords()
         self.cv = pt_cv.gmcec(
-            self.coords, 
+            self.coords,
             pt_def["proton_idx"],
             pt_def["heavy_idx"],
             pt_def["heavy_weights"],
@@ -627,19 +632,23 @@ class CV:
             self.type = "distance"
         elif cv.lower() == "path":
             xi = self.path(atoms, method="path")
-            self.type = "2d" if self.pathcv.ndim == 2 else None 
+            self.type = "2d" if self.pathcv.ndim == 2 else None
         elif cv.lower() == "gpath":
             xi = self.path(atoms, method="gpath")
-            self.type = "2d" if self.pathcv.ndim == 2 else None 
+            self.type = "2d" if self.pathcv.ndim == 2 else None
         elif cv.lower() == "path_z":
             xi = self.path_z(atoms)
-            self.type = "2d" if atoms.ndim == 2 else None 
+            self.type = "2d" if atoms.ndim == 2 else None
         elif cv.lower() == "cec" or cv.lower() == "mcec":
             xi = self.cec(atoms)
             self.type = "distance"
         elif cv.lower() == "gmcec":
             xi = self.gmcec(atoms)
-            self.type = "distance" if atoms.get("mapping", None) not in ["f_sw", "fraction"] else None
+            self.type = (
+                "distance"
+                if atoms.get("mapping", None) not in ["f_sw", "fraction"]
+                else None
+            )
         else:
             print(" >>> Error in CV: Unknown Collective Variable")
             sys.exit(1)

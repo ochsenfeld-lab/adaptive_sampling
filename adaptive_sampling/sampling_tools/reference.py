@@ -24,7 +24,13 @@ class Reference(EnhancedSampling):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-    def step_bias(self, write_output: bool = True, write_traj: bool = True, traj_file="ref_traj.dat", **kwargs):
+    def step_bias(
+        self,
+        write_output: bool = True,
+        write_traj: bool = True,
+        traj_file="ref_traj.dat",
+        **kwargs,
+    ):
 
         md_state = self.the_md.get_sampling_data()
         (xi, delta_xi) = self.get_cv(**kwargs)
@@ -155,7 +161,7 @@ class Reference(EnhancedSampling):
         if self.verbose:
             print(f" >>> Info: Sampling restartet from {filename}!")
 
-    def write_traj(self, filename: str="CV_traj.dat"):
+    def write_traj(self, filename: str = "CV_traj.dat"):
         """save trajectory for post-processing"""
         data = {
             "Epot [H]": self.epot,

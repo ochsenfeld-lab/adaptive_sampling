@@ -1,13 +1,14 @@
 import torch
 
 from .utils import *
-from ..units import * 
+from ..units import *
+
 
 class PT:
-    """ Proton Transfer (PT) Collective Variables
+    """Proton Transfer (PT) Collective Variables
 
     see: König et. al, J. Phys. Chem. A, (2006): https://doi.org/10.1021/jp052328q
-    
+
     Args:
         r_sw: switching distance in Angstrom, Atoms closer than r_sw are considered coordinated
         d_sw: in Angstrom, controls how fast switching function flips from 0 to 1
@@ -16,30 +17,30 @@ class PT:
     """
 
     def __init__(
-        self, 
-        r_sw: float=1.4, 
-        d_sw: float=0.05, 
-        n_pair: int=15,
-        requires_grad: bool=True,      
+        self,
+        r_sw: float = 1.4,
+        d_sw: float = 0.05,
+        n_pair: int = 15,
+        requires_grad: bool = True,
     ):
-        self.r_sw          = r_sw / BOHR_to_ANGSTROM
-        self.d_sw          = d_sw / BOHR_to_ANGSTROM
-        self.n_pair        = n_pair
+        self.r_sw = r_sw / BOHR_to_ANGSTROM
+        self.d_sw = d_sw / BOHR_to_ANGSTROM
+        self.n_pair = n_pair
         self.requires_grad = requires_grad
-        self.cv            = None
-        self.gradient      = None
+        self.cv = None
+        self.gradient = None
 
     def cec(
-        self, 
-        coords: torch.tensor, 
-        proton_idx: list, 
-        heavy_idx: list, 
-        heavy_weights: list, 
-        ref_idx: list, 
-        pair_def: list=[], 
+        self,
+        coords: torch.tensor,
+        proton_idx: list,
+        heavy_idx: list,
+        heavy_weights: list,
+        ref_idx: list,
+        pair_def: list = [],
         modified: bool = True,
     ) -> torch.tensor:
-        """Center of Excess Charge coordinate for long-range PT 
+        """Center of Excess Charge coordinate for long-range PT
         projected on 1D axis of PT
 
         Args:
@@ -62,17 +63,17 @@ class PT:
         r_acc = z[ref_idx[1]]
 
         z_pt = r_acc - r_don
-        z_n  = 1. / torch.linalg.norm(z_pt)
-        z_u  = z_pt * z_n
+        z_n = 1.0 / torch.linalg.norm(z_pt)
+        z_u = z_pt * z_n
 
         # sum over protons
         for _, idx_h in enumerate(proton_idx):
             self.cv += torch.matmul(z[idx_h] - r_don, z_u)
 
         # sum over donors/acceptors
-        for _, (idx_x, w_x) in enumerate(zip(heavy_idx, heavy_weights)): 
+        for _, (idx_x, w_x) in enumerate(zip(heavy_idx, heavy_weights)):
             self.cv -= w_x * torch.matmul(z[idx_x] - r_don, z_u)
-            
+
         # mixed sum for modified CEC
         if modified:
             for _, idx_hi in enumerate(proton_idx):
@@ -81,16 +82,16 @@ class PT:
                     r_ij = r_hi - z[idx_xj]
                     self.cv -= self._f_sw(r_ij) * torch.matmul(r_ij, z_u)
 
-        # correction for coupled donor and acceptor 
+        # correction for coupled donor and acceptor
         # (e.g. for glutamate, aspartate, histidine, ...)
         if bool(pair_def):
             w_pair = [j[0] for j in pair_def]
             ind_pair = [[j[1], j[2]] for j in pair_def]
             for _, (w_pj, ind_pj) in enumerate(zip(w_pair, ind_pair)):
-                
+
                 r_k = z[ind_pj[0]]
                 r_l = z[ind_pj[1]]
-                
+
                 r_kl = torch.matmul(r_l - r_k, z_u)
 
                 # accumulators for m_k and m_l
@@ -104,8 +105,8 @@ class PT:
                     f_l = self._f_sw(r_hi - r_l)
 
                     # for heavy atoms sum over all protons contributes to gradient
-                    nom_k   += torch.pow(f_k, self.n_pair + 1)
-                    nom_l   += torch.pow(f_l, self.n_pair + 1)
+                    nom_k += torch.pow(f_k, self.n_pair + 1)
+                    nom_l += torch.pow(f_l, self.n_pair + 1)
                     denom_k += torch.pow(f_k, self.n_pair)
                     denom_l += torch.pow(f_l, self.n_pair)
 
@@ -115,22 +116,20 @@ class PT:
                 self.cv += (w_pj / 2.0) * (m_k * r_kl - m_l * r_kl)
 
         if self.requires_grad:
-            self.gradient = torch.autograd.grad(
-                self.cv, coords, allow_unused=True
-            )[0]
+            self.gradient = torch.autograd.grad(self.cv, coords, allow_unused=True)[0]
             self.gradient.detach().numpy()
 
         return self.cv
 
     def gmcec(
-        self, 
-        coords: torch.tensor, 
-        proton_idx: list, 
-        heavy_idx: list, 
+        self,
+        coords: torch.tensor,
+        proton_idx: list,
+        heavy_idx: list,
         heavy_weights: list,
-        ref_idx: list, 
-        pair_def: list=[], 
-        mapping: str = "default"
+        ref_idx: list,
+        pair_def: list = [],
+        mapping: str = "default",
     ) -> torch.tensor:
         """Generalized modified CEC coordinate to describe long range proton transfer generalized to complex 3D wire geometries after König et al.
 
@@ -144,11 +143,11 @@ class PT:
             mapping: 'f_SW': mapping to switching function (chi = 1/(1+(1+e^(d_acc_xi))) - 1/(1+e^(d_don_xi)))
                      'fraction': chi = d_don_xi / (d_don_xi+d_acc_xi)
                      'default': antisymmetric stretch between ref_idx[0], xi and ref_idx[1] (chi = (d_xi_ref0 - d_xi_ref1) / 2.)
-                         
+
         Returns:
             cv: gmCEC coordinate
         """
-        z  = coords.view(int(torch.numel(coords) / 3), 3)
+        z = coords.view(int(torch.numel(coords) / 3), 3)
         xi = torch.zeros(3, dtype=torch.float)
 
         # protons
@@ -163,16 +162,16 @@ class PT:
         for _, idx_h in enumerate(proton_idx):
             r_hi = z[idx_h]
             for _, idx_x in enumerate(heavy_idx):
-                r_ij = (r_hi - z[idx_x])
+                r_ij = r_hi - z[idx_x]
                 xi -= self._f_sw(r_ij) * r_ij
 
-        # correction for coupled donor and acceptor 
+        # correction for coupled donor and acceptor
         # (e.g. for glutamate, aspartate, histidine, ...)
         if bool(pair_def):
             w_pair = [j[0] for j in pair_def]
             index_pair = [[j[1], j[2]] for j in pair_def]
             for _, (w_pj, idx_pj) in enumerate(zip(w_pair, index_pair)):
-                
+
                 r_k = z[idx_pj[0]]
                 r_l = z[idx_pj[1]]
                 r_kl = r_l - r_k
@@ -191,36 +190,37 @@ class PT:
                     # for heavy atoms sum over all protons contributes to gradient
                     denom_k += torch.pow(f_k, self.n_pair)
                     denom_l += torch.pow(f_l, self.n_pair)
-                    num_k   += torch.pow(f_k, self.n_pair + 1)
-                    num_l   += torch.pow(f_l, self.n_pair + 1)
+                    num_k += torch.pow(f_k, self.n_pair + 1)
+                    num_l += torch.pow(f_l, self.n_pair + 1)
 
                 # add coupled term to xi
                 m_k = num_k / denom_k
                 m_l = num_l / denom_l
-                xi +=  (w_pj / 2.0) * (m_k * r_kl - m_l * r_kl)
+                xi += (w_pj / 2.0) * (m_k * r_kl - m_l * r_kl)
 
         # mapping to 1D
         if mapping.lower() == "f_sw":
-            self.cv =- 1.0 / (1. + torch.exp(torch.linalg.norm(xi - z[ref_idx[0]])))
-            self.cv += 1.0 / (1. + torch.exp(torch.linalg.norm(xi - z[ref_idx[1]])))
+            self.cv = -1.0 / (1.0 + torch.exp(torch.linalg.norm(xi - z[ref_idx[0]])))
+            self.cv += 1.0 / (1.0 + torch.exp(torch.linalg.norm(xi - z[ref_idx[1]])))
 
         elif mapping.lower() == "fraction":
             d_xi_don = torch.linalg.norm(xi - z[ref_idx[0]])
             d_xi_acc = torch.linalg.norm(xi - z[ref_idx[1]])
             self.cv = d_xi_don / (d_xi_don + d_xi_acc)
 
-        else: # default
-            self.cv = 0.5 * (torch.linalg.norm(xi - z[ref_idx[0]]) - torch.linalg.norm(xi - z[ref_idx[1]]))
-        
+        else:  # default
+            self.cv = 0.5 * (
+                torch.linalg.norm(xi - z[ref_idx[0]])
+                - torch.linalg.norm(xi - z[ref_idx[1]])
+            )
+
         # gradient of gmcec coordinate
         if self.requires_grad:
-            self.gradient = torch.autograd.grad(
-                self.cv, coords, allow_unused=True
-            )[0]
+            self.gradient = torch.autograd.grad(self.cv, coords, allow_unused=True)[0]
             self.gradient.detach().numpy()
 
         return self.cv
 
     def _f_sw(self, r) -> float:
         """switching function f_sw(r)"""
-        return 1. / (1. + torch.exp((torch.linalg.norm(r) - self.r_sw) / self.d_sw))
+        return 1.0 / (1.0 + torch.exp((torch.linalg.norm(r) - self.r_sw) / self.d_sw))

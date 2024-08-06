@@ -22,7 +22,7 @@ class EnhancedSampling(ABC):
         f_conf: force constant for confinment of CVs to the range of interest with harmonic walls
         output_freq: frequency in steps for writing outputs
         multiple_walker: share bias with other simulations via buffer file
-        periodicity: periodicity of CVs, [[lower_boundary0, upper_boundary0], ...] 
+        periodicity: periodicity of CVs, [[lower_boundary0, upper_boundary0], ...]
     """
 
     def __init__(
@@ -60,13 +60,15 @@ class EnhancedSampling(ABC):
         (xi, delta_xi) = self.get_cv(**kwargs)
 
         # periodic boundary conditions
-        self.periodicity = periodicity if periodicity else [None for _ in range(self.ncoords)]
+        self.periodicity = (
+            periodicity if periodicity else [None for _ in range(self.ncoords)]
+        )
 
         # unit conversion
         self.minx, self.maxx, self.dx = self.unit_conversion_cv(
             self.minx, self.maxx, self.dx
         )
-        self.f_conf, = self.unit_conversion_force(self.f_conf)
+        (self.f_conf,) = self.unit_conversion_force(self.f_conf)
 
         # store trajectories of CVs and temperature and epot between outputs
         md_state = self.the_md.get_sampling_data()
@@ -185,7 +187,7 @@ class EnhancedSampling(ABC):
         conf_force = np.zeros_like(self.the_md.get_sampling_data().forces.ravel())
         if (self.f_conf == 0.0).all():
             return conf_force
-        
+
         for i in range(self.ncoords):
             if xi[i] > (self.maxx[i] - margin[i]):
                 r = diff(self.maxx[i] - margin[i], xi[i], self.periodicity[i])
@@ -291,8 +293,12 @@ class EnhancedSampling(ABC):
         """
         if self.ncoords == 1:
             if self.cv_type[0] == "2d":
-                return np.dot(delta_xi[0], (1.0 / np.repeat(self.the_md.mass, 2)) * delta_xi[0])
-            return np.dot(delta_xi[0], (1.0 / np.repeat(self.the_md.mass, 3)) * delta_xi[0])
+                return np.dot(
+                    delta_xi[0], (1.0 / np.repeat(self.the_md.mass, 2)) * delta_xi[0]
+                )
+            return np.dot(
+                delta_xi[0], (1.0 / np.repeat(self.the_md.mass, 3)) * delta_xi[0]
+            )
 
     def write_output(self, data: dict, filename="free_energy.dat"):
         """write results to output file
@@ -332,7 +338,7 @@ class EnhancedSampling(ABC):
                             fout.write("%14.6f\t" % dat[i, j])
                         fout.write("\n")
 
-    def _write_traj(self, data: dict = {}, filename: str = 'CV_traj.dat'):
+    def _write_traj(self, data: dict = {}, filename: str = "CV_traj.dat"):
         """write trajectory of extended or normal ABF at output times
 
         Args:
@@ -370,15 +376,26 @@ class EnhancedSampling(ABC):
                     )  # time in fs
                     for i in range(len(self.traj[0])):
                         if self.cv_type[i] == "angle":
-                            traj_out.write("%14.6f\t" % (self.traj[-self.out_freq + n][i] * DEGREES_per_RADIAN))
+                            traj_out.write(
+                                "%14.6f\t"
+                                % (
+                                    self.traj[-self.out_freq + n][i]
+                                    * DEGREES_per_RADIAN
+                                )
+                            )
                         elif self.cv_type[i] == "distance":
-                            traj_out.write("%14.6f\t" % (self.traj[-self.out_freq + n][i] * BOHR_to_ANGSTROM))
+                            traj_out.write(
+                                "%14.6f\t"
+                                % (self.traj[-self.out_freq + n][i] * BOHR_to_ANGSTROM)
+                            )
                         else:
-                            traj_out.write("%14.6f\t" % (self.traj[-self.out_freq + n][i]))
+                            traj_out.write(
+                                "%14.6f\t" % (self.traj[-self.out_freq + n][i])
+                            )
 
                     for val in data.values():
                         traj_out.write("%14.6f\t" % (val[-self.out_freq + n]))
-                        
+
                     if self.kinetics:
                         traj_out.write(
                             "%14.6f\t" % (self.mass_traj[-self.out_freq + n])

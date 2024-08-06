@@ -36,21 +36,21 @@ the_abm = WTMeABF(
     ats,
     hill_drop_freq=100,
     output_freq=1,
-    well_tempered_temp = 342.74,
+    well_tempered_temp=342.74,
     f_conf=1000.0,
     equil_temp=300.0,
     force_from_grid=True,
     multiple_walker=False,
 )
-#the_abm.restart(filename='restart_wtmeabf1')
+# the_abm.restart(filename='restart_wtmeabf1')
 
 the_md.calc_init()
 the_abm.step_bias(
-    mw_file='shared_bias1', 
+    mw_file="shared_bias1",
     sync_interval=40,
-    output_file='wtmeabf1.out',
-    traj_file='CV_traj1.dat',
-    restart_file='restart_wtmeabf1',
+    output_file="wtmeabf1.out",
+    traj_file="CV_traj1.dat",
+    restart_file="restart_wtmeabf1",
 )
 the_md.calc_etvp()
 
@@ -81,11 +81,11 @@ while step_count < nsteps:
     the_md.calc()
 
     the_md.forces += the_abm.step_bias(
-        mw_file='shared_bias1', 
+        mw_file="shared_bias1",
         sync_interval=40,
-        output_file='wtmeabf1.out',
-        traj_file='CV_traj1.dat',
-        restart_file='restart_wtmeabf1',
+        output_file="wtmeabf1.out",
+        traj_file="CV_traj1.dat",
+        restart_file="restart_wtmeabf1",
     )
 
     the_md.up_momenta(langevin=True)

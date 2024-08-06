@@ -4,9 +4,8 @@ import torch
 from adaptive_sampling.units import BOHR_to_ANGSTROM
 from adaptive_sampling.sampling_tools.utils import diff, sum
 
-def read_xyz(
-    xyz_name: str
-) -> torch.tensor:
+
+def read_xyz(xyz_name: str) -> torch.tensor:
     """Read cartesian coordinates from file (*.xyz)
 
     Args:
@@ -30,25 +29,29 @@ def read_xyz(
     mol = torch.FloatTensor(list(mol)) / BOHR_to_ANGSTROM
     return mol
 
+
 def read_path(
-    filename: str, 
+    filename: str,
     ndim: int,
 ) -> tuple:
     """Read coordinates of path nodes from file (*.xyz, *.npy)
-        
+
     Args:
-        filename 
-        
+        filename
+
     Returns:
         traj: list of torch arrays containing coordinates of nodes
         nnodes: number of nodes in path
     """
     if filename[-3:] == "dcd":
         # TODO: Read path from dcd file
-        raise NotImplementedError(" >>> ERROR: Reading path from dcd not yet implemented. Use `.xzy` or `.npy` file")
+        raise NotImplementedError(
+            " >>> ERROR: Reading path from dcd not yet implemented. Use `.xzy` or `.npy` file"
+        )
 
     elif filename[-3:] == "npy":
         import numpy
+
         traj = numpy.load(filename)
         traj = [torch.from_numpy(t) for t in traj]
 
@@ -71,31 +74,35 @@ def read_path(
                     if ndim == 2:
                         mol.append([float(words[1]), float(words[2])])
                     else:
-                        mol.append([
-                            float(words[1]) / BOHR_to_ANGSTROM, 
-                            float(words[2]) / BOHR_to_ANGSTROM, 
-                            float(words[3]) / BOHR_to_ANGSTROM,
-                        ])
+                        mol.append(
+                            [
+                                float(words[1]) / BOHR_to_ANGSTROM,
+                                float(words[2]) / BOHR_to_ANGSTROM,
+                                float(words[3]) / BOHR_to_ANGSTROM,
+                            ]
+                        )
                     n += 1
 
         if mol:
             mol = itertools.chain(*mol)
             mol = torch.FloatTensor(list(mol))
             traj.append(mol)
-    
+
     else:
-        raise ValueError(" >>> ERROR: Unnown format of path. Available: `.xzy`, `.npy`, `.dcd`.")
+        raise ValueError(
+            " >>> ERROR: Unnown format of path. Available: `.xzy`, `.npy`, `.dcd`."
+        )
 
     return traj, len(traj)
 
 
-def get_rmsd(V: torch.tensor, W: torch.tensor, periodicity: list=None):
+def get_rmsd(V: torch.tensor, W: torch.tensor, periodicity: list = None):
     """root-mean-square deviation"""
     d = diff(V, W, periodicity)
     return torch.sqrt(torch.sum(d * d) / len(V))
 
 
-def get_msd(V: torch.tensor, W: torch.tensor, periodicity: list=None):
+def get_msd(V: torch.tensor, W: torch.tensor, periodicity: list = None):
     """mean-square deviation"""
     d = diff(V, W, periodicity)
     return torch.sum(d * d) / len(V)
@@ -105,8 +112,8 @@ def kabsch_rmsd(
     coords1: torch.tensor,
     coords2: torch.tensor,
     indices: bool = None,
-    return_coords: bool=False,
-    ndim: int=3,
+    return_coords: bool = False,
+    ndim: int = 3,
 ) -> torch.tensor:
     """minimize rmsd between cartesian coordinates by kabsch algorithm
 
@@ -154,7 +161,7 @@ def centroid(
 
 
 def kabsch_rot(
-    coords1: torch.tensor, 
+    coords1: torch.tensor,
     coords2: torch.tensor,
 ) -> torch.tensor:
     """Rotate coords1 on coords2
@@ -265,7 +272,7 @@ def _makeQ(r1, r2, r3, r4=0):
 
 
 def quaternion_rotate(
-    X: torch.tensor, 
+    X: torch.tensor,
     Y: torch.tensor,
 ) -> torch.tensor:
     """
@@ -290,7 +297,7 @@ def quaternion_rotate(
 
 
 def get_amber_charges(prmtop: str) -> list:
-    """Parse charges from AMBER parameter file 
+    """Parse charges from AMBER parameter file
 
     Args:
         prmtop (string): filename
@@ -302,30 +309,32 @@ def get_amber_charges(prmtop: str) -> list:
         prm = f.readlines()
         for i, line in enumerate(prm):
             if line.find("CHARGE") != -1:
-                q_str = prm[i+2]
+                q_str = prm[i + 2]
                 j = 3
                 while len(prm) > j:
-                    if prm[i+j].find("FLAG") != -1:
+                    if prm[i + j].find("FLAG") != -1:
                         break
                     else:
-                        q_str += prm[i+j]
+                        q_str += prm[i + j]
                         j += 1
                 break
 
     charge = []
     for q in q_str.split(" "):
         if q:
-            charge.append(float(q) / 18.2223)  # converted to a.u. with factor sqrt(electrostatic constant)
+            charge.append(
+                float(q) / 18.2223
+            )  # converted to a.u. with factor sqrt(electrostatic constant)
 
     return charge
 
 
 def get_internal_coordinate(
-    cv: list, 
-    coords: torch.tensor, 
-    ndim: int=3,
+    cv: list,
+    coords: torch.tensor,
+    ndim: int = 3,
 ) -> torch.tensor:
-    """Get internal coordinate 
+    """Get internal coordinate
 
     Args:
         cv: definition of internal coordinate
@@ -337,12 +346,12 @@ def get_internal_coordinate(
                 ["coordination_number", [[idx0, idx1], [...], r_0, exp_nom, exp_denom]]]
         coords: Cartesian coordinates
         ndim: Number of dimensions of coords
-    
+
     Returns:
         cv: internal coordinate
     """
-    z = coords.view(int(torch.numel(coords)/ndim), ndim)
-    
+    z = coords.view(int(torch.numel(coords) / ndim), ndim)
+
     if cv[0].lower() == "distance":
         xi = torch.linalg.norm(z[cv[1][0]] - z[cv[1][1]])
 
@@ -352,12 +361,12 @@ def get_internal_coordinate(
 
         q12_n = torch.linalg.norm(q12)
         q23_n = torch.linalg.norm(q23)
-                
+
         q12_u = q12 / q12_n
         q23_u = q23 / q23_n
 
-        xi = torch.arccos(torch.dot(-q12_u, q23_u))  
-                
+        xi = torch.arccos(torch.dot(-q12_u, q23_u))
+
     elif cv[0].lower() == "torsion":
         q12 = z[cv[1][1]] - z[cv[1][0]]
         q23 = z[cv[1][2]] - z[cv[1][1]]
@@ -366,10 +375,8 @@ def get_internal_coordinate(
         q23_u = q23 / torch.linalg.norm(q23)
         n1 = -q12 - torch.dot(-q12, q23_u) * q23_u
         n2 = q34 - torch.dot(q34, q23_u) * q23_u
-        
-        xi = torch.atan2(
-            torch.dot(torch.cross(q23_u, n1), n2), torch.dot(n1, n2)
-        )
+
+        xi = torch.atan2(torch.dot(torch.cross(q23_u, n1), n2), torch.dot(n1, n2))
 
     elif cv[0].lower() == "min_distance":
         # returns minimum distance of list of distances
@@ -377,40 +384,41 @@ def get_internal_coordinate(
         for x in cv[1]:
             dists.append(torch.linalg.norm(z[x[0]] - z[x[1]]))
         xi = min(dists)
-    
+
     elif cv[0].lower() == "coordination_number":
-        
-        cv_def    = cv[1]
+
+        cv_def = cv[1]
         exp_denom = int(cv_def[-1])
-        exp_nom   = int(cv_def[-2])
-        r_0       = float(cv_def[-3]) / BOHR_to_ANGSTROM
+        exp_nom = int(cv_def[-2])
+        r_0 = float(cv_def[-3]) / BOHR_to_ANGSTROM
 
         xi = 0.0
         for atoms in cv_def[:-3]:
             r12 = torch.linalg.norm(z[atoms[1]] - z[atoms[0]])
 
             # for numerical stability
-            if abs(r12-r_0) < 1.e-6:
+            if abs(r12 - r_0) < 1.0e-6:
                 r = r12 / (r_0 * 1.000001)
             else:
                 r = r12 / r_0
 
-            nom   = 1. - torch.pow(r, exp_nom)
-            denom = 1. - torch.pow(r, exp_denom)     
+            nom = 1.0 - torch.pow(r, exp_nom)
+            denom = 1.0 - torch.pow(r, exp_denom)
             xi += nom / denom
 
     elif cv[0].lower() == "cec":
         # Modified Center-of-Excess Charge (mCEC) for Proton Transfer (PT)
         from .proton_transfer import PT
+
         pt_def = cv[1]
         pt_cv = PT(
-            r_sw   = pt_def.get("r_sw", 1.4),
-            d_sw   = pt_def.get("d_sw", 0.05),
-            n_pair = pt_def.get("n_pair", 15), 
-            requires_grad = True,
+            r_sw=pt_def.get("r_sw", 1.4),
+            d_sw=pt_def.get("d_sw", 0.05),
+            n_pair=pt_def.get("n_pair", 15),
+            requires_grad=True,
         )
         xi = pt_cv.gmcec(
-            coords, 
+            coords,
             pt_def["proton_idx"],
             pt_def["heavy_idx"],
             pt_def["heavy_weights"],
@@ -421,56 +429,56 @@ def get_internal_coordinate(
 
     else:
         raise ValueError(" >>> ERROR: wrong definition of internal coordinate!")
-        
+
     return xi
 
 
 def cartesians_to_internals(
-    coords: torch.tensor, 
-    ndim: int=3,
+    coords: torch.tensor,
+    ndim: int = 3,
 ) -> torch.tensor:
     """Converts reduced cartesian coordinates to Z-Matrix
 
-    Args:  
+    Args:
         coords: reduced cartesian coordinates
         ndim: Number of dimensions of input coordinates
-        
+
     Returns:
         zmatrix: Z-Matrix with angles given in radians
     """
-        
+
     z = coords.view(int(torch.numel(coords) / ndim), ndim)
     zmatrix = torch.zeros_like(z)
-            
+
     for i, _ in enumerate(z[1:], start=1):
 
         zmatrix[i, 0] = get_internal_coordinate(
-            ["distance", [i-1, i]], coords, ndim=ndim
-        )  
+            ["distance", [i - 1, i]], coords, ndim=ndim
+        )
 
         if i > 1:
             zmatrix[i, 1] = get_internal_coordinate(
-                ["angle", [i-2, i-1, i]], coords, ndim=ndim
-            ) 
-                
+                ["angle", [i - 2, i - 1, i]], coords, ndim=ndim
+            )
+
         if i > 2:
             zmatrix[i, 2] = get_internal_coordinate(
-                ["torsion", [i-3, i-2, i-1, i]], coords, ndim=ndim
+                ["torsion", [i - 3, i - 2, i - 1, i]], coords, ndim=ndim
             )
-    
+
     return zmatrix
 
 
 def convert_coordinate_system(
     coords: torch.tensor,
-    active: list=None,
-    coord_system: str="Cartesian", 
-    ndim: int=3,
+    active: list = None,
+    coord_system: str = "Cartesian",
+    ndim: int = 3,
 ) -> torch.tensor:
     """Convert XYZ tensor to selected coordinate system
 
     Args:
-        coords: xyz coordinates 
+        coords: xyz coordinates
         active: list of active atoms or list of internal coordinates
         coord_system: Selected new coordinate system:
             `Cartesian`: xyz coordinates reduced to `active` atoms
@@ -479,16 +487,16 @@ def convert_coordinate_system(
         ndim: Number of dimensions of input coordinates
 
     Returns:
-        new_coords: Converted coords 
+        new_coords: Converted coords
     """
     if coord_system.lower() == "cartesian":
-        z = coords.view(int(torch.numel(coords)/ndim), ndim)
+        z = coords.view(int(torch.numel(coords) / ndim), ndim)
         if active != None:
             z = z[active]
         return z
 
     elif coord_system.lower() == "zmatrix":
-        z = coords.view(int(torch.numel(coords)/ndim), ndim)
+        z = coords.view(int(torch.numel(coords) / ndim), ndim)
         if active != None:
             z = z[active]
         return cartesians_to_internals(z, ndim=ndim)
@@ -498,4 +506,3 @@ def convert_coordinate_system(
         for i, cv in enumerate(active):
             cvs[i] = get_internal_coordinate(cv, coords, ndim=ndim)
         return cvs
- 

@@ -7,6 +7,7 @@ from .opes import OPES
 from ..units import *
 from adaptive_sampling.processing_tools.thermodynamic_integration import *
 
+
 class OPESeABF(eABF, OPES, EnhancedSampling):
     """Well-Tempered Metadynamics extended-system Adaptive Biasing Force method
 
@@ -33,7 +34,7 @@ class OPESeABF(eABF, OPES, EnhancedSampling):
         kernel_std: standard deviation of first kernel
         explore: enables exploration mode
         energy_barr: free energy barrier that the bias should help to overcome [kJ/mol]
-        update_freq: interval of md steps in which new kernels should be 
+        update_freq: interval of md steps in which new kernels should be
         approximate_norm: enables approximation of norm factor
         exact_norm: enables exact calculation of norm factor, if both are enabled, exact is used every 100 updates
         merge_threshold: threshold distance for kde-merging in units of std, "np.inf" disables merging
@@ -48,28 +49,26 @@ class OPESeABF(eABF, OPES, EnhancedSampling):
     """
 
     def __init__(
-        self, 
-        *args,
-        enable_eabf: bool = False,
-        enable_opes: bool = True,
-        **kwargs
+        self, *args, enable_eabf: bool = False, enable_opes: bool = True, **kwargs
     ):
         super().__init__(*args, **kwargs)
         self.abf_forces = np.zeros_like(self.bias)
         self.enable_eabf = enable_eabf
         self.enable_opes = enable_opes
         if self.enable_eabf == False and self.enable_opes == False:
-            raise ValueError(" >>> Error: At least one biasing method has to be enabled!")
+            raise ValueError(
+                " >>> Error: At least one biasing method has to be enabled!"
+            )
 
     def step_bias(
-        self, 
-        write_output: bool = False, 
-        write_traj: bool = True, 
+        self,
+        write_output: bool = False,
+        write_traj: bool = True,
         stabilize: bool = False,
         stabilizer_threshold: float = None,
-        output_file: str = 'wtmeabf.out',
-        traj_file: str = 'CV_traj.dat', 
-        restart_file: str = 'restart_wtmeabf',
+        output_file: str = "wtmeabf.out",
+        traj_file: str = "CV_traj.dat",
+        restart_file: str = "restart_wtmeabf",
         **kwargs,
     ) -> np.ndarray:
         """Apply OPES-eABF to MD simulation
@@ -90,12 +89,14 @@ class OPESeABF(eABF, OPES, EnhancedSampling):
         self.md_state = self.the_md.get_sampling_data()
         (xi, delta_xi) = self.get_cv(**kwargs)
 
-        if stabilize and len(self.traj)>0:
+        if stabilize and len(self.traj) > 0:
             self.stabilizer(xi, threshold=stabilizer_threshold)
 
         self._propagate()
 
-        mtd_forces = self.opes_bias(np.copy(self.ext_coords)) / atomic_to_kJmol / kJ_to_kcal
+        mtd_forces = (
+            self.opes_bias(np.copy(self.ext_coords)) / atomic_to_kJmol / kJ_to_kcal
+        )
         bias_force = self._extended_dynamics(xi, delta_xi)  # , self.hill_std)
         force_sample = [0 for _ in range(2 * self.ncoords)]
 
@@ -105,8 +106,8 @@ class OPESeABF(eABF, OPES, EnhancedSampling):
             self.ext_hist[bin_la[1], bin_la[0]] += 1
 
             for i in range(self.ncoords):
-                
-                if self.enable_eabf: 
+
+                if self.enable_eabf:
 
                     # linear ramp function
                     ramp = (
@@ -116,7 +117,9 @@ class OPESeABF(eABF, OPES, EnhancedSampling):
                     )
 
                     # apply bias force on extended variable
-                    force_sample[i] = self.ext_k[i] * diff(self.ext_coords[i], xi[i], self.periodicity[i])
+                    force_sample[i] = self.ext_k[i] * diff(
+                        self.ext_coords[i], xi[i], self.periodicity[i]
+                    )
                     (
                         self.abf_forces[i][bin_la[1], bin_la[0]],
                         self.m2_force[i][bin_la[1], bin_la[0]],
@@ -128,9 +131,14 @@ class OPESeABF(eABF, OPES, EnhancedSampling):
                         force_sample[i],
                     )
                     if self.enable_opes:
-                        self.ext_forces -= (ramp * self.abf_forces[i][bin_la[1], bin_la[0]] - mtd_forces[i])
+                        self.ext_forces -= (
+                            ramp * self.abf_forces[i][bin_la[1], bin_la[0]]
+                            - mtd_forces[i]
+                        )
                     else:
-                        self.ext_forces -= ramp * self.abf_forces[i][bin_la[1], bin_la[0]]
+                        self.ext_forces -= (
+                            ramp * self.abf_forces[i][bin_la[1], bin_la[0]]
+                        )
                 else:
                     self.ext_forces += mtd_forces[i]
         # xi-conditioned accumulators for CZAR
@@ -139,11 +147,13 @@ class OPESeABF(eABF, OPES, EnhancedSampling):
             self.histogram[bink[1], bink[0]] += 1
 
             for i in range(self.ncoords):
-                force_sample[self.ncoords+i] = self.ext_k[i] * diff(
+                force_sample[self.ncoords + i] = self.ext_k[i] * diff(
                     self.ext_coords[i], self.grid[i][bink[i]], self.periodicity[i]
                 )
-                self.correction_czar[i][bink[1], bink[0]] += force_sample[self.ncoords+i]
-        
+                self.correction_czar[i][bink[1], bink[0]] += force_sample[
+                    self.ncoords + i
+                ]
+
         # correction for kinetics
         if self.kinetics:
             self._kinetics(delta_xi)
@@ -173,16 +183,14 @@ class OPESeABF(eABF, OPES, EnhancedSampling):
                 output[f"opespot"] = self.potential
 
                 self.write_output(output, filename=output_file)
-                #self.write_restart(filename=restart_file)
-        #if self.md_state.step % self.update_freq == 0:
-        #print("mtd forces", mtd_forces)
-        #print(self.ext_forces+mtd_forces)
+                # self.write_restart(filename=restart_file)
+        # if self.md_state.step % self.update_freq == 0:
+        # print("mtd forces", mtd_forces)
+        # print(self.ext_forces+mtd_forces)
         return bias_force
 
-
     def reinit(self):
-        """Reinit WTM-eABF and start building new bias potential
-        """
+        """Reinit WTM-eABF and start building new bias potential"""
         self.histogram = np.zeros_like(self.histogram)
         self.bias = np.zeros_like(self.bias)
         self.m2_force = np.zeros_like(self.m2_force)
@@ -193,7 +201,7 @@ class OPESeABF(eABF, OPES, EnhancedSampling):
         self.metapot = np.zeros_like(self.metapot)
         self.reinit_ext_system(self.traj[-1])
 
-    def write_restart(self, filename: str="restart_wtmeabf"):
+    def write_restart(self, filename: str = "restart_wtmeabf"):
         """write restart file
 
         Args:
@@ -209,16 +217,16 @@ class OPESeABF(eABF, OPES, EnhancedSampling):
             ext_momenta=self.ext_momenta,
             ext_coords=self.ext_coords,
             sum_weigths=self.sum_weights,
-            sum_weigths_square = self.sum_weights_square,
-            norm_factor = self.norm_factor,
-            kernel_heigth = self.kernel_height,
-            kernel_center = self.kernel_center,
-            kernel_sigma = self.kernel_sigma,
-            explore = self.explore,
-            n = self.n
+            sum_weigths_square=self.sum_weights_square,
+            norm_factor=self.norm_factor,
+            kernel_heigth=self.kernel_height,
+            kernel_center=self.kernel_center,
+            kernel_sigma=self.kernel_sigma,
+            explore=self.explore,
+            n=self.n,
         )
 
-    def restart(self, filename: str = "restart_wtmeabf", restart_ext_sys: bool=False):
+    def restart(self, filename: str = "restart_wtmeabf", restart_ext_sys: bool = False):
         """restart from restart file
 
         Args:
@@ -250,7 +258,7 @@ class OPESeABF(eABF, OPES, EnhancedSampling):
         if self.verbose:
             print(f" >>> Info: Adaptive sampling restarted from {filename}!")
 
-    def write_traj(self, filename: str = 'CV_traj.dat'):
+    def write_traj(self, filename: str = "CV_traj.dat"):
         """save trajectory for post-processing"""
 
         data = self._write_ext_traj()
@@ -274,29 +282,31 @@ class OPESeABF(eABF, OPES, EnhancedSampling):
         pmf_hist_res: int = 100,
     ):
         """Calculate PMF history for CZAR
-        
+
         Args:
             grid: grid for CZAR
             cv_x: CV trajectory
             cv_la: extended system trajectory
             ext_sigma: thermal width of coupling between CV and extended variable
             pmf_hist_res: resolution of PMF history
-            
+
         Returns:
             pmf_hist: PMF history
             scattered_time: scattered time points
             rho_hist: density history
         """
-        
-        dx = grid[1]-grid[0]
-        n = int(len(cv_x)/pmf_hist_res)
+
+        dx = grid[1] - grid[0]
+        n = int(len(cv_x) / pmf_hist_res)
         scattered_time = []
         pmf_hist = []
         rho_hist = []
-        print('-------------------------------------------------------------------------------')
+        print(
+            "-------------------------------------------------------------------------------"
+        )
         print("Integrating CZAR...")
         for j in range(pmf_hist_res):
-            if j%10 == 0:
+            if j % 10 == 0:
                 print(f"Progress: Iteration {j} of {pmf_hist_res}")
             n_sample = j * n + n
             scattered_time.append(n_sample)
@@ -305,6 +315,8 @@ class OPESeABF(eABF, OPES, EnhancedSampling):
             pmf_hist.append(pmf)
             rho_hist.append(rho)
         print("CZAR done!")
-        print('-------------------------------------------------------------------------------')
+        print(
+            "-------------------------------------------------------------------------------"
+        )
 
         return pmf_hist, scattered_time, rho_hist
