@@ -293,14 +293,18 @@ class OPESeABF(eABF, OPES, EnhancedSampling):
         scattered_time = []
         pmf_hist = []
         rho_hist = []
+        print('-------------------------------------------------------------------------------')
         print("Integrating CZAR...")
         for j in range(pmf_hist_res):
+            if j%10 == 0:
+                print(f"Progress: Iteration {j} of {pmf_hist_res}")
             n_sample = j * n + n
             scattered_time.append(n_sample)
             czar_grad = czar(grid, cv_x[0:n_sample], cv_la[0:n_sample], ext_sigma)
             pmf, rho = integrate(czar_grad, dx)
             pmf_hist.append(pmf)
             rho_hist.append(rho)
-        print("Done!")
+        print("CZAR done!")
+        print('-------------------------------------------------------------------------------')
 
         return pmf_hist, scattered_time, rho_hist
