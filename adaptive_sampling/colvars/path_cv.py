@@ -27,6 +27,7 @@ class PathCV:
             `KMSD`: Mean square deviation of optimally fitted coords
             `distance`: Absolute distance
         reduce_path: if Cartesian input path should be translated into CV space
+        selected_nodes: list of indices of path nodes that should be selected
         adaptive: if adaptive, path converges to average CV density perpendicular to path
         update_interval: number of steps between updates of adaptive path
         half_life: number of steps til weight of original path is half due to updates
@@ -49,6 +50,7 @@ class PathCV:
         coordinate_system: str = "Cartesian",
         metric: str = "RMSD",
         reduce_path: bool = True,
+        selected_nodes: list = None,
         adaptive: bool = False,
         update_interval: int = 100,
         half_life: float = -1,
@@ -86,6 +88,13 @@ class PathCV:
             self.guess_path,
             ndim=self.ndim,
         )
+
+        # only use selected path nodes for PathCV
+        if selected_nodes:
+            self.path = [self.path[i] for i in selected_nodes]
+            self.nnodes = len(self.path)
+            if self.verbose:
+                print(f" >>> INFO: Selected path nodes are {selected_nodes}")
 
         # translates cartesian input path into CV space
         if reduce_path:
@@ -151,15 +160,19 @@ class PathCV:
             ]
         )
 
-        la = 1.0 / torch.min(rmsds)
-        sm = torch.softmax(-la * rmsds, dim=0)
+        if not hasattr(self, "la"):
+            self.la = self._calc_lambda()
+            if self.verbose:
+                print(f" >>> INFO: Setting lambda parameter for arithmetic path to {self.la}")
+
+        sm = torch.softmax(-self.la * rmsds, dim=0)
         self.path_cv = (
             1.0 / (self.nnodes - 1) * torch.sum(torch.arange(self.nnodes) * sm)
         )
 
         # distance from path
         if self.requires_z:
-            self.path_z = -1.0 / la * torch.logsumexp(-la * rmsds, dim=0)
+            self.path_z = -(1.0 / self.la) * torch.logsumexp(-self.la * rmsds, dim=0)
             self.grad_z = torch.autograd.grad(
                 self.path_z,
                 coords,
@@ -481,13 +494,12 @@ class PathCV:
         upper_bound = path[-1] - delta_upper
         return [lower_bound, upper_bound]
 
-    def _calc_1overlambda(self):
+    def _calc_lambda(self):
         """get lambda parameter for smoothing of arithmetic path"""
-        sumlen = 0
-        for i, coords in enumerate(self.path[1:], start=1):
-            d = self.get_distance(coords, self.path[i - 1], metric=self.metric)
-            sumlen += d
-        return sumlen / (self.nnodes - 1)
+        sumlen = 0.0
+        for i, coords in enumerate(self.path[1:]):
+            sumlen += self.get_distance(coords, self.path[i], metric=self.metric)
+        return 1.0 / (sumlen / (self.nnodes - 1))
 
     def _get_distance_to_path(self, z: torch.tensor) -> list:
         """Calculates distance according to chosen metric

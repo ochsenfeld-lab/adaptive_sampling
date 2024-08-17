@@ -10,7 +10,7 @@ from ..processing_tools.thermodynamic_integration import integrate
 class WTM(EnhancedSampling):
     """Well-Tempered Metadynamics
 
-       see: Barducci et. al., Phys. rev. lett. (2008); https://doi.org/10.1103/PhysRevLett.100.020603
+    see: Barducci et. al., Phys. rev. lett. (2008); https://doi.org/10.1103/PhysRevLett.100.020603
 
     An repulsive biasing potential is built by a superposition of Gaussian hills along the reaction coordinate.
 

@@ -7,6 +7,7 @@ from .metadynamics import *
 from .metaeabf import *
 from .reference import *
 from .feneb import *
+from .harmonic_constraint import *
 from .utils import *
 from .opes import *
 from .opeseabf import *
@@ -23,4 +24,5 @@ __all__ = [
     "Reference",
     "OPES",
     "OPESeABF",
+    "Harmonic_Constraint",
 ]

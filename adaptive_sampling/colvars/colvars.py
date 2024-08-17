@@ -434,16 +434,14 @@ class CV:
     def rmsd(
         self,
         cv_def: Union[str, list],
-        method: str = "quaternion",
     ) -> float:
         """rmsd to reference structure
 
         Args:
             cv_def: path to xyz file with reference structure
                     definition: 'path to xyz' or
-                                ['path to reference xyz', [atom indices]]
-            method: 'kabsch', 'quaternion' or 'kearsley' algorithm for optimal alignment
-                    gradient of kabsch algorithm numerical unstable!
+                                ['path to reference xyz', [atom indices], method]
+                    method can be 'kabsch' or 'quaternion' algorithm for optimal alignment or 'absolute' 
 
         Returns:
             cv: root-mean-square deviation to reference structure
@@ -452,17 +450,23 @@ class CV:
 
         if isinstance(cv_def, list):
             atom_indices = cv_def[1]
+            method = cv_def[2]
             cv_def = cv_def[0]
         else:
             atom_indices = None
+            method = 'kabsch'
 
         if self.reference == None:
             self.reference = read_xyz(cv_def)
 
         if method.lower() == "kabsch":
             self.cv = kabsch_rmsd(self.coords, self.reference, indices=atom_indices)
-        else:  # 'quaternion':
+        elif method.lower() == "quaternion":
             self.cv = quaternion_rmsd(self.coords, self.reference, indices=atom_indices)
+        elif method.lower() == "absolute":
+            self.cv = get_rmsd(self.coords, self.reference, indices=atom_indices)
+        else:
+            raise ValueError(" >>> ERROR: invalid method for calculation of RMSD, valid options are 'kabsch', 'quaternion' or 'absolute'")
 
         if self.requires_grad:
             self.gradient = torch.autograd.grad(

@@ -32,6 +32,9 @@ class AdaptiveSamplingOpenMM:
         calc_energy: bool = True,
         platform: str = "CPU",
     ):
+        import openmm
+        from openmm import unit
+
         self.topology = topology  # OpenMM topology object
         self.system = system  # OpenMM system object
 
@@ -119,6 +122,8 @@ class AdaptiveSamplingOpenMM:
             nsteps: number of MD steps
             update_bias_freq: frequency of updates of bias force
         """
+        from openmm import unit
+
         for i in range(int(nsteps / update_bias_freq)):
 
             # update bias force
