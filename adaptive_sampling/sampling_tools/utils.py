@@ -83,6 +83,7 @@ def welford_var(
 ) -> Tuple[float, float, float]:
     """On-the-fly estimate of sample variance by Welford's online algorithm
 
+
     Args:
         count: current number of samples (with new one)
         mean: current mean
@@ -150,99 +151,4 @@ def cond_avg(a: np.ndarray, hist: np.ndarray) -> np.ndarray:
         cond_avg: conditional average
     """
     return np.divide(a, hist, out=np.zeros_like(a), where=(hist != 0))
-
-
-class Kernel:
-    """kernel object is a gaussian and can return its value
-
-    Args:
-        height: height of the initialized gaussian
-        center: center of the initialized gaussian
-        sigma: variance of the initialized gaussian
-
-    """
-
-    def __init__(self, height: float, center: np.array, sigma: np.array):
-        self.height = height
-        self.center = center
-        self.sigma = sigma
-
-    def evaluate(self, s: np.array, periodicity: list = [None]):
-        """calculating the value of the gaussian with object parameters
-
-        Args:
-            s: location, where value is wanted
-            periodicity: periodicity of CV
-        """
-        s_diff = s - self.center
-        for i, p in enumerate(periodicity):
-            s_diff[i] = correct_periodicity(s_diff[i], p)
-        gauss_value = self.height * np.exp(
-            -0.5 * np.sum(np.square(s_diff / self.sigma))
-        )
-        gauss_grad = (
-            -self.height
-            * np.exp(-0.5 * np.square(s_diff / self.sigma))
-            * (s_diff / self.sigma)
-        )
-        return gauss_value, gauss_grad
-
-
-def gaussian_calc(
-    s: np.array,
-    kernel_std: np.array,
-    s_new: np.array,
-    periodicity: list = [None],
-    requires_grad: bool = False,
-) -> list:
-    """calculate the potential from a deployed gaussian and if needed the derivative
-
-    Args:
-        s: coordinates of gaussian center
-        kernel_std: standard deviation of gaussian
-        s_new: location in which potential is wanted
-        periodicity: periodicity of CV
-        requires_grad: default False, decides, if derivative of gaussian is needed
-
-    Returns:
-        G: potential in s_new
-        delta_G: derivative of G
-    """
-    h = np.prod(1 / (s * np.sqrt(2 * np.pi)))
-    s_diff = s - s_new
-    for i, p in enumerate(periodicity):
-        s_diff[i] = correct_periodicity(s_diff[i], p)
-    G = h * np.exp((-1.0 / 2.0) * np.sum(np.square(s_diff / kernel_std)))
-    if requires_grad == False:
-        return G, None
-    else:
-        delta_G = (
-            -h
-            * np.exp((-1.0 / 2.0) * np.square(s_diff / kernel_std))
-            * (s_diff / kernel_std)
-        )
-        return G, delta_G
-
-
-def distance_calc(
-    s_new: np.array, s_old: np.array, kernel_std: np.array, periodicity: list = [None]
-) -> float:
-    """calculate distance between a deployed gaussian and location if interest
-
-    Args:
-        s_new: location of interest, sampling point
-        s_old: gaussian center
-        kernel_std: standard deviation of gaussian
-        periodicity: list of lower and upper boundary
-
-    Returns:
-        d: distance as float
-    """
-    if not hasattr(s_new, "__len__"):
-        raise ValueError("Wrong Input: Not array!")
-    s_diff = s_old - s_new
-    # print(s_diff)
-    for i, p in enumerate(periodicity):
-        s_diff[i] = correct_periodicity(s_diff[i], p)
-    d = np.sqrt(np.sum(np.square(s_diff / kernel_std)))
-    return d
+    
