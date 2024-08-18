@@ -441,7 +441,7 @@ class CV:
             cv_def: path to xyz file with reference structure
                     definition: 'path to xyz' or
                                 ['path to reference xyz', [atom indices], method]
-                    method can be 'kabsch' or 'quaternion' algorithm for optimal alignment or 'absolute' 
+                    method can be 'kabsch' or 'quaternion' algorithm for optimal alignment or 'absolute'
 
         Returns:
             cv: root-mean-square deviation to reference structure
@@ -454,7 +454,7 @@ class CV:
             cv_def = cv_def[0]
         else:
             atom_indices = None
-            method = 'kabsch'
+            method = "kabsch"
 
         if self.reference == None:
             self.reference = read_xyz(cv_def)
@@ -466,7 +466,9 @@ class CV:
         elif method.lower() == "absolute":
             self.cv = get_rmsd(self.coords, self.reference, indices=atom_indices)
         else:
-            raise ValueError(" >>> ERROR: invalid method for calculation of RMSD, valid options are 'kabsch', 'quaternion' or 'absolute'")
+            raise ValueError(
+                " >>> ERROR: invalid method for calculation of RMSD, valid options are 'kabsch', 'quaternion' or 'absolute'"
+            )
 
         if self.requires_grad:
             self.gradient = torch.autograd.grad(

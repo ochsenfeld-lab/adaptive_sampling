@@ -49,7 +49,11 @@ class OPESeABF(eABF, OPES, EnhancedSampling):
     """
 
     def __init__(
-        self, *args, enable_eabf: bool = False, enable_opes: bool = True, **kwargs
+        self,
+        *args,
+        enable_eabf: bool = False,
+        enable_opes: bool = True,
+        **kwargs,
     ):
         super().__init__(*args, **kwargs)
         self.abf_forces = np.zeros_like(self.bias)
@@ -66,9 +70,9 @@ class OPESeABF(eABF, OPES, EnhancedSampling):
         write_traj: bool = True,
         stabilize: bool = False,
         stabilizer_threshold: float = None,
-        output_file: str = "wtmeabf.out",
+        output_file: str = "eopesabf.out",
         traj_file: str = "CV_traj.dat",
-        restart_file: str = "restart_wtmeabf",
+        restart_file: str = "restart_eopesabf",
         **kwargs,
     ) -> np.ndarray:
         """Apply OPES-eABF to MD simulation
@@ -184,9 +188,6 @@ class OPESeABF(eABF, OPES, EnhancedSampling):
 
                 self.write_output(output, filename=output_file)
                 # self.write_restart(filename=restart_file)
-        # if self.md_state.step % self.update_freq == 0:
-        # print("mtd forces", mtd_forces)
-        # print(self.ext_forces+mtd_forces)
         return bias_force
 
     def reinit(self):
@@ -285,7 +286,7 @@ class OPESeABF(eABF, OPES, EnhancedSampling):
 
         Args:
             grid: grid for CZAR
-            cv_x: CV trajectory
+            cv_x: trajectory of CV
             cv_la: extended system trajectory
             ext_sigma: thermal width of coupling between CV and extended variable
             pmf_hist_res: resolution of PMF history

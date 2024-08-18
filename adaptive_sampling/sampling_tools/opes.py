@@ -70,6 +70,11 @@ class OPES(EnhancedSampling):
             raise ValueError(
                 " >>> Error: Kernel standard deviation must be set either all None or all values!"
             )
+        if self.adaptive_sigma and not self.sigma_estimate:
+            self.sigma_estimate == True
+            print(
+                "For adaptive sigma there is only sigma estimation available, which has been automatically activated."
+            )
 
         # Constants
         self.energy_barr = energy_barr * kJ_to_kcal
@@ -332,13 +337,13 @@ class OPES(EnhancedSampling):
 
     def get_val_gaussian(
         self,
-        s: np.array,
+        s_new: np.array,
     ) -> np.array:
 
         """get the values of all gaussians at point s_new
 
         Args:
-            s = point of interest
+            s_new: center of new gaussian
 
         Returns:
             val_gaussians: array of all values of all kernels at s
@@ -346,21 +351,13 @@ class OPES(EnhancedSampling):
         if len(self.kernel_center) == 0:
             return np.zeros(1)
 
-        s_diff = s - np.asarray(self.kernel_center)
+        s_diff = s_new - np.asarray(self.kernel_center)
 
         # Correct Periodicity of spatial distances
         for i in range(self.ncoords):
             s_diff[:, i] = correct_periodicity(s_diff[:, i], self.periodicity[i])
 
         # Calculate values of Gaussians at center of kernel currently in loop and sum them
-        if (
-            False
-            and self.verbose
-            and self.md_state.step % self.update_freq == 0
-            and self.md_state.step > 0
-        ):
-            print("S_diff", s_diff)
-            print(np.asarray(self.kernel_sigma))
         val_gaussians = np.asarray(self.kernel_height) * np.exp(
             -0.5
             * np.sum(
@@ -746,11 +743,14 @@ class OPES(EnhancedSampling):
         grid_y: np.array,
         hist_res: int = 10,
     ) -> np.array:
-        """calculate weighted pmf history
+        """calculate pmf history from reweighting parts of the trajectory
 
         Args:
-            cv_x: trajectory of cv x
-            cv_y: trajectory of cv y
+            cv_x: trajectory of first CV
+            cv_y: trajectory of second CV
+            cv_pot: potential energy for trajectory points
+            grid_x: grid along first CV
+            grid_y: grid along second CV
             hist_res: resolution of history
 
         Returns:
@@ -775,7 +775,8 @@ class OPES(EnhancedSampling):
 
         print("Initialize pmf history calculation.")
         for j in range(hist_res):
-            print("Iteration ", j + 1, " of", hist_res, "started.")
+            if j % 10 == 0:
+                print(f"Progress: History entry {j} of {hist_res}")
             n_sample = j * n + n
             scattered_time.append(n_sample)
             probability_hist = np.zeros((len(grid_x), len(grid_y)))
@@ -815,7 +816,9 @@ class OPES(EnhancedSampling):
         """calculate weighted pmf history
 
         Args:
-            cv_x: trajectory of cv x
+            cv_x: trajectory of first CV
+            cv_pot: potential energy for trajectory points
+            grid: grid along CV
             hist_res: resolution of history
 
         Returns:
@@ -835,10 +838,14 @@ class OPES(EnhancedSampling):
         scattered_time = []
         pmf_bin_hist = []
         divisor = self.sum_weights if not self.explore else self.n
-        print("Initialize pmf history calculation.")
+        print(
+            "-------------------------------------------------------------------------------"
+        )
+        print("Initialize 1D history reweighting ...")
         for j in range(hist_res):
             n_sample = j * n + n
-            print("Iteration ", j + 1, " of", hist_res, "started.")
+            if j % 10 == 0:
+                print(f"Progress: History entry {j} of {hist_res}")
             scattered_time.append(n_sample)
             probability_hist = np.zeros(len(grid))
             for i, x in enumerate(grid):  # Loop over grid so that i are bin centers
@@ -855,6 +862,9 @@ class OPES(EnhancedSampling):
             potential_hist -= potential_hist.min()
             potential_hist = np.where(potential_hist == np.inf, 0, potential_hist)
             pmf_bin_hist.append(potential_hist)
-        print("Done.")
+        print("1D history reweighting done!")
+        print(
+            "-------------------------------------------------------------------------------"
+        )
 
         return pmf_bin_hist, scattered_time

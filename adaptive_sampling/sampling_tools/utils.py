@@ -151,4 +151,3 @@ def cond_avg(a: np.ndarray, hist: np.ndarray) -> np.ndarray:
         cond_avg: conditional average
     """
     return np.divide(a, hist, out=np.zeros_like(a), where=(hist != 0))
-    
