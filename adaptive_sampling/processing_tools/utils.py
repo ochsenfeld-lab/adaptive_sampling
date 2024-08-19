@@ -340,7 +340,6 @@ def activation_freeE(
     pmf = pmf[~np.isnan(pmf)]
     if TS == None:
         TS = np.where(pmf == np.amax(pmf[min_bin:max_bin]))[0][0]
-
     rho = np.exp(-pmf / RT)
     P = rho / rho.sum()  # normalize so that P_a + P_b = 1.0
 

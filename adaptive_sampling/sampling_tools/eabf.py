@@ -487,7 +487,10 @@ class eABF(ABF, EnhancedSampling):
 
             # harmonic walls for confinement to range of interest
             if self.f_conf[i] > 0.0:
-                if self.ext_coords[i] > (self.maxx[i] - margin[i]):
+                if (
+                    self.ext_coords[i] > (self.maxx[i] - margin[i])
+                    and not self.periodicity[i]
+                ):
                     r = diff(
                         self.maxx[i] - margin[i],
                         self.ext_coords[i],
@@ -495,7 +498,10 @@ class eABF(ABF, EnhancedSampling):
                     )
                     self.ext_forces[i] -= self.f_conf[i] * r
 
-                elif self.ext_coords[i] < (self.minx[i] + margin[i]):
+                elif (
+                    self.ext_coords[i] < (self.minx[i] + margin[i])
+                    and not self.periodicity[i]
+                ):
                     r = diff(
                         self.minx[i] + margin[i],
                         self.ext_coords[i],
