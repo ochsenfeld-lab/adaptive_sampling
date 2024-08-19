@@ -196,7 +196,10 @@ class OPES(EnhancedSampling):
             bias_force: bias force on location in CV space in atomic units
         """
         if self.verbose and self.md_state.step % self.update_freq == 0:
-            print("OPES bias called at ", s_new)
+            print(
+                "###############################################################################"
+            )
+            print("OPES bias function called at CV point s_new: ", s_new)
 
         # Unbiased estimation of sigma
         if self.sigma_estimate and self.md_state.step < self.adaptive_sigma_stride:
@@ -232,8 +235,10 @@ class OPES(EnhancedSampling):
 
         # Call update function to place kernel
         if self.md_state.step % self.update_freq == 0:
-            if self.verbose:
-                print("OPES update KDE started.")
+            if self.verbose and self.md_state.step % self.update_freq == 0:
+                print(
+                    "--------------------OPES update KDE started--------------------------------------"
+                )
             self.update_kde(s_new)
 
         # Calculate new probability and its derivative
@@ -255,20 +260,27 @@ class OPES(EnhancedSampling):
 
         self.prob_dist = prob_dist
         self.deriv_prob_dist = deriv_prob_dist
-        if self.verbose and self.md_state.step % self.update_freq == 0:
-            print(
-                "Probabiliy distribution: ",
-                prob_dist,
-                "and its derivative: ",
-                deriv_prob_dist,
-            )
-            print("val gaussians =  ", val_gaussians)
 
         # Calculate Potential
         self.potential = self.calc_pot(prob_dist)
 
         # Calculate forces
         forces = self.calculate_forces(prob_dist, deriv_prob_dist)
+
+        if self.verbose and self.md_state.step % self.update_freq == 0:
+            print("Final values for OPES bias calculation:")
+            print(
+                "Probabiliy distribution ",
+                prob_dist,
+                "and its derivative ",
+                deriv_prob_dist,
+            )
+            print(
+                "Potential ",
+                self.potential,
+                "and undirected forces derivated from it ",
+                forces,
+            )
 
         return forces
 
@@ -295,10 +307,6 @@ class OPES(EnhancedSampling):
 
         # Calculate weight coefficients
         weigth_coeff = np.exp(self.beta * potential)
-        if self.verbose:
-            print("Update function called, now evaluating its properties")
-            # print("Probability distribution: ", prob_dist)
-            # print("potential is: ", potential)
         self.sum_weights += weigth_coeff
         self.sum_weights_square += weigth_coeff * weigth_coeff
 
@@ -334,6 +342,13 @@ class OPES(EnhancedSampling):
         # Calculate pmf on the fly if enabled
         if self.print_pmf:
             self.pmf = self.get_pmf()
+
+        if self.verbose and self.md_state.step % self.update_freq == 0:
+            print("Finished update function with Kernels:")
+            self.show_kernels()
+            print(
+                "-------------------------------------------------------------------------------"
+            )
 
     def get_val_gaussian(
         self,
@@ -395,9 +410,6 @@ class OPES(EnhancedSampling):
             * (1 / ((prob_dist / self.norm_factor) + self.epsilon))
             * (deriv_prob_dist / self.norm_factor)
         )
-        if self.verbose and self.md_state.step % self.update_freq == 0:
-            print("derivate of pot: ", deriv_pot)
-
         return deriv_pot
 
     def calc_norm_factor(self, approximate: bool = True):
@@ -485,21 +497,38 @@ class OPES(EnhancedSampling):
         """
         # Set up and update kernel lists
 
-        if self.verbose:
-            print("Kernels before adding:")
-            self.show_kernels()
+        if self.verbose and self.md_state.step % self.update_freq == 0:
+            print(
+                "....................Compression Check started......................................"
+            )
         self.kernel_height.append(h_new)
         self.kernel_center.append(s_new)
         self.kernel_sigma.append(std_new)
-        if self.verbose:
-            print("Kernels after adding:")
+        if self.verbose and self.md_state.step % self.update_freq == 0:
+            print("Kernel lists after adding new kernel at CV location:")
             self.show_kernels()
 
         kernel_min_ind, min_distance = self.calc_min_dist(s_new)
 
-        if self.verbose:
-            print("Kernel added: ", h_new, self.kernel_center[-1], std_new)
-            print("min distance: ", min_distance, " to sampling point: ", s_new)
+        if self.verbose and self.md_state.step % self.update_freq == 0:
+            print(
+                "Kernel added: ",
+                h_new,
+                self.kernel_center[-1],
+                std_new,
+                "with mininmal distance: ",
+                min_distance,
+                " to nearest kernel: ",
+                kernel_min_ind,
+            )
+            if min_distance < self.merge_threshold:
+                print(
+                    "The minimal distance is below the merge threshold therefore merging is needed."
+                )
+            else:
+                print(
+                    "The minimal distance is above the merge threshold therefore no merging is needed."
+                )
 
         # Recursive merging if enabled and distances under threshold
         while (
@@ -507,10 +536,10 @@ class OPES(EnhancedSampling):
             and np.all(min_distance < self.merge_threshold)
             and len(self.kernel_center) > 1
         ):
-            if self.verbose:
-                print("Merging started.")
+            if self.verbose and self.md_state.step % self.update_freq == 0:
+                print("Merging started in while loop...")
                 print(
-                    "Kernel to merge: ",
+                    "Kernel to merge last added one into: ",
                     self.kernel_height[kernel_min_ind],
                     self.kernel_center[kernel_min_ind],
                     self.kernel_sigma[kernel_min_ind],
@@ -530,6 +559,12 @@ class OPES(EnhancedSampling):
         self.delta_kernel_height.append(h_new)
         self.delta_kernel_center.append(s_new)
         self.delta_kernel_sigma.append(std_new)
+
+        if self.verbose and self.md_state.step % self.update_freq == 0:
+            print("Exited Compression Check...")
+            print(
+                "..............................................................................."
+            )
 
     def calc_min_dist(self, s_new: np.array):
         """calculate distances to all compressed kernels and get the minimal distance as well as the corresponding kernel
@@ -551,8 +586,6 @@ class OPES(EnhancedSampling):
         distance = np.sqrt(
             np.sum(np.square(np.divide(s_diff, np.asarray(self.kernel_sigma))), axis=1)
         )
-        if self.verbose:
-            print("distances: ", distance)
         kernel_min_ind = np.argmin(distance[:-1]) if len(distance) > 1 else None
         min_distance = distance[kernel_min_ind]
 
@@ -646,7 +679,7 @@ class OPES(EnhancedSampling):
         self.explore = data["explore"]
         self.n = data["n"]
 
-        if self.verbose:
+        if self.verbose and self.md_state.step % self.update_freq == 0:
             print(f" >>> Info: Adaptive sampling restartet from {filename}!")
 
     def write_traj(self, filename: str = "CV_traj.dat"):
@@ -664,13 +697,12 @@ class OPES(EnhancedSampling):
         self.temp = [self.temp[-1]]
         self.output_bias_pot = [self.output_bias_pot[-1]]
 
-    def show_kernels(self):
+    def show_kernels(self, manual: bool = False):
         """for testing print kernels"""
-        if self.verbose:  # and self.md_state.step%(self.update_freq*100)==0:
-            print("Kernels: ")
-            print("heights ", self.kernel_height)
-            print("centers ", self.kernel_center)
-            print("sigmas ", self.kernel_sigma)
+        if self.verbose or manual:  # and self.md_state.step%(self.update_freq*100)==0:
+            print("    Heights ", self.kernel_height)
+            print("    Centers ", self.kernel_center)
+            print("    Sigmas ", self.kernel_sigma)
         else:
             pass
 

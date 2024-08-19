@@ -1,19 +1,21 @@
 import numpy as np
-from adaptive_sampling.sampling_tools.utils import correct_periodicity
+import pytest as pytest
 from adaptive_sampling.sampling_tools.opes import *
 from adaptive_sampling.interface.sampling_data import SamplingData
+from adaptive_sampling.sampling_tools.enhanced_sampling import EnhancedSampling
+from adaptive_sampling.units import *
 
 
 class MD:
     def __init__(self, mass, coords):
-        self.masses = np.array(mass)
+        self.mass = np.array(mass)
         self.coords = np.array(coords)
         self.natoms = len(mass)
         self.forces = np.zeros(3 * self.natoms)
 
     def get_sampling_data(self) -> SamplingData:
         return SamplingData(
-            self.masses,
+            self.mass,
             self.coords,
             np.zeros_like(self.coords),
             0.0,
@@ -36,80 +38,88 @@ def four_particles2():
     return MD(masses, coords)
 
 
-def test_kde_1D_2():
-    OPES_test1_2 = OPES(
-        four_particles(),
-        [["distance", [0, 1], 0, 0, 0]],
-        kernel_location=np.ones(1),
-        kernel_var=np.ones(1),
-    )
-    OPES_test1_2.compression_check(1.0, np.array([1.0]), np.array([1.0]))
-    OPES_test1_2.compression_check(1.0, np.array([2.0]), np.array([1.0]))
-    assert OPES_test1_2.kernels_h == [2.0, 1.0]
-    assert OPES_test1_2.kernels_s == [1.0, 2.0]
-    assert OPES_test1_2.kernels_var == [1.0, 1.0]
-
-
-def test_kde_1D():
-    OPES_test1 = OPES(
-        four_particles(),
-        [["distance", [0, 1], 0, 0, 0]],
-        kernel_location=np.ones(1),
-        kernel_var=np.ones(1),
-    )
-    OPES_test1.compression_check(1.0, np.array([1.0]), np.array([1.0]))
-    OPES_test1.compression_check(1.0, np.array([2.0]), np.array([1.0]))
-    OPES_test1.compression_check(1.0, np.array([2.5]), np.array([1.0]))
-    assert OPES_test1.kernels_h == [2.0, 2.0]
-    assert OPES_test1.kernels_s == [1.0, 2.25]
-    assert OPES_test1.kernels_var == [1.0, np.sqrt(1.0625)]
-
-
-def test_kde_2D():
-    OPES_test2 = OPES(
-        four_particles(),
-        [["distance", [0, 1], 0, 0, 0]],
-        kernel_location=np.ones(2),
-        kernel_var=np.ones(2),
-    )
-    OPES_test2.compression_check(1.0, np.array([1.0, 1.0]), np.array([1.0, 1.0]))
-    OPES_test2.compression_check(1.0, np.array([2.0, 1.0]), np.array([1.0, 1.0]))
-    OPES_test2.compression_check(1.0, np.array([2.5, 1.0]), np.array([1.0, 1.0]))
-    assert OPES_test2.kernels_h == [2.0, 2.0]
-    assert np.allclose(
-        np.array(OPES_test2.kernels_s),
-        np.array([np.array([1.0, 1.0]), np.array([2.25, 1.0])]),
-    )
-    assert np.allclose(
-        np.array(OPES_test2.kernels_var),
-        np.array([np.array([1.0, 1.0]), np.array([np.sqrt(1.0625), 1.0])]),
-    )
-
-
-# print("2D Test")
-# OPES2 = OPES(four_particles(), [["distance", [0,1], 0,0,0]])
-# OPES2.update_kde(np.array([2.0,1.5]))
-# print("2D Test successful")
-
-print("initiate 1D Test")
-OPES1 = OPES(
-    [0.1, 0.1],
+the_bias = OPES(
     four_particles(),
-    [["distance", [0, 1], 0, 0, 0]],
-    merge_kernels=True,
+    [["distance", [0, 1], 0, 10, 1]],
+    # kernel_location=np.ones(1),
+    kernel_std=np.ones(1),
+    adaptive_sigma=False,
+    unbiased_time=10,
+    fixed_sigma=False,
+    explore=False,
+    periodicity=None,
+    output_freq=1000,
+    equil_temp=300.0,
+    energy_barr=20,
     merge_threshold=1.0,
-    approximate_norm=False,
+    approximate_norm=True,
+    exact_norm=True,
     verbose=True,
+    recursion_merge=True,
+    update_freq=100,
+    f_conf=1000.0,
+    bias_factor=None,
+    kinetics=True,
 )
-OPES1.update_kde(np.array([1.1]))
-OPES1.md_step = 1
-print(OPES1.md_step)
-OPES1.update_kde(np.array([1.25]))
-OPES1.update_kde(np.array([1.11]))
-OPES1.update_kde(np.array([1.124]))
-OPES1.update_kde(np.array([1.214]))
-OPES1.update_kde(np.array([1.123]))
-OPES1.update_kde(np.array([1.342]))
-OPES1.step_bias()
-OPES1.get_pmf()
-print("1D Test successful")
+
+the_bias.delta_kernel_height = []
+the_bias.delta_kernel_center = []
+the_bias.delta_kernel_sigma = []
+
+the_bias.kernel_center.append(np.array([1.5]))
+the_bias.kernel_height.append(1.0)
+the_bias.kernel_sigma.append(np.array([0.5]))
+
+the_bias.kernel_center.append(np.array([3.0]))
+the_bias.kernel_height.append(1.0)
+the_bias.kernel_sigma.append(np.array([0.5]))
+
+
+# Unit Tests
+def test_get_val_gaussian_on_first_kernel_center():
+    assert the_bias.get_val_gaussian(1.5)[0] == pytest.approx(1.0)
+
+
+def test_get_val_gaussian_on_two_kernel():
+    assert np.sum(the_bias.get_val_gaussian(2.5)) == pytest.approx(0.74186594)
+
+
+def test_calc_min_dist():
+    assert the_bias.calc_min_dist(1.75)[0] == 0
+    assert the_bias.calc_min_dist(1.75)[1] == pytest.approx(0.5)
+
+
+def test_calc_pot():
+    assert the_bias.calc_pot(1.0) == pytest.approx(-4.039473105783248)
+
+
+def test_calculate_forces():
+    assert the_bias.calculate_forces(1.0, 0.2) == pytest.approx(0.07912062349399933)
+
+
+def test_calc_norm_factor_exact():
+    assert the_bias.calc_norm_factor(approximate=False) == pytest.approx(
+        3069.313587526749
+    )
+
+
+def test_compression_check_for_new_kernel_out_of_merging_threshold():
+    the_bias.compression_check(1.0, np.array([4.5]), np.array([1.0]))
+    assert the_bias.kernel_center == [np.array([1.5]), np.array([3.0]), np.array([4.5])]
+    assert the_bias.kernel_height == [1.0, 1.0, 1.0]
+    assert the_bias.kernel_sigma == [np.array([0.5]), np.array([0.5]), np.array([1.0])]
+
+
+def test_compression_check_for_new_kernel_in_merging_threshold_of_second():
+    the_bias.compression_check(1.0, np.array([2.75]), np.array([1.0]))
+    assert the_bias.kernel_center == [
+        np.array([1.5]),
+        np.array([4.5]),
+        np.array([2.875]),
+    ]
+    assert the_bias.kernel_height == [1.0, 1.0, 2.0]
+    assert the_bias.kernel_sigma == [
+        np.array([0.5]),
+        np.array([1.0]),
+        np.array([pytest.approx(0.80039053)]),
+    ]
