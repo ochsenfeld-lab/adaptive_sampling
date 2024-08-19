@@ -6,7 +6,7 @@ from adaptive_sampling.units import *
 
 ################# Imput Section ####################
 # MD
-seed = random.randint(0,10000)
+seed = random.randint(0, 10000)
 nsteps = 100000  # number of MD steps
 dt = 5.0e0  # stepsize in fs
 target_temp = 300.0  # Kelvin
@@ -44,11 +44,11 @@ the_abm = WTMeABF(
 # the_abm.restart()
 
 step_dict = {
-    'mw_file': '../shared_bias1', 
-    'sync_interval': 5000,
-    'output_file': 'wtmeabf1.out',
-    'traj_file': 'CV_traj1.dat',
-    'restart_file': 'restart_wtmeabf1',
+    "mw_file": "../shared_bias1",
+    "sync_interval": 5000,
+    "output_file": "wtmeabf1.out",
+    "traj_file": "CV_traj1.dat",
+    "restart_file": "restart_wtmeabf1",
 }
 
 the_md.calc_init()

@@ -163,7 +163,9 @@ class PathCV:
         if not hasattr(self, "la"):
             self.la = self._calc_lambda()
             if self.verbose:
-                print(f" >>> INFO: Setting lambda parameter for arithmetic path to {self.la}")
+                print(
+                    f" >>> INFO: Setting lambda parameter for arithmetic path to {self.la}"
+                )
 
         sm = torch.softmax(-self.la * rmsds, dim=0)
         self.path_cv = (

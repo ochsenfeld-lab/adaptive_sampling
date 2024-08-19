@@ -12,7 +12,7 @@ target_temp = 300.0  # Kelvin
 mass = 10.0  # a.u.
 potential = "1"
 
-with open('../walkers', 'r') as w:
+with open("../walkers", "r") as w:
     walkers = w.readlines()
     for i, path in enumerate(walkers):
         walkers[i] = path[:-1]
@@ -112,7 +112,7 @@ while step_count < nsteps:
 
     the_md.propagate(langevin=True)
     the_md.calc()
-    
+
     the_md.forces += the_abm.step_bias()
     if tube:
         the_abm.the_cv.pathcv.adaptive = False
@@ -135,4 +135,4 @@ while step_count < nsteps:
         )
     )
     if not the_md.step % 4000 and dev["adaptive"]:
-        the_abm.the_cv.pathcv.write_path(filename=f'path_{step_count}.npy')
+        the_abm.the_cv.pathcv.write_path(filename=f"path_{step_count}.npy")

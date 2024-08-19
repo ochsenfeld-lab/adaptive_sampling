@@ -96,10 +96,16 @@ def read_path(
     return traj, len(traj)
 
 
-def get_rmsd(V: torch.tensor, W: torch.tensor, periodicity: list = None, indices: list = None, ndim: int = 3):
+def get_rmsd(
+    V: torch.tensor,
+    W: torch.tensor,
+    periodicity: list = None,
+    indices: list = None,
+    ndim: int = 3,
+):
     """root-mean-square deviation"""
     V = V.view(int(torch.numel(V) / ndim), ndim).float()
-    W = W.view(int(torch.numel(W) / ndim), ndim).float()       
+    W = W.view(int(torch.numel(W) / ndim), ndim).float()
     if indices != None:
         V = V[indices]
         W = W[indices]
@@ -107,10 +113,16 @@ def get_rmsd(V: torch.tensor, W: torch.tensor, periodicity: list = None, indices
     return torch.sqrt(torch.sum(d * d) / len(V))
 
 
-def get_msd(V: torch.tensor, W: torch.tensor, periodicity: list = None, indices: list = None, ndim: int = 3):
+def get_msd(
+    V: torch.tensor,
+    W: torch.tensor,
+    periodicity: list = None,
+    indices: list = None,
+    ndim: int = 3,
+):
     """mean-square deviation"""
     V = V.view(int(torch.numel(V) / ndim), ndim).float()
-    W = W.view(int(torch.numel(W) / ndim), ndim).float()       
+    W = W.view(int(torch.numel(W) / ndim), ndim).float()
     if indices != None:
         V = V[indices]
         W = W[indices]

@@ -441,7 +441,7 @@ class CV:
             cv_def: path to xyz file with reference structure
                     definition: 'path to xyz' or
                                 ['path to reference xyz', [atom indices], method]
-                    method can be 'kabsch' or 'quaternion' algorithm for optimal alignment or 'absolute' 
+                    method can be 'kabsch' or 'quaternion' algorithm for optimal alignment or 'absolute'
 
         Returns:
             cv: root-mean-square deviation to reference structure
@@ -450,11 +450,11 @@ class CV:
 
         if isinstance(cv_def, list):
             atom_indices = cv_def[1]
-            method = cv_def[2]
             cv_def = cv_def[0]
+            method = cv_def[2]
         else:
             atom_indices = None
-            method = 'kabsch'
+            method = "kabsch"
 
         if self.reference == None:
             self.reference = read_xyz(cv_def)
@@ -466,7 +466,9 @@ class CV:
         elif method.lower() == "absolute":
             self.cv = get_rmsd(self.coords, self.reference, indices=atom_indices)
         else:
-            raise ValueError(" >>> ERROR: invalid method for calculation of RMSD, valid options are 'kabsch', 'quaternion' or 'absolute'")
+            raise ValueError(
+                " >>> ERROR: invalid method for calculation of RMSD, valid options are 'kabsch', 'quaternion' or 'absolute'"
+            )
 
         if self.requires_grad:
             self.gradient = torch.autograd.grad(
@@ -579,6 +581,57 @@ class CV:
 
         return float(self.cv)
 
+    def lambda_max(self, graph_def: dict):
+        """Largest eigenvalue of the contact matrix
+
+        Args:
+            graph_def: definition of graph cv (see: GRAPH_CV)
+        """
+        if not hasattr(self, "the_graphcv"):
+            from .graph_cv import GRAPH_CV
+
+            the_graphcv = GRAPH_CV(
+                atom_indices=graph_def.get("atom_indices", None),
+                atom_types=graph_def.get("atom_types", None),
+                N=graph_def.get("N", 6),
+                M=graph_def.get("M", None),
+                requires_grad=self.requires_grad,
+            )
+
+        self.update_coords()
+        self.cv = the_graphcv.calc(self.coords)
+
+        if self.requires_grad:
+            self.gradient = the_graphcv.gradient
+
+        return float(self.cv)
+
+    def plumed_cv(self, plumed_def: dict):
+        """Collective Variable from the Plumed library"""
+        from .plumed_cv import PLUMED_CV
+
+        self.plumed_atom_indices = plumed_def["atom_indices"]
+        self.gradient = np.zeros_like(self.coords.detach().numpy())
+        self.plumed_handle = PLUMED_CV(
+            cv_def=plumed_def.get("cv_def", None),
+            natoms=self.natoms,
+            scratch_dir=plumed_def.get("scratch_dir", "PLUMED"),
+        )
+
+        self.update_coords()
+        self.cv = self.plumed_handle.calc(self.coords.detach().numpy())
+
+        if self.requires_grad:
+            self.gradient = self.gradient.reshape(
+                (int(len(self.coords.flatten()) / 3), 3)
+            )
+            self.gradient[self.plumed_atom_indices] = self.plumed_handle.gradient[
+                : len(self.plumed_atom_indices)
+            ]
+            self.gradient = self.gradient.flatten()
+
+        return float(self.cv)
+
     def get_cv(self, cv: str, atoms: list, **kwargs) -> Tuple[float, np.ndarray]:
         """get state of collective variable from cv definition of sampling_tools
 
@@ -653,6 +706,12 @@ class CV:
                 if atoms.get("mapping", None) not in ["f_sw", "fraction"]
                 else None
             )
+        elif cv.lower() == "lambda_max":
+            xi = self.lambda_max(atoms)
+            self.type = None
+        elif cv.lower() == "plumed":
+            xi = self.plumed_cv(atoms)
+            self.type = atoms.get("type", None)
         else:
             print(" >>> Error in CV: Unknown Collective Variable")
             sys.exit(1)

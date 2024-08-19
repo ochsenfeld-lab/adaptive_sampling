@@ -106,7 +106,7 @@ while step_count < nsteps:
 
     the_md.propagate(langevin=True)
     the_md.calc()
-    
+
     the_md.forces += the_abm.step_bias()
     if tube:
         the_abm.the_cv.pathcv.adaptive = False
@@ -129,4 +129,4 @@ while step_count < nsteps:
         )
     )
     if not the_md.step % 4000 and dev["adaptive"]:
-        the_abm.the_cv.pathcv.write_path(filename=f'path_{step_count}.npy')
+        the_abm.the_cv.pathcv.write_path(filename=f"path_{step_count}.npy")

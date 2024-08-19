@@ -30,10 +30,10 @@ the_md = MD(
     seed_in=seed,
 )
 the_abm = ABF(
-    the_md, 
-    ats, 
-    output_freq=1000, 
-    f_conf=100, 
+    the_md,
+    ats,
+    output_freq=1000,
+    f_conf=100,
     equil_temp=300.0,
     multiple_walker=True,
 )
@@ -77,7 +77,6 @@ while step_count < nsteps:
         mw_file="../shared_bias",
         sync_interval=1000,
     )
-
 
     the_md.up_momenta(langevin=True)
     the_md.calc_etvp()

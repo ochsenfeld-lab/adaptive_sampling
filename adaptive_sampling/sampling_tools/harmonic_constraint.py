@@ -2,6 +2,7 @@ import numpy as np
 from typing import List, Tuple
 from ..units import *
 
+
 class Harmonic_Constraint:
     """Harmonic constraint of collective variables
 
@@ -41,6 +42,7 @@ class Harmonic_Constraint:
 
         # init collective variable
         from ..colvars import CV
+
         self.the_cv = CV(self.the_md, requires_grad=True)
         self.colvars = colvars
         if len(self.colvars) != len(self.force_constants) or len(self.colvars) != len(
