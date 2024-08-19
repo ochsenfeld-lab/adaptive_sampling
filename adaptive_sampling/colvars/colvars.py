@@ -449,9 +449,9 @@ class CV:
         self.update_coords()
 
         if isinstance(cv_def, list):
+            method = cv_def[2]
             atom_indices = cv_def[1]
             cv_def = cv_def[0]
-            method = cv_def[2]
         else:
             atom_indices = None
             method = "kabsch"
