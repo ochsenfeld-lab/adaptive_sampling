@@ -211,14 +211,6 @@ class OPES(EnhancedSampling):
                 self.md_state.step, self.welford_mean, self.welford_m2, s_new, tau
             )
             self.sigma_0 = np.sqrt(self.welford_var)
-
-            # self.traj = np.append(self.traj, [s_new], axis=0)
-            # self.epot.append(self.md_state.epot)
-            # self.temp.append(self.md_state.temp)
-            # self.output_bias_pot.append(0.0)
-            # self.output_sum_weigths.append(self.sum_weights)
-            # self.output_sum_weigths_square.append(self.sum_weights_square)
-            # self.output_norm_factor.append(self.norm_factor)
             return np.zeros_like(self.the_md.coords)
 
         # Update sigma if adaptive sigma is enabled

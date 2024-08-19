@@ -1,13 +1,13 @@
 #!/usr/bin/env python
+import numpy as np
 from adaptive_sampling.sampling_tools.metaeabf import WTMeABF
 from adaptive_sampling.interface.interfaceMD_2D import *
 from adaptive_sampling.units import *
 
-
 ################# Imput Section ####################
 # MD
-seed = 42
-nsteps = 5000000  # number of MD steps
+seed = np.random.randint(1, 150)
+nsteps = 1e7  # number of MD steps
 dt = 5.0e0  # stepsize in fs
 target_temp = 300.0  # Kelvin
 mass = 10.0  # a.u.
@@ -18,10 +18,12 @@ ats = [["x", [], 70.0, 170.0, 2.0]]
 N_full = 100
 
 step_count = 0
-coords = [71.0, 0]
+
+coords_in = [float(np.random.randint(72, 168)), float(np.random.randint(-1, 1))]
+
 the_md = MD(
     mass_in=mass,
-    coords_in=coords,
+    coords_in=coords_in,
     potential=potential,
     dt_in=dt,
     target_temp_in=target_temp,

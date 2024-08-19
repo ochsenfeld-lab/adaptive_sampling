@@ -1,14 +1,28 @@
+# -------------------------------------------------------------------------------------
+### SCRIPT FOR 2D CV SPACES ###
+# -------------------------------------------------------------------------------------
+# -------------------------------------------------------------------------------------
+# configure parameters
+# -------------------------------------------------------------------------------------
 import numpy as np
 
-# CONFIGURE PARAMETER
-config_nsteps = 3e6
+config_nsteps = 2e7  # Number of simulation steps
+config_explore = False  # Enable Exploration mode
+config_adaptive_sigma = True  # Enable adaptive sigma calculation according to welford
+config_unbiased_time = 100  # Determine how many update freq steps an unbiased simulation is run to approximate sigma 0
+config_input = False  # If False enable unbiased simulation to estimate sigma 0
+config_fixed_sigma = (
+    False  # Disable bandwidth rescaling and use input std for all kernels
+)
 config_merge = 1.0  # Merging or not, np.inf is no merging
-config_update_freq = 300
-config_print_freq = 1000
-config_approx_norm_factor = True
-config_recursion_merge = False
-config_verbose = False
-
+config_update_freq = 200  # Frequency in which kernels are placed
+config_recursion_merge = True  # Enable recursive merging
+config_approx_norm_factor = True  # Enable approximation of norm factor
+config_exact_norm_factor = False  # Enable exact norm factor, if both activated, exact is used every 100 updates
+config_f_conf = 1000.0  # Confinment force to keep system in boundaries
+config_bias_factor = None  # Direct setting of bias factor, if calculation from energy is wanted put in 'None'
+config_energy_barr = 20.0  # Energy barrier to overcome
+config_verbose = False  # Enable for debugging
 # -------------------------------------------------------------------------------------
 import os
 from sys import stdout
@@ -58,10 +72,9 @@ min_y = -40.0
 max_y = 40.0
 bin_width_y = 2.0
 
-collective_var = [
-    ["x", cv_atoms, minimum, maximum, bin_width],
-    ["y", cv_atoms, min_y, max_y, bin_width_y],
-]
+collective_var = [["x", cv_atoms, minimum, maximum, bin_width]]
+
+periodicity = None
 
 # ------------------------------------------------------------------------------------
 # setup MD
@@ -70,7 +83,7 @@ seed = 42  # random seed
 dt = 5.0e0  # stepsize in fs
 temp = 300.0  # temperature in K
 
-coords_in = [-50.0, -30.0]
+coords_in = [-50.0, 0.0]
 
 the_md = MD(
     mass_in=mass,
@@ -86,45 +99,57 @@ the_md.calc_etvp()
 # --------------------------------------------------------------------------------------
 # Setup the sampling algorithm
 output_freq = 1000  # frequency of writing outputs
-kernel_std = np.array([5.0, 1.0])
+kernel_std = np.array([5.0]) if config_input else np.array([None])
 
 the_bias = OPES(
-    kernel_std,
     the_md,
     collective_var,
+    kernel_std=kernel_std,
+    adaptive_sigma=config_adaptive_sigma,
+    unbiased_time=config_unbiased_time,
+    fixed_sigma=config_fixed_sigma,
+    explore=config_explore,
+    periodicity=periodicity,
     output_freq=output_freq,
-    equil_temp=temp,
-    energy_barr=20.0,
+    equil_temp=300.0,
+    energy_barr=config_energy_barr,
     merge_threshold=config_merge,
     approximate_norm=config_approx_norm_factor,
+    exact_norm=config_exact_norm_factor,
     verbose=config_verbose,
     recursion_merge=config_recursion_merge,
     update_freq=config_update_freq,
+    f_conf=config_f_conf,
+    bias_factor=config_bias_factor,
+    kinetics=True,
 )
+
 
 # --------------------------------------------------------------------------------------
 # remove old output
 if True:
     os.system("rm CV_traj.dat")
     os.system("rm restart_opes.npz")
+    os.system("rm pmf_hist.npz")
 
 the_bias.step_bias()
 
 
 def print_output(the_md, the_bias, t):
     print(
-        "%11.2f\t%14.6f\t%14.6f\t%14.6f\t%14.6f\t%14.6f\t%14.6f\t%14d\t%14.6f\t%14.6f"
+        "%11.2f\t%14.6f\t%14.6f\t%14.6f\t%14.6f\t%14.6f\t%14.6f\t%14d\t%14.6f\t%14.6f\t%14.6f"
         % (
             the_md.step * the_md.dt * atomic_to_fs,
             the_md.coords[0],
             the_md.coords[1],
             the_md.epot,
             the_md.ekin,
-            the_md.epot + the_md.ekin,
+            the_bias.n_eff,
             the_md.temp,
             len(the_bias.kernel_center),
             the_bias.potential,
             t,
+            the_bias.kernel_sigma[-1][0] if len(the_bias.kernel_sigma) > 0 else 0.0,
         )
     )
     sys.stdout.flush()
@@ -144,18 +169,19 @@ potentials = []
 
 
 print(
-    "%11s\t%14s\t%14s\t%14s\t%14s\t%14s\t%14s\t%14s\t%14s\t%14s"
+    "%11s\t%14s\t%14s\t%14s\t%14s\t%14s\t%14s\t%14s\t%14s\t%14s\t%14s"
     % (
         "time [fs]",
         "x",
         "y",
         "E_pot",
         "E_kin",
-        "E_tot",
+        "N_eff",
         "Temp",
         "n Kernel",
         "Bias Potential",
         "Wall time",
+        "last sigma",
     )
 )
 print_output(the_md, the_bias, 0)
@@ -183,3 +209,29 @@ while the_md.step < nsteps:
     if the_md.step % traj_freq == 0:
         x.append(the_md.coords[0])
         y.append(the_md.coords[1])
+
+# Save full trajectory for alternative reweighting
+np.savez("full_traj.npz", x=x, y=y)
+
+
+# weighted PMF history
+if True:
+    cv_traj = np.loadtxt("CV_traj.dat", skiprows=1)
+    full_traj = np.load("full_traj.npz")
+    # cv_x = np.array(cv_traj[:,1])
+    cv_x = np.array(full_traj["x"])
+    cv_y = np.array(full_traj["y"])
+    cv_pot = np.array(cv_traj[:, 4])
+    pmf_weight_history_1d, scattered_time_1d = the_bias.weighted_pmf_history1d(
+        cv_x, cv_pot, coords_x, hist_res=50
+    )
+    pmf_weight_history_2d, scattered_time_2d = the_bias.weighted_pmf_history2d(
+        cv_x, cv_y, cv_pot, coords_x, coords_y, hist_res=50
+    )
+    np.savez(
+        "pmf_hist.npz",
+        pmf_weight_history_1d=pmf_weight_history_1d,
+        scattered_time_1d=scattered_time_1d,
+        pmf_weight_history_2d=pmf_weight_history_2d,
+        scattered_time_2d=scattered_time_2d,
+    )
