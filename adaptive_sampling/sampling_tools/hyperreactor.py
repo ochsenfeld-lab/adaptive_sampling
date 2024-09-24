@@ -16,9 +16,16 @@ class Hyperreactor(Reactor, aMD):
         **kwargs
 ):
         #super().__init__(*args, **kwargs)
+                # Definition of reaction coordinate (Collective Variable)
+        CV_type         = 'distance'
+        atom_indices    = [0,1]
+        min_xi          = 0.5        # A
+        max_xi          = 10.0        # A
+        bin_width       = 0.5       # A
+        cv = [[CV_type, atom_indices, min_xi, max_xi, bin_width]]
         Reactor.__init__(self,*args, **kwargs)
-        aMD.__init__(self,*args, *kwargs)
-
+        aMD.__init__(self,cv_def=cv, *args, **kwargs)
+        #super().__init__(cv_def=cv,*args, **kwargs)
         self.mode = mode.lower()
         if self.mode == "ahrd":
             self.amd_method = "amd"
@@ -36,16 +43,11 @@ class Hyperreactor(Reactor, aMD):
 
         self.radius = r_max
 
-        # Definition of reaction coordinate (Collective Variable)
-        CV_type         = 'distance'
-        atom_indices    = [0,1]
-        min_xi          = 0.5        # A
-        max_xi          = 10.0        # A
-        bin_width       = 0.5       # A
 
-        self.cv_def = [[CV_type, atom_indices, min_xi, max_xi, bin_width]]
+
+        
         #self.ncoords = len(cv_def)
-        self.the_cv = CV(self.the_md, requires_grad=True)
+        #self.the_cv = CV(self.the_md, requires_grad=True)
         self.confine=False
 
     def _spherical_bias(
