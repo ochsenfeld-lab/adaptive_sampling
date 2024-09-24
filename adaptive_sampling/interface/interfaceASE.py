@@ -2,7 +2,6 @@
 import os, time
 import numpy as np
 import random
-
 from adaptive_sampling import units
 
 
@@ -99,7 +98,6 @@ class AseMD:
     def calc_init(
         self,
         init_momenta: str = "random",
-        biaspots: list = [],
         restart_file: str = None,
         init_temp: float = 298.15e0,
     ):
@@ -112,11 +110,6 @@ class AseMD:
             init_temp: initial temperature, if init_momenta='random'
         """
         self.calc()
-
-        if hasattr(biaspots, "__len__"):
-            self.biaspots = biaspots
-        else:
-            self.biaspots = [biaspots]
 
         # Init momenta
         if init_momenta.lower() == "zero":
@@ -156,6 +149,14 @@ class AseMD:
             print(" >>> AseMD: Illegal selection of init_momenta!")
 
         self.calc_etvp()
+
+        print("Res: %14s  %14s  %14s  %14s  %14s  %14s %10s %10s %10s %10s\n" % ("Time [fs]", "Epot [a.u.]", "Ekin [a.u.]", "Etot [a.u.]", "Temp [K]", "Pressure [bar]", "Radius [A]", "Wall [s]", "Pot_max [a.u.]", "Pot_min [a.u.]"))
+
+    def set_biaspots(self, biaspots: list = []):
+        if hasattr(biaspots, "__len__"):
+            self.biaspots = biaspots
+        else:
+            self.biaspots = [biaspots]
 
     def run(
         self,
@@ -198,7 +199,16 @@ class AseMD:
 
             self.up_momenta()
             self.calc_etvp()
+            
+            if bool(self.biaspots):
+                for bias in self.biaspots:
+                    print ("Res: %14.7f  %14.7f  %14.7f  %14.7f  %14.7f  %14.7f  %10.7f  %8.3f %14.7f %14.7f" % (self.step*self.dt,self.epot,self.ekin,self.epot+self.ekin,self.temp,self.pres,bias.radius,time.perf_counter()-start_time,bias.pot_max,bias.pot_min))
+                    #sys.stdout.flush()
+            else:
+                print ("Res: %14.7f  %14.7f  %14.7f  %14.7f  %14.7f  %14.7f  %10.7f  %8.3f %14.7f %14.7f" % (self.step*self.dt,self.epot,self.ekin,self.epot+self.ekin,self.temp,self.pres,0,time.perf_counter()-start_time,0,0))
+                #sys.stdout.flush()
 
+ 
             if restart_freq != None and self.step % restart_freq == 0:
                 self.write_restart(prefix=prefix)
 
@@ -209,6 +219,7 @@ class AseMD:
             if out_freq != None and self.step % out_freq == 0:
                 self.print_energy(prefix=prefix)
 
+            
     def heat(
         self,
         nsteps: int = 0,
@@ -527,3 +538,7 @@ class AseMD:
             raise NotImplementedError(
                 " >>> AseMD: `get_sampling_data()` is missing `adaptive_sampling` package"
             ) from e
+        
+
+
+        
