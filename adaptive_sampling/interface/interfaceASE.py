@@ -202,7 +202,7 @@ class AseMD:
             
             if bool(self.biaspots):
                 for bias in self.biaspots:
-                    print ("Res: %14.7f  %14.7f  %14.7f  %14.7f  %14.7f  %14.7f  %10.7f  %8.3f %14.7f %14.7f" % (self.step*self.dt,self.epot,self.ekin,self.epot+self.ekin,self.temp,self.pres,bias.radius,time.perf_counter()-start_time,bias.pot_max,bias.pot_min))
+                    print ("Res: %14.7f  %14.7f  %14.7f  %14.7f  %14.7f  %14.7f  %10.7f  %8.3f %14.7f %14.7f" % (self.step*self.dt,self.epot,self.ekin,self.epot+self.ekin,self.temp,self.pres,bias.radius*units.BOHR_to_ANGSTROM,time.perf_counter()-start_time,bias.pot_max,bias.pot_min))
                     #sys.stdout.flush()
             else:
                 print ("Res: %14.7f  %14.7f  %14.7f  %14.7f  %14.7f  %14.7f  %10.7f  %8.3f %14.7f %14.7f" % (self.step*self.dt,self.epot,self.ekin,self.epot+self.ekin,self.temp,self.pres,0,time.perf_counter()-start_time,0,0))
@@ -218,7 +218,8 @@ class AseMD:
             self.time_per_step.append(time.perf_counter() - start_time)
             if out_freq != None and self.step % out_freq == 0:
                 self.print_energy(prefix=prefix)
-
+                self.print_geom(prefix=prefix)
+                self.print_bo(prefix=prefix, bo=self.molecule.calc.get_property("bond-orders"))
             
     def heat(
         self,
@@ -230,7 +231,7 @@ class AseMD:
         restart_freq: int = None,
         dcd_freq: int = None,
         remove_rotation: bool = False,
-        prefix: str = "ashMD_heating",
+        prefix: str = "aseMD_heating",
         **kwargs,
     ):
         """Heating of MD simulation from current temperature to target temperature
@@ -274,8 +275,10 @@ class AseMD:
         from ase.units import Bohr, Hartree
 
         self.molecule.positions = self.coords.reshape((self.natoms, 3)) * Bohr
+        
         self.epot = self.molecule.get_potential_energy() / Hartree
         self.forces = -self.molecule.get_forces().flatten() * (Bohr / Hartree)
+        #print(self.molecule.calc.get_property("bond-orders"))
         os.chdir(self.cwd)
 
     def calc_etvp(self):
@@ -504,6 +507,27 @@ class AseMD:
             )
             pdbout.close()
 
+    def print_geom(self, prefix: str = "aseMD"):
+        """saves coordinates to xyz format
+
+        Args:
+           prefix (str): prefix for trajectory files
+        """
+        with open(prefix + "_traj.xyz", "a+") as f:
+                elements = self.molecule.get_chemical_symbols()
+                f.write(str("%i\nTIME: %14.7f\n") % (self.natoms, self.step * self.dt))
+                
+                for i in range(self.natoms):
+                    string = str("%s %20.10e %20.10e %20.10e\n") % (
+                        elements[i],
+                        self.coords[3 * i + 0] * units.BOHR_to_ANGSTROM,
+                        self.coords[3 * i + 1] * units.BOHR_to_ANGSTROM,
+                        self.coords[3 * i + 2] * units.BOHR_to_ANGSTROM,
+                    )
+                    f.write(string)
+        f.close()
+
+
     def print_dcd(self, prefix: str = "aseMD"):
         """saves coordinates to binary dcd format
 
@@ -517,6 +541,28 @@ class AseMD:
                 f"{prefix}_traj.dcd", "w", force_overwrite=True
             )
         self.dcd.write(units.BOHR_to_ANGSTROM * self.coords.reshape(self.natoms, 3))
+
+    def print_bo(self, prefix: str = "aseMD", bo: np.array = None):
+        """saves bond orders in a ij order for each time step (needed for the post-processing)
+
+        Args:
+            filename: name of vond-orders file
+        """
+
+        if bo.all() == None:
+            return "No reactor found. Bond orders were not computed."
+        else:
+            with open(prefix + "_bo.dat", "a+") as f:
+                string = str("TIME: %14.7f\n") % (self.step*self.dt)
+
+                f.write(string)
+                for i in range(0,self.natoms):
+                    for j in range(i+1,self.natoms):
+                        string = str("%20.10e") % (bo[i][j])
+                        f.write(string)
+                        f.write("\n")
+                f.write("\n")
+                f.close()
 
     def get_sampling_data(self):
         """interface to adaptive sampling algorithms. see: https://github.com/ahulm/adaptive_sampling"""

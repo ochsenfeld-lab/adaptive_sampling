@@ -1,6 +1,6 @@
 import numpy as np
 from .reactor import Reactor
-from .amd import aMD
+from ..sampling_tools.amd import aMD
 from ..units import *
 
 class Hyperreactor(Reactor, aMD):
@@ -15,17 +15,17 @@ class Hyperreactor(Reactor, aMD):
         mode: str = "GaHRD_lower", #aHRD, GaHRD, SaHRD
         **kwargs
 ):
-        #super().__init__(*args, **kwargs)
-                # Definition of reaction coordinate (Collective Variable)
+        # Definition of reaction coordinate (Collective Variable)
         CV_type         = 'distance'
         atom_indices    = [0,1]
         min_xi          = 0.5        # A
         max_xi          = 10.0        # A
         bin_width       = 0.5       # A
         cv = [[CV_type, atom_indices, min_xi, max_xi, bin_width]]
-        Reactor.__init__(self,*args, **kwargs)
-        aMD.__init__(self,cv_def=cv, *args, **kwargs)
-        #super().__init__(cv_def=cv,*args, **kwargs)
+
+        Reactor.__init__(self, *args, **kwargs)
+        aMD.__init__(self, confine=False, cv_def=cv, *args, **kwargs)
+
         self.mode = mode.lower()
         if self.mode == "ahrd":
             self.amd_method = "amd"
@@ -41,14 +41,7 @@ class Hyperreactor(Reactor, aMD):
         self.t_total = t_total
         self.k_conf = k_conf*np.power(BOHR_to_ANGSTROM,2.0)/(atomic_to_kJmol*kJ_to_kcal)
 
-        self.radius = r_max
-
-
-
-        
-        #self.ncoords = len(cv_def)
-        #self.the_cv = CV(self.the_md, requires_grad=True)
-        self.confine=False
+        self.radius = self.r_max
 
     def _spherical_bias(
         self, 
@@ -59,7 +52,7 @@ class Hyperreactor(Reactor, aMD):
         bias_pot = md_state.epot
 
         t = md_state.step * md_state.dt
-        self.radius = min(self.r_max + (self.r_max - self.r_min) * np.sin(np.pi/2*np.cos(t/self.t_total*2*np.pi)) , self.r_max)
+        self.radius = min(self.r_max + (self.r_max - self.r_min) * np.sin(np.pi/2*np.cos(t/self.t_total*2*np.pi)), self.r_max)
 
         for i in range(self.the_md.natoms):
             xx = self.the_md.coords[3*i+0]
@@ -71,7 +64,7 @@ class Hyperreactor(Reactor, aMD):
         if r == 0.e0:
             dbase = 0.e0
         else:
-            maxr = np.max([0,r-self.radius/BOHR_to_ANGSTROM])
+            maxr = np.max([0,r-self.radius])
             bias_pot += 0.5e0 * self.k_conf * np.power(maxr,2.e0) * mass
 
             dbase = self.k_conf * maxr/r * mass

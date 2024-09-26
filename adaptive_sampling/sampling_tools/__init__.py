@@ -11,9 +11,6 @@ from .harmonic_constraint import *
 from .utils import *
 from .opes import *
 from .opeseabf import *
-from .reactor import *
-from .hyperreactor import *
-from .nanoreactor import *
 
 __all__ = [
     "ABF",
@@ -28,7 +25,4 @@ __all__ = [
     "OPES",
     "OPESeABF",
     "Harmonic_Constraint",
-    "Reactor",
-    "Hyperreactor",
-    "Nanoreactor",
 ]

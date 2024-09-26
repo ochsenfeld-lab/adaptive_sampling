@@ -5,7 +5,6 @@ from typing import Tuple
 from abc import ABC, abstractmethod
 
 from ..interface.sampling_data import MDInterface
-from .utils import diff
 from ..units import *
 
 
@@ -38,6 +37,7 @@ class Reactor(ABC):
     @abstractmethod
     def step_bias(self):
         pass
+
 
     #@abstractmethod
     #def write_restart(self):
