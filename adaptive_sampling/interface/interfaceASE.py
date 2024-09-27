@@ -57,6 +57,7 @@ class AseMD:
         self.forces = np.zeros_like(self.coords)
         self.momenta = np.zeros_like(self.coords)
         self.bias_forces = np.zeros_like(self.forces)
+        self.explorationpots = []
         self.biaspots = []
 
         # active and frozen atoms
@@ -150,13 +151,21 @@ class AseMD:
 
         self.calc_etvp()
 
-        print("Res: %14s  %14s  %14s  %14s  %14s  %14s %10s %10s %10s %10s\n" % ("Time [fs]", "Epot [a.u.]", "Ekin [a.u.]", "Etot [a.u.]", "Temp [K]", "Pressure [bar]", "Radius [A]", "Wall [s]", "Pot_max [a.u.]", "Pot_min [a.u.]"))
+        if bool(self.explorationpots):
+            print("Res: %14s  %14s  %14s  %14s  %14s  %14s %10s %10s %10s %10s\n" % 
+                 ("Time [fs]", "Epot [a.u.]", "Ekin [a.u.]", "Etot [a.u.]", "Temp [K]", "Pressure [bar]", "Radius [A]", "Wall [s]", "Pot_max [a.u.]", "Pot_min [a.u.]"))
 
     def set_biaspots(self, biaspots: list = []):
         if hasattr(biaspots, "__len__"):
             self.biaspots = biaspots
         else:
             self.biaspots = [biaspots]
+
+    def set_explorationpots(self, exppots: list = []):
+        if hasattr(exppots, "__len__"):
+            self.explorationpots = exppots
+        else:
+            self.explorationpots = [exppots]
 
     def run(
         self,
@@ -191,6 +200,12 @@ class AseMD:
                     self.bias_forces += bias.step_bias(**kwargs)
                 self.forces += self.bias_forces
 
+            if bool(self.explorationpots):
+                self.bias_forces = np.zeros_like(self.forces)
+                for explore in self.explorationpots:
+                    self.bias_forces += explore.step_bias(**kwargs)
+                self.forces += self.bias_forces    
+
             if self.n_active != self.natoms:
                 self.freeze_atoms()
 
@@ -200,14 +215,10 @@ class AseMD:
             self.up_momenta()
             self.calc_etvp()
             
-            if bool(self.biaspots):
-                for bias in self.biaspots:
-                    print ("Res: %14.7f  %14.7f  %14.7f  %14.7f  %14.7f  %14.7f  %10.7f  %8.3f %14.7f %14.7f" % (self.step*self.dt,self.epot,self.ekin,self.epot+self.ekin,self.temp,self.pres,bias.radius*units.BOHR_to_ANGSTROM,time.perf_counter()-start_time,bias.pot_max,bias.pot_min))
-                    #sys.stdout.flush()
-            else:
-                print ("Res: %14.7f  %14.7f  %14.7f  %14.7f  %14.7f  %14.7f  %10.7f  %8.3f %14.7f %14.7f" % (self.step*self.dt,self.epot,self.ekin,self.epot+self.ekin,self.temp,self.pres,0,time.perf_counter()-start_time,0,0))
-                #sys.stdout.flush()
-
+            if bool(self.explorationpots):
+                for explore in self.explorationpots:
+                    print ("Res: %14.7f  %14.7f  %14.7f  %14.7f  %14.7f  %14.7f  %10.7f  %8.3f %14.7f %14.7f" % 
+                          (self.step*self.dt,self.epot,self.ekin,self.epot+self.ekin,self.temp,self.pres,explore.radius*units.BOHR_to_ANGSTROM,time.perf_counter()-start_time,explore.pot_max,explore.pot_min))
  
             if restart_freq != None and self.step % restart_freq == 0:
                 self.write_restart(prefix=prefix)
@@ -219,8 +230,11 @@ class AseMD:
             if out_freq != None and self.step % out_freq == 0:
                 self.print_energy(prefix=prefix)
                 self.print_geom(prefix=prefix)
-                self.print_bo(prefix=prefix, bo=self.molecule.calc.get_property("bond-orders"))
-            
+                if bool(self.explorationpots):
+                    for explore in self.explorationpots:
+                        bo = self.molecule.calc.get_property("bond-orders")
+                        explore.write_bond_order_output(prefix=prefix, bo=bo)
+                        
     def heat(
         self,
         nsteps: int = 0,
@@ -278,7 +292,7 @@ class AseMD:
         
         self.epot = self.molecule.get_potential_energy() / Hartree
         self.forces = -self.molecule.get_forces().flatten() * (Bohr / Hartree)
-        #print(self.molecule.calc.get_property("bond-orders"))
+        
         os.chdir(self.cwd)
 
     def calc_etvp(self):
@@ -527,7 +541,6 @@ class AseMD:
                     f.write(string)
         f.close()
 
-
     def print_dcd(self, prefix: str = "aseMD"):
         """saves coordinates to binary dcd format
 
@@ -541,28 +554,6 @@ class AseMD:
                 f"{prefix}_traj.dcd", "w", force_overwrite=True
             )
         self.dcd.write(units.BOHR_to_ANGSTROM * self.coords.reshape(self.natoms, 3))
-
-    def print_bo(self, prefix: str = "aseMD", bo: np.array = None):
-        """saves bond orders in a ij order for each time step (needed for the post-processing)
-
-        Args:
-            filename: name of vond-orders file
-        """
-
-        if bo.all() == None:
-            return "No reactor found. Bond orders were not computed."
-        else:
-            with open(prefix + "_bo.dat", "a+") as f:
-                string = str("TIME: %14.7f\n") % (self.step*self.dt)
-
-                f.write(string)
-                for i in range(0,self.natoms):
-                    for j in range(i+1,self.natoms):
-                        string = str("%20.10e") % (bo[i][j])
-                        f.write(string)
-                        f.write("\n")
-                f.write("\n")
-                f.close()
 
     def get_sampling_data(self):
         """interface to adaptive sampling algorithms. see: https://github.com/ahulm/adaptive_sampling"""

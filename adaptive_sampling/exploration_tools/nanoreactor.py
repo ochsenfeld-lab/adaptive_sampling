@@ -7,26 +7,23 @@ class Nanoreactor(Reactor):
     def __init__(
         self,
         boost_temperature: float,
-        r_max: float,
-        r_min: float,
-        k_max: float,
-        k_min: float,
-        t_expand: float,
-        t_contract: float,
+        t_total: float,
+        k_conf: float,
         *args,
         confinement_method : str,
         **kwargs
-):
+    ):
         super().__init__(*args, **kwargs)
         self.confinement_method = confinement_method.lower()
         self.the_md.target_temp = boost_temperature
 
-        self.k_conf_max = k_max*np.power(BOHR_to_ANGSTROM,2.0)/(atomic_to_kJmol*kJ_to_kcal)
-        self.k_conf_min = k_min*np.power(BOHR_to_ANGSTROM,2.0)/(atomic_to_kJmol*kJ_to_kcal)
-        self.r_max = r_max/BOHR_to_ANGSTROM
-        self.r_min = r_min/BOHR_to_ANGSTROM
-        self.t_expand = t_expand
-        self.t_contract = t_contract
+        self.k_conf_max = k_conf * np.power(BOHR_to_ANGSTROM, 2.0) / (atomic_to_kJmol * kJ_to_kcal)
+        self.k_conf_min = k_conf / 2.e0 * np.power(BOHR_to_ANGSTROM, 2.0) / (atomic_to_kJmol * kJ_to_kcal)
+
+        self.t_expand = 3.e0 / 4.e0 * t_total
+        self.t_contract = 1.e0 / 4.e0 * t_total
+
+        self.radius = self.r_max
 
     def _spherical_bias(
         self, 
@@ -64,9 +61,9 @@ class Nanoreactor(Reactor):
                     dbase = 0.e0
                 else:
                     maxr = np.max([0,r-radius/BOHR_to_ANGSTROM])
-                    bias_pot += 0.5e0 * self.k_conf * np.power(maxr,2.e0) * mass
+                    bias_pot += 0.5e0 * self.k_conf_max * np.power(maxr,2.e0) * mass
 
-                    dbase = self.k_conf * maxr/r * mass
+                    dbase = self.k_conf_max * maxr/r * mass
 
             elif self.confinement_method == "smooth":
                 radius = self.r_min + (self.r_max - self.r_min) * (1e0 + np.cos(t/(self.t_expand + self.t_contract)*2*np.pi))
@@ -74,9 +71,9 @@ class Nanoreactor(Reactor):
                     dbase = 0.e0
                 else:
                     maxr = np.max([0,r-radius/BOHR_to_ANGSTROM])
-                    bias_pot += 0.5e0 * self.k_conf * np.power(maxr,2.e0) * mass
+                    bias_pot += 0.5e0 * self.k_conf_max * np.power(maxr,2.e0) * mass
 
-                    dbase = self.k_conf * maxr/r * mass
+                    dbase = self.k_conf_max * maxr / r * mass
 
             bias_force[i*3+0] += xx * dbase
             bias_force[i*3+1] += yy * dbase
@@ -85,8 +82,8 @@ class Nanoreactor(Reactor):
         return bias_force
 
 
-    def step_bias(self, write_output: bool = True, write_traj: bool = True, **kwargs):
-        spherical_bias = self._spherical_bias()
+    def step_bias(self, *args, **kwargs):
+        spherical_bias = self._spherical_bias(*args, **kwargs)
 
         return spherical_bias
     

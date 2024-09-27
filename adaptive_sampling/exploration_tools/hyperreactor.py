@@ -7,24 +7,22 @@ class Hyperreactor(Reactor, aMD):
 
     def __init__(
         self,
-        r_min: float,
-        r_max: float,
         t_total: float,
         k_conf: float,
         *args,
         mode: str = "GaHRD_lower", #aHRD, GaHRD, SaHRD
         **kwargs
-):
-        # Definition of reaction coordinate (Collective Variable)
+    ):
+        # Definition of reaction coordinate (Collective Variable) ! This is just a dummy CV because of the code's architecture requires one.
         CV_type         = 'distance'
         atom_indices    = [0,1]
         min_xi          = 0.5        # A
-        max_xi          = 10.0        # A
-        bin_width       = 0.5       # A
+        max_xi          = 10.0       # A
+        bin_width       = 0.5        # A
         cv = [[CV_type, atom_indices, min_xi, max_xi, bin_width]]
 
         Reactor.__init__(self, *args, **kwargs)
-        aMD.__init__(self, confine=False, cv_def=cv, *args, **kwargs)
+        aMD.__init__(self, cv_def=cv, confine=False, verbose=False, *args, **kwargs)
 
         self.mode = mode.lower()
         if self.mode == "ahrd":
@@ -35,9 +33,7 @@ class Hyperreactor(Reactor, aMD):
             self.amd_method = "gamd_upper"
         elif self.mode == "sahrd":
             self.amd_method = "samd"
-        
-        self.r_max = r_max/BOHR_to_ANGSTROM
-        self.r_min = r_min/BOHR_to_ANGSTROM
+
         self.t_total = t_total
         self.k_conf = k_conf*np.power(BOHR_to_ANGSTROM,2.0)/(atomic_to_kJmol*kJ_to_kcal)
 
@@ -74,8 +70,8 @@ class Hyperreactor(Reactor, aMD):
 
         return bias_force
 
-    def step_bias(self, write_output: bool = True, write_traj: bool = True, **kwargs):
-        amd_bias = aMD.step_bias(self)
+    def step_bias(self, *args, **kwargs):
+        amd_bias = aMD.step_bias(self, *args, **kwargs)
 
         return  amd_bias + self._spherical_bias()
     
