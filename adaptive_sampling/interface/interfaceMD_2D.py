@@ -145,6 +145,20 @@ class MD:
                 )
             ).sum()
 
+        elif potential == '4':
+
+            a = 10e-2
+            b = 10.3333e-2
+            c = 2.52e-2
+            d = 2.0e-2
+    
+            s1 = a * torch.square(x)
+            s2 = b * torch.pow(x,3)
+            s3 = c * torch.pow(x,4)
+            s4 = d * torch.square(y)
+            
+            self.epot = s1 - s2 + s3 + s4 + 0.02596466400007491 # minimum shifted to zero
+
         else:
             return (0.0, np.zeros(2))
             # raise ValueError(" >>> Invalid Potential!")
