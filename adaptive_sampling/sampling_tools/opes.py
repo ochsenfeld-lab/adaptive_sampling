@@ -1,16 +1,17 @@
-import torch 
 import numpy as np
 from adaptive_sampling.sampling_tools.enhanced_sampling import EnhancedSampling
 from adaptive_sampling.units import *
 from .utils import correct_periodicity
 from .utils import welford_var
 
-class OPES_MINIMAL(EnhancedSampling):
+class OPES(EnhancedSampling):
 
     def __init__(
         self,
         *args,
-        kernel_std: torch.tensor = None,
+        kernel_std: np.array = None,
+        adaptive_std: bool=True,
+        adaptive_std_freq: int=10,
         explore: bool=False,
         energy_barr: float = 20.0,
         update_freq: int = 1000,
@@ -25,9 +26,19 @@ class OPES_MINIMAL(EnhancedSampling):
         super().__init__(*args, **kwargs)
 
         if kernel_std is None:
-            raise ValueError(" >>> OPES: invalid kernel_std")
-     
-        self.sigma_0 = kernel_std
+            print(f" >>> INFO: estimating kernel standard deviation from initial unbiased MD ({update_freq*adaptive_std_freq} steps)")
+        self.adaptive_std = adaptive_std
+        self.adaptive_std_stride = adaptive_std_freq * self.update_freq
+        self.adaptive_counter = 0
+        self.welford_m2 = np.zeros(self.ncoords)
+        self.welford_mean = np.zeros(self.ncoords)        
+        if self.adaptive_std:
+            self.sigma_0 = np.full((self.ncoords,), np.nan)
+        elif not hasattr(kernel_std, "__len__"):
+            self.sigma_0 = np.asarray([kernel_std])
+        else:
+            self.sigma_0 = np.asarray(kernel_std) 
+        
         self.explore = explore
         self.update_freq = update_freq
         self.approximate_norm = approximate_norm
@@ -76,6 +87,8 @@ class OPES_MINIMAL(EnhancedSampling):
     def step_bias(
         self, 
         traj_file: str="CV_traj.dat", 
+        out_file: str="opes.out",
+        restart_file: str="restart_opes",
         **kwargs
     ) -> np.array:
         """Apply OPES bias to MD
@@ -85,28 +98,41 @@ class OPES_MINIMAL(EnhancedSampling):
         """
 
         self.md_state = self.the_md.get_sampling_data()
-        (s_new, delta_s_new) = self.get_cv(**kwargs)
+        (cv, grad_cv) = self.get_cv(**kwargs)
 
         if self.kinetics:
-            self._kinetics(delta_s_new)
+            self._kinetics(grad_cv)
 
-        forces = self.opes_bias(s_new)
+        # get OPES bias force
+        forces = self.opes_bias(cv)
+        bias_force = self.harmonic_walls(cv, grad_cv)  
+        for i in range(self.ncoords):
+            bias_force += forces[i] * grad_cv[i]
         self.bias_pot_traj.append(self.potential)
 
-        bias_force = self.harmonic_walls(s_new, delta_s_new)  # , 1.6 * self.hill_std)
-        for i in range(self.ncoords):
-            bias_force += forces[i] * delta_s_new[i]
+        # store biased histogram along CV for output
+        if self._check_boundaries(cv):
+            bink = self.get_index(cv)
+            self.histogram[bink[1], bink[0]] += 1
 
         # Save values for traj
-        self.traj = np.append(self.traj, [s_new], axis=0)
+        self.traj = np.append(self.traj, [cv], axis=0)
         self.epot.append(self.md_state.epot)
         self.temp.append(self.md_state.temp)
 
         # Write output
         if self.md_state.step % self.out_freq == 0:
-
-            self.write_traj(filename=traj_file)
-            self.write_restart()
+            if traj_file:
+                self.write_traj(filename=traj_file)
+            if out_file:
+                output = {
+                    "hist": self.histogram,
+                    "free energy": self.pmf * atomic_to_kJmol,
+                    "OPES Pot": self.bias_potential * atomic_to_kJmol,
+                }                
+                self.write_output(output, filename=out_file)
+            if restart_file:
+                self.write_restart(filename=restart_file)
 
         return bias_force
 
@@ -117,39 +143,16 @@ class OPES_MINIMAL(EnhancedSampling):
             pmf: current PMF estimate from OPES kernels
         """
         if self.ncoords == 1:
-            P = np.zeros_like(self.grid[0])
-            for x in range(len(self.grid[0])):
-                val_gaussians = self.calc_gaussians(self.grid[0][x])
-                P[x] = np.sum(val_gaussians) 
-
-        elif self.ncoords == 2:
-            P = np.zeros_like(self.grid)
-            KDE_norm = self.sum_weights if not self.explore else self.n
-            for x in range(len(self.grid[0, :])):
-                for y in range(len(self.grid[1, :])):
-                    s_diff = np.array([self.grid[0, x], self.grid[1, y]]) - np.asarray(
-                        self.kernel_center
-                    )
-                    for l in range(self.ncoords):
-                        s_diff[:, l] = correct_periodicity(
-                            s_diff[:, l], self.periodicity[l]
-                        )
-                    val_gaussians = np.asarray(self.kernel_height) * np.exp(
-                        -0.5
-                        * np.sum(
-                            np.square(np.divide(s_diff, np.asarray(self.kernel_std))),
-                            axis=1,
-                        )
-                    )
-                    P[x, y] = np.sum(val_gaussians) / KDE_norm
+            prob_dist = np.zeros_like(self.grid)
+            for i, cv in enumerate(self.grid[0]):
+                val_gaussians = self.calc_gaussians(cv)
+                prob_dist[0, i] = np.sum(val_gaussians) 
         else:
-            pmf = np.zeros_like(self.grid)
-            return pmf
+            return np.zeros_like(self.grid)
         
-        P /= self.norm_factor
-        self.bias_potential = (np.log(P + self.epsilon) / self.beta) * self.gamma_prefac
+        prob_dist /= self.norm_factor
+        self.bias_potential = (np.log(prob_dist + self.epsilon) / self.beta) * self.gamma_prefac
         pmf = -self.bias_potential / self.gamma_prefac
-        
         pmf -= pmf.min()
         return pmf
 
@@ -219,8 +222,32 @@ class OPES_MINIMAL(EnhancedSampling):
             cv: new value of CV
 
         Returns:
-            bias force: len(ncoords) array of bias forces on CVs
+            bias force: len(ncoords) array of bias forces
         """
+        if self.sigma_0[0]==None and self.md_state.step < self.adaptive_std_stride:
+            self.adaptive_counter += 1
+            tau = self.adaptive_std_stride
+            if self.adaptive_counter < self.adaptive_std_stride:
+                tau = self.adaptive_counter
+            self.welford_mean, self.welford_m2, self.welford_var = welford_var(
+                self.md_state.step, self.welford_mean, self.welford_m2, cv, tau
+            )
+            return np.zeros_like(self.the_md.coords)
+        
+        elif self.md_state.step == self.adaptive_std_stride:
+            self.sigma_0 = np.sqrt(self.welford_var)
+        
+        if self.adaptive_std:
+            self.adaptive_counter += 1
+            tau = self.adaptive_std_stride
+            if self.adaptive_counter < self.adaptive_std_stride:
+                tau = self.adaptive_counter
+            self.welford_mean, self.welford_m2, self.welford_var = welford_var(
+                self.md_state.step, self.welford_mean, self.welford_m2, cv, tau
+            )
+            factor = self.gamma if not self.explore else 1.0
+            self.sigma_0 = np.sqrt(self.welford_var / factor)
+
         if self.md_state.step % self.update_freq == 0:
             self.update_kde(cv)
 
@@ -230,18 +257,22 @@ class OPES_MINIMAL(EnhancedSampling):
             self.potential = self.bias_potential[idx[0]]
             return [self.forces_numerical[idx[0]]]
         else:
-            # calc analytical bias potential and forces from KDE at cv
-            kde, kde_derivative = self.calc_gaussians(cv, requires_grad=True)
-            self.prob_dist = np.sum(kde) 
+            # calc analytical bias potential and forces from KDE 
+            gaussians, kde_derivative = self.calc_gaussians(cv, requires_grad=True)
+            self.prob_dist = np.sum(gaussians) 
             self.potential = self.calc_potential(self.prob_dist)
             return self.calculate_forces(self.prob_dist, kde_derivative)
 
     def calc_gaussians(self, cv, requires_grad: bool=False) -> np.array:
-        """Get current value of KDE from Gaussian hills
+        """Get normalized value of gaussian hills
 
         Args:
-            cv: value of CV where the KDE should be evaluated
-            requires_grad: if True, gradient of KDE is returned as second argument
+            cv: value of CV where the kernels should be evaluated
+            requires_grad: if True, accumulated gradient of KDE is returned as second argument
+
+        Returns:
+            gaussians: values of gaussians at CV
+            kde_derivative: derivative of KDE, only if requires_grad
         """
 
         if len(self.kernel_center) == 0:
@@ -254,15 +285,15 @@ class OPES_MINIMAL(EnhancedSampling):
         for i in range(self.ncoords):
             s_diff[:, i] = correct_periodicity(s_diff[:, i], self.periodicity[i])
 
-        # Calculate values of Gaussians at center of kernel currently in loop and sum them
-        kde = np.asarray(self.kernel_height) / KDE_norm * np.exp(-0.5 * np.sum(
+        # evaluate values of kernels at cv
+        gaussians = np.asarray(self.kernel_height) / KDE_norm * np.exp(-0.5 * np.sum(
             np.square(np.divide(s_diff, np.asarray(self.kernel_std))), axis=1)
         ) 
         if requires_grad:
-            kde_derivative = np.sum(-kde * np.divide(s_diff, np.square(np.asarray(self.kernel_std))).T, axis=1,)
-            return kde, kde_derivative
+            kde_derivative = np.sum(-gaussians * np.divide(s_diff, np.square(np.asarray(self.kernel_std))).T, axis=1,)
+            return gaussians, kde_derivative
 
-        return kde
+        return gaussians
 
     def update_kde(self, cv):
         """on-the-fly update of kernel density estimation of probability density along CVs
@@ -346,7 +377,7 @@ class OPES_MINIMAL(EnhancedSampling):
             if not self.recursive_merge:
                 break
 
-        # Append final merged kernel or if no merging occurred just the new kernel to delta list
+        # Append final kernel delta list
         self.delta_kernel_height.append(h_new)
         self.delta_kernel_center.append(s_new)
         self.delta_kernel_sigma.append(std_new)
@@ -434,6 +465,8 @@ class OPES_MINIMAL(EnhancedSampling):
         KDE_norm = self.sum_weights if not self.explore else self.n
 
         if self.approximate_norm and N > 10:
+            # approximate norm factor to avoid O(N_kernel^2) scaling of exact evaluation
+
             delta_uprob = 0.0
             for j, s in enumerate(self.delta_kernel_center):
 
@@ -473,7 +506,7 @@ class OPES_MINIMAL(EnhancedSampling):
             norm_factor = new_uprob / N / KDE_norm
 
         else:
-            # exact norm factor, slow in long run as O(N_kernels^2)!
+            # analytical calculation of norm factor, inefficient for high number of kernels
             uprob = 0.0
             for s in self.kernel_center:
                 sum_gaussians = np.sum(self.calc_gaussians(s))
