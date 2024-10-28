@@ -13,13 +13,13 @@ class EnhancedSampling(ABC):
     """Abstract class for molecular dynamics based sampling algorithms
 
     Args:
-        md: Object of the MD Inteface
+        md: Object of the MD Interface
         cv_def: definition of the Collective Variable (CV) (see adaptive_sampling.colvars)
             [["cv_type", [atom_indices], minimum, maximum, bin_width], [possible second dimension]]
-        equil_temp: equillibrium temperature of MD
+        equil_temp: equilibrium temperature of MD
         verbose: print verbose information
-        kinetice: calculate necessary data to obtain kinetics of reaction
-        f_conf: force constant for confinment of CVs to the range of interest with harmonic walls
+        kinetics: calculate necessary data to obtain kinetics of reaction
+        f_conf: force constant for confinement of CVs to the range of interest with harmonic walls
         output_freq: frequency in steps for writing outputs
         multiple_walker: share bias with other simulations via buffer file
         periodicity: periodicity of CVs, [[lower_boundary0, upper_boundary0], ...]
@@ -42,7 +42,7 @@ class EnhancedSampling(ABC):
 
         self.the_md = md
         self.the_cv = CV(self.the_md, requires_grad=True)
-        self.out_freq = output_freq
+        self.out_freq = int(output_freq)
         self.equil_temp = equil_temp
         self.verbose = verbose
         self.shared = multiple_walker

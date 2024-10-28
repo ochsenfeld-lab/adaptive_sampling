@@ -112,6 +112,8 @@ class AdaptiveSamplingOpenMM:
             sampling_algorithm: sampling algorithm from `adaptive_sampling.sampling_tools`
         """
         self.the_bias = sampling_algorithm
+        if not hasattr(self.the_bias, "__len__"):
+            self.the_bias = [self.the_bias]
 
     def run(self, nsteps: int = 1, update_bias_freq: int = 1, **kwargs):
         """perform MD steps
@@ -125,8 +127,10 @@ class AdaptiveSamplingOpenMM:
         for i in range(int(nsteps / update_bias_freq)):
 
             # update bias force
-            if hasattr(self, "the_bias"):
-                bias_force = self.the_bias.step_bias(**kwargs).reshape((self.natoms, 3))
+            if hasattr(self, "the_bias"):                    
+                bias_force = np.zeros_like(self.coords).reshape((self.natoms,3))
+                for bias in self.the_bias:
+                    bias_force += bias.step_bias(**kwargs).reshape((self.natoms, 3))
                 for i, idx in enumerate(self.cv_atoms):
                     bias_force[idx] *= atomic_to_kJmol / BOHR_to_NANOMETER
                     self.bias_force.setParticleParameters(

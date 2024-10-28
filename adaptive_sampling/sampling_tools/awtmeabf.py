@@ -14,7 +14,7 @@ class aWTMeABF(WTMeABF, aMD, EnhancedSampling):
 
     The collective variable (CV) is coupled to a fictitious particle with an harmonic force.
     The dynamics of the fictitious particel is biased using a combination of ABF and metadynamics.
-    The dynamics of the pysical system is biased with CV-independend an GaMD boost potential
+    The dynamics of the pysical system is biased with an CV-independend boost potential
 
     Args:
         ext_sigma: thermal width of coupling between collective and extended variable

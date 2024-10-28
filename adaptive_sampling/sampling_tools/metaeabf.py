@@ -13,17 +13,17 @@ class WTMeABF(eABF, WTM, EnhancedSampling):
        see: Fu et. al., J. Phys. Chem. Lett. (2018); https://doi.org/10.1021/acs.jpclett.8b01994
 
     The collective variable is coupled to a fictitious particle with an harmonic force.
-    The dynamics of the fictitious particel is biased using a combination of ABF and Metadynamics.
+    The dynamics of the fictitious particle is biased using a combination of ABF and Metadynamics.
 
     Args:
         ext_sigma: thermal width of coupling between collective and extended variable
         ext_mass: mass of extended variable in atomic units
         hill_height: height of Gaussian hills in kJ/mol
         hill_std: standard deviation of Gaussian hills in units of the CV (can be Bohr, Degree, or None)
-        md: Object of the MD Inteface
+        md: Object of the MD Interface
         cv_def: definition of the Collective Variable (CV) (see adaptive_sampling.colvars)
                 [["cv_type", [atom_indices], minimum, maximum, bin_width], [possible second dimension]]
-        friction: friction coefficient for Lagevin dynamics of the extended-system
+        friction: friction coefficient for Langevin dynamics of the extended-system
         seed_in: random seed for Langevin dynamics of extended-system
         nfull: Number of force samples per bin where full bias is applied,
                if nsamples < nfull the bias force is scaled down by nsamples/nfull
@@ -31,16 +31,17 @@ class WTMeABF(eABF, WTM, EnhancedSampling):
         well_tempered_temp: effective temperature for WTM, if None, hills are not scaled down (normal metadynamics)
         force_from_grid: forces are accumulated on grid for performance,
                          if False, forces are calculated from sum of Gaussians in every step
-        equil_temp: equillibrium temperature of MD
+        equil_temp: equilibrium temperature of MD
         verbose: print verbose information
-        kinetice: calculate necessary data to obtain kinetics of reaction
+        kinetic: calculate necessary data to obtain kinetics of reaction
         f_conf: force constant for confinement of system to the range of interest in CV space
         output_freq: frequency in steps for writing outputs
 
     """
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args, apply_abf=True, **kwargs):
         super().__init__(*args, **kwargs)
+        self.apply_abf = apply_abf
         self.abf_forces = np.zeros_like(self.bias)
 
     def step_bias(
@@ -59,7 +60,7 @@ class WTMeABF(eABF, WTM, EnhancedSampling):
         Args:
             write_output: if on-the-fly free energy estimate and restart files should be written
             write_traj: if CV and extended system trajectory file should be written
-            stabilize: if stabilisation algorithm should be applied for discontinous CVs
+            stabilize: if stabilisation algorithm should be applied for discontinuous CVs
             stabilizer_threshold: treshold for stabilisation of extended system
             output_file: name of the output file
             traj_file: name of the trajectory file
@@ -88,30 +89,33 @@ class WTMeABF(eABF, WTM, EnhancedSampling):
 
             for i in range(self.ncoords):
 
-                # linear ramp function
-                ramp = (
-                    1.0
-                    if self.ext_hist[bin_la[1], bin_la[0]] > self.nfull
-                    else self.ext_hist[bin_la[1], bin_la[0]] / self.nfull
-                )
+                if self.apply_abf:
+                    # linear ramp function
+                    ramp = (
+                        1.0
+                        if self.ext_hist[bin_la[1], bin_la[0]] > self.nfull
+                        else self.ext_hist[bin_la[1], bin_la[0]] / self.nfull
+                    )
 
-                # apply bias force on extended variable
-                force_sample[i] = self.ext_k[i] * diff(
-                    self.ext_coords[i], xi[i], self.periodicity[i]
-                )
-                (
-                    self.abf_forces[i][bin_la[1], bin_la[0]],
-                    self.m2_force[i][bin_la[1], bin_la[0]],
-                    self.var_force[i][bin_la[1], bin_la[0]],
-                ) = welford_var(
-                    self.ext_hist[bin_la[1], bin_la[0]],
-                    self.abf_forces[i][bin_la[1], bin_la[0]],
-                    self.m2_force[i][bin_la[1], bin_la[0]],
-                    force_sample[i],
-                )
-                self.ext_forces -= (
-                    ramp * self.abf_forces[i][bin_la[1], bin_la[0]] - mtd_forces[i]
-                )
+                    # apply bias force on extended variable
+                    force_sample[i] = self.ext_k[i] * diff(
+                        self.ext_coords[i], xi[i], self.periodicity[i]
+                    )
+                    (
+                        self.abf_forces[i][bin_la[1], bin_la[0]],
+                        self.m2_force[i][bin_la[1], bin_la[0]],
+                        self.var_force[i][bin_la[1], bin_la[0]],
+                    ) = welford_var(
+                        self.ext_hist[bin_la[1], bin_la[0]],
+                        self.abf_forces[i][bin_la[1], bin_la[0]],
+                        self.m2_force[i][bin_la[1], bin_la[0]],
+                        force_sample[i],
+                    )
+                    self.ext_forces -= (
+                        ramp * self.abf_forces[i][bin_la[1], bin_la[0]] - mtd_forces[i]
+                    )
+                else:
+                    self.ext_forces += mtd_forces[i]
 
         # xi-conditioned accumulators for CZAR
         if self._check_boundaries(xi):

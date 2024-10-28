@@ -145,6 +145,7 @@ class OPESeABF(eABF, OPES, EnhancedSampling):
                         )
                 else:
                     self.ext_forces += mtd_forces[i]
+
         # xi-conditioned accumulators for CZAR
         if self._check_boundaries(xi):
             bink = self.get_index(xi)

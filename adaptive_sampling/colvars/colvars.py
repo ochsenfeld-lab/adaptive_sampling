@@ -16,7 +16,7 @@ class CV:
     Args:
         the_mol: Molecule Object containing masses (natoms) and coords (3*natoms)
         requires_grad: if True, partial derivatives of CVs with respect
-                                to atom coordinats are computed
+                                to atom coordinates are computed
                                 and saved to self.gradient
     """
 
@@ -104,7 +104,7 @@ class CV:
 
         Args:
             cv_def (list):
-                distance beteen atoms: [ind0, ind1]
+                distance between atoms: [ind0, ind1]
                 distance between mass centers: [[ind00, ind01, ...], [ind10, ind11, ...]]
 
         Returns:
@@ -278,7 +278,7 @@ class CV:
 
         Args:
             cv_def (list):
-                distorted distance beteen atoms: [ind0, ind1]
+                distorted distance between atoms: [ind0, ind1]
                 distorted distance between mass centers: [[ind00, ind01, ...],
                                                           [ind10, ind11, ...]]
             r_0 (float): distance in Angstrom at which the CN function has the value 0.5
@@ -324,7 +324,7 @@ class CV:
         Args:
             cv_def (list):
                 [[idx0, idxA], [idx1, idxA], ..., r_eq, exp_nom, exp_denom]
-                with indices of cordinated atoms ind0, ind1, ...,
+                with indices of coordinated atoms ind0, ind1, ...,
                 distance r_0 in Angstrom (bonds smaller than r_0 are coordinated),
                 and exponent of the nominator and denominator exp_nom and exp_denom
         """
@@ -362,7 +362,7 @@ class CV:
 
         Args:
             cv_def (list):
-                list of distances beteen atoms: [[ind0, ind1], [], ...]
+                list of distances between atoms: [[ind0, ind1], [], ...]
 
         Returns:
             distorted distance (float): computed distance
@@ -394,7 +394,7 @@ class CV:
         self,
         cv_def: list,
     ):
-        """Electrostatic potential on spezific Atom. Environmental CV to treat reorganization of polar solvent or protein sites
+        """Electrostatic potential on specific Atom. Environmental CV to treat reorganization of polar solvent or protein sites
         needs a file called `charges.npy` that contains the charges of all atoms in cv_def
 
         Args:

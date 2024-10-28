@@ -275,7 +275,7 @@ def pmf_from_weights(
     equil_temp: float = 300.0,
     dx: np.ndarray = None,
 ) -> Tuple[np.ndarray, np.ndarray]:
-    """Get Potential of Mean Force (PMF) from statistical weigths obtained by MBAR
+    """Get Potential of Mean Force (PMF) from statistical weights obtained by MBAR
        Note: for higher dimensional PMFs, they need to be reshaped,
        this function returns a flattened version
 

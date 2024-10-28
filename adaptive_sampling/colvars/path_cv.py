@@ -20,6 +20,7 @@ class PathCV:
         reparam_tol: Tolerance for reparametrization of path to ensure equidistant nodes
         coordinate_system: coordinate system for calculation of PathCV
             available: `cartesian`, `zmatrix` or `cv_space`
+        periodicity: if `coordinate_system= 'cv_space'`, periodicity of CVs can be specified
         metric: Metric for calculation of distance of points
             `RMSD`: Root mean square deviation
             `MSD`: Mean square deviation
@@ -34,6 +35,7 @@ class PathCV:
         walkers: list of paths to `local_path_file` of multiple walkers contributing to path updates (if None: single walker)
         local_path_file: filename to dump path information of local simulation to share path between multiple walkers
         requires_z: if distance to path should be calculated and stored for confinement to path
+        requires_grad: of gradient of distance to path should be calculated
         device: desired device of torch tensors
         ndim: number of dimensions (2 for 2D test potentials, 3 else)
         verbose: if verbose information should be printed
@@ -48,6 +50,7 @@ class PathCV:
         reparam_steps: int = 1,
         reparam_tol: float = 0.01,
         coordinate_system: str = "Cartesian",
+        periodicity: list = None,
         metric: str = "RMSD",
         reduce_path: bool = True,
         selected_nodes: list = None,
@@ -57,6 +60,7 @@ class PathCV:
         walkers: List[str] = None,
         local_path_file: str = "local_path_data",
         requires_z: bool = False,
+        requires_grad: bool = True,
         device: str = "cpu",
         ndim: int = 3,
         verbose: bool = False,
@@ -71,6 +75,7 @@ class PathCV:
         self.reparam_steps = reparam_steps
         self.reparam_tol = reparam_tol
         self.coordinates = coordinate_system
+        self.periodicity = periodicity
         self.metric = metric
         self.adaptive = adaptive
         self.update_interval = update_interval
@@ -78,6 +83,7 @@ class PathCV:
         self.walkers = walkers
         self.local_path_file = local_path_file
         self.requires_z = requires_z
+        self.requires_grad = requires_grad
         self.device = device
         self.ndim = ndim
         self.verbose = verbose
@@ -201,25 +207,26 @@ class PathCV:
 
         return self.path_cv
 
-    def calculate_gpath(self, coords: torch.tensor) -> torch.tensor:
+    def calculate_gpath(self, coords: torch.tensor, distance_threshold: float=None) -> torch.tensor:
         """Calculate geometric PathCV according to
         Leines et al., Phys. Ref. Lett. (2012): https://doi.org/10.1103/PhysRevLett.109.020601
 
         Args:
             coords: cartesian coordinates
+            distance_threshold: only include samples in adaptive updates where distance to path is below threshold
 
         Returns:
             path_cv: progress anlong path in range [0,1]
         """
         if self.path[0].shape == coords.shape:
-            z = torch.clone(coords).to(self.device, non_blocking=True)
+            self.z = torch.clone(coords).to(self.device, non_blocking=True)
         else:
-            z = convert_coordinate_system(
+            self.z = convert_coordinate_system(
                 coords, self.active, coord_system=self.coordinates, ndim=self.ndim
             ).to(self.device, non_blocking=True)
 
-        dists = self._get_distance_to_path(z)
-        idx_nodemin = self._get_closest_nodes(z, dists, regulize=False)
+        dists = self._get_distance_to_path(self.z)
+        idx_nodemin = self._get_closest_nodes(self.z, dists, regulize=False)
 
         # add boundary nodes to `self.path`
         self.path.insert(0, self.boundary_nodes[0])
@@ -236,8 +243,8 @@ class PathCV:
         idx_nodemin[1] = idx_nodemin[0] - isign
         idx_nodemin.append(idx_nodemin[0] + isign)
 
-        v1 = self.path[idx_nodemin[0]] - z
-        v3 = z - self.path[idx_nodemin[1]]
+        v1 = self.path[idx_nodemin[0]] - self.z
+        v3 = self.z - self.path[idx_nodemin[1]]
 
         # if idx_nodemin[2] is out of bounds, use idx_nodemin[1]
         if idx_nodemin[2] < 0 or idx_nodemin[2] > self.nnodes:
@@ -261,7 +268,7 @@ class PathCV:
 
         if self.requires_z or self.adaptive:
             v = (
-                z
+                self.z
                 - self.path[idx_nodemin[0]]
                 - dx * (self.path[idx_nodemin[0]] - self.path[idx_nodemin[1]])
             )
@@ -274,13 +281,17 @@ class PathCV:
         # get perpendicular `z` component (distance to path)
         if self.requires_z:
             self.path_z = torch.linalg.norm(v)
-            self.grad_z = torch.autograd.grad(
-                self.path_z,
-                coords,
-                allow_unused=True,
-                retain_graph=True,
-            )[0]
-            self.grad_z = self.grad_z.detach().numpy()
+            if self.requires_grad:
+                self.grad_z = torch.autograd.grad(
+                    self.path_z,
+                    coords,
+                    allow_unused=True,
+                    retain_graph=True,
+                )[0]
+                self.grad_z = self.grad_z.detach().numpy()
+
+            if distance_threshold and self.path_z > distance_threshold:
+                return self.path_cv
 
         # accumulate average distance from path for path update
         if self.adaptive:
@@ -304,7 +315,7 @@ class PathCV:
                 self.weights[idx_nodemin[1]] *= self.fade_factor
                 self.weights[idx_nodemin[1]] += w2
 
-            self.update_path(z, q=None)
+            self.update_path(self.z, q=None)
 
         return self.path_cv
 
@@ -320,13 +331,13 @@ class PathCV:
         if q != None:
             self.n_updates += 1
             s = self._project_coords_on_line(z, q)
-            dist_ij = self.get_distance(self.path[0], self.path[1], metric=self.metric)
+            dist_ij = self.get_distance(self.path[0], self.path[1], metric=self.metric, periodicity=self.periodicity)
             for j, _ in enumerate(self.path[1:-1], start=1):
                 w = max(
                     [
                         0,
                         1
-                        - self.get_distance(self.path[j], s, metric=self.metric)
+                        - self.get_distance(self.path[j], s, metric=self.metric, periodicity=self.periodicity)
                         / dist_ij,
                     ]
                 )
@@ -515,12 +526,12 @@ class PathCV:
         d = []
         for i in range(self.nnodes):
             self.path[i] = self.path[i].detach().to(self.device)
-            d.append(self.get_distance(z, self.path[i], metric=self.metric))
+            d.append(self.get_distance(z, self.path[i], metric=self.metric, periodicity=self.periodicity))
         return d
 
     @staticmethod
     def get_distance(
-        coords: torch.tensor, reference: torch.tensor, metric: str = "RMSD"
+        coords: torch.tensor, reference: torch.tensor, metric: str = "RMSD", periodicity: list = None
     ) -> torch.tensor:
         """Get distance between coordinates and reference calculated by `metric`
 
@@ -540,10 +551,10 @@ class PathCV:
             d: distance between coords and reference in `self.metric`
         """
         if metric.lower() == "rmsd":
-            d = get_rmsd(coords, reference)
+            d = get_rmsd(coords, reference, periodicity=periodicity)
 
         elif metric.lower() == "msd":
-            d = get_msd(coords, reference)
+            d = get_msd(coords, reference, periodicity=periodicity)
 
         elif metric.lower() == "kmsd":
             coords_fitted, reference_fitted = kabsch_rmsd(
@@ -555,7 +566,12 @@ class PathCV:
             d = kabsch_rmsd(coords, reference)
 
         elif metric.lower() == "distance":
-            d = torch.linalg.norm(coords - reference)
+            diff = coords - reference 
+            if periodicity:
+                from ..sampling_tools.utils import correct_periodicity
+                for i, d in enumerate(diff):
+                    diff[i] = correct_periodicity(diff[i], periodicity=periodicity[i])
+            d = torch.linalg.norm(diff)
 
         else:
             raise NotImplementedError(
