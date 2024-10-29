@@ -5,13 +5,43 @@ from .utils import correct_periodicity
 from .utils import welford_var
 
 class OPES(EnhancedSampling):
+    """on-the-fly probability enhanced sampling
 
+    References: 
+        OPES: M. Invernizzi, M. Parrinello; J. Phys. Chem. 2020; <https://doi.org/10.1021/acs.jpclett.0c00497>
+        OPES Explore: M. Invernizzi, M. Parrinello; J. Chem. Theory. Comput. 2022; <https://doi.org/10.1021/acs.jctc.2c00152>
+
+    Args:
+        md: Object of the MD Interface
+        cv_def: definition of the Collective Variable (CV) (see adaptive_sampling.colvars)
+                [["cv_type", [atom_indices], minimum, maximum, bin_width], [possible second dimension]]
+        kernel_std: standard deviation of first kernel, 
+                    if None, kernel_std will be estimated from initial MD with `adaptive_std_freq*update_freq` steps
+        adaptive_std: if adaptive kernel standad deviation is enabled
+        adaptive_std_freq: time for estimation of standard deviation in units of `update_freq`
+        bandwidth_rescaling: if True, `kernel_std` shrinks during simulation to refine KDE
+        explore: enables the OPES explore mode, 
+        energy_barr: free energy barrier that the bias should help to overcome [kJ/mol]
+        update_freq: interval of md steps in which new kernels should be created
+        approximate_norm: enables linear scaling approximation of norm factor
+        merge_threshold: threshold distance for kde-merging in units of std, "np.inf" disables merging
+        recursive_merge: enables recursive merging until seperation of all kernels is above threshold distance
+        bias_factor: bias factor of target distribution, default is `beta * energy_barr` 
+        numerical_forces: read forces from grid instead of calculating sum of kernels in every step, only for 1D CVs
+        equil_temp: equilibrium temperature of MD
+        verbose: print verbose information
+        kinetics: calculate necessary data to obtain kinetics of reaction
+        f_conf: force constant for confinement of CVs to the range of interest with harmonic walls
+        output_freq: frequency in steps for writing outputs
+        periodicity: periodicity of CVs, [[lower_boundary0, upper_boundary0], ...]        
+    """
     def __init__(
         self,
         *args,
         kernel_std: np.array = None,
         adaptive_std: bool=True,
         adaptive_std_freq: int=10,
+        bandwidth_rescaling: bool=True,
         explore: bool=False,
         energy_barr: float = 20.0,
         update_freq: int = 100,
@@ -24,7 +54,7 @@ class OPES(EnhancedSampling):
     ):
         super().__init__(*args, **kwargs)
 
-        if kernel_std is None or kernel_std[0] is None:
+        if kernel_std is None:
             if self.verbose:
                 print(f" >>> INFO: estimating kernel standard deviation from initial unbiased MD ({update_freq*adaptive_std_freq} steps)")
         self.adaptive_std = adaptive_std
@@ -32,13 +62,16 @@ class OPES(EnhancedSampling):
         self.adaptive_counter = 0
         self.welford_m2 = np.zeros(self.ncoords)
         self.welford_mean = np.zeros(self.ncoords)        
+        self.initial_sigma_estimate = False
         if self.adaptive_std or not kernel_std:
             self.sigma_0 = np.full((self.ncoords,), np.nan)
+            self.initial_sigma_estimate = True
         elif not hasattr(kernel_std, "__len__"):
             self.sigma_0 = np.asarray([kernel_std])
         else:
             self.sigma_0 = np.asarray(kernel_std) 
-        
+        self.bandwidth_rescaling = bandwidth_rescaling
+
         self.explore = explore
         self.update_freq = update_freq
         self.approximate_norm = approximate_norm
@@ -152,8 +185,7 @@ class OPES(EnhancedSampling):
         else:
             return np.zeros_like(self.grid)
         
-        prob_dist /= self.norm_factor
-        self.bias_potential = (np.log(prob_dist + self.epsilon) / self.beta) * self.gamma_prefac
+        self.bias_potential = self.calc_potential(prob_dist)
         pmf = -self.bias_potential / self.gamma_prefac
         pmf -= pmf.min()
         return pmf
@@ -226,34 +258,22 @@ class OPES(EnhancedSampling):
         Returns:
             bias force: len(ncoords) array of bias forces
         """
-        # estimate initial `sigma_0` from MD
-        if np.isnan(self.sigma_0)[0] and self.md_state.step < self.adaptive_std_stride:
-            self.adaptive_counter += 1
-            tau = self.adaptive_std_stride
-            if self.adaptive_counter < self.adaptive_std_stride:
-                tau = self.adaptive_counter
-            self.welford_mean, self.welford_m2, self.welford_var = welford_var(
-                self.md_state.step, self.welford_mean, self.welford_m2, cv, tau
-            )
+        # kernel `sigma_0` estimate from MD
+        if self.initial_sigma_estimate and self.md_state.step < self.adaptive_std_stride:
+            self.estimate_kernel_std(cv)
             return np.zeros_like(self.the_md.coords)        
-        elif self.md_state.step == self.adaptive_std_stride:
-            self.sigma_0 = np.sqrt(self.welford_var)
         
-        # adaptive sigma estimation
-        if self.adaptive_std:
-            self.adaptive_counter += 1
-            tau = self.adaptive_std_stride
-            if self.adaptive_counter < self.adaptive_std_stride:
-                tau = self.adaptive_counter
-            self.welford_mean, self.welford_m2, self.welford_var = welford_var(
-                self.md_state.step, self.welford_mean, self.welford_m2, cv, tau
-            )
-            factor = self.gamma if not self.explore else 1.0
-            self.sigma_0 = np.sqrt(self.welford_var / factor)
+        elif self.initial_sigma_estimate or self.adaptive_std:
+            self.sigma_0 = self.estimate_kernel_std(cv)
+            if self.initial_sigma_estimate and self.verbose:
+                print(f" >>> INFO: kernel standard deviation for OPES is set to {self.sigma_0}")
+            self.initial_sigma_estimate = False 
 
-        # On-the-fly KDE estimate of probability density 
+        # OPES KDE update
         if self.md_state.step % self.update_freq == 0:
             self.update_kde(cv)
+            #if self.verbose:
+            #    print(f" >>> INFO: OPES KDE updated, N_kernels={len(self.kernel_height)}")
 
         if self.numerical_forces and self._check_boundaries(cv):
             # read numerical bias potential and forces from grid
@@ -329,12 +349,12 @@ class OPES(EnhancedSampling):
             else self.n           
         )
 
-        if len(self.kernel_std) > 0:
+        if self.bandwidth_rescaling and len(self.kernel_std) > 0:
             sigma_i = self.sigma_0 * np.power(
                 (self.n_eff * (self.ncoords + 2.) / 4.), -1. / (self.ncoords + 4.)
             )
-        else: 
-            sigma_i = self.sigma_0
+        else:
+            sigma_i = np.copy(self.sigma_0)
 
         height = (
             weight_coeff * np.prod(self.sigma_0 / sigma_i) if not self.explore else 1.0
@@ -518,7 +538,21 @@ class OPES(EnhancedSampling):
             self.uprob_old = uprob 
             norm_factor = uprob / N / KDE_norm
         return norm_factor
-    
+
+    def estimate_kernel_std(self, cv):
+        """Adaptive estimate of optimal kernel standard deviation from trajectory"""
+        self.adaptive_counter += 1
+        tau = self.adaptive_std_stride
+        if self.adaptive_counter < self.adaptive_std_stride:
+            tau = self.adaptive_counter
+        self.welford_mean, self.welford_m2, self.welford_var = welford_var(
+            self.md_state.step, self.welford_mean, self.welford_m2, cv, tau
+        ) 
+        return (np.sqrt(self.welford_var / self.gamma) 
+            if not self.explore 
+            else np.sqrt(self.welford_var)
+        )
+
     def calc_potential(self, prob_dist: float):
         """calc the OPES bias potential from the probability density"""
         potential = (self.gamma_prefac / self.beta) * np.log(

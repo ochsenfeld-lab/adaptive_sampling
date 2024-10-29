@@ -19,33 +19,31 @@ class OPESeABF(eABF, OPES, EnhancedSampling):
     Args:
         ext_sigma: thermal width of coupling between collective and extended variable
         ext_mass: mass of extended variable in atomic units
-        md: Object of the MD Inteface
+        md: Object of the MD Interface
         cv_def: definition of the Collective Variable (CV) (see adaptive_sampling.colvars)
                 [["cv_type", [atom_indices], minimum, maximum, bin_width], [possible second dimension]]
-        friction: friction coefficient for Lagevin dynamics of the extended-system
+        friction: friction coefficient for Langevin dynamics of the extended-system
         seed_in: random seed for Langevin dynamics of extended-system
         nfull: Number of force samples per bin where full bias is applied,
-               if nsamples nfull the bias force is scaled down by nsamples/nfull
-        equil_temp: equillibrium temperature of MD
-        verbose: print verbose information
-        kinetice: calculate necessary data to obtain kinetics of reaction
-        f_conf: force constant for confinement of system to the range of interest in CV space
-        output_freq: frequency in steps for writing outputs
-        kernel_std: standard deviation of first kernel
-        explore: enables exploration mode
+               if nsamples < nfull the bias force is scaled down by nsamples/nfull
+        kernel_std: standard deviation of first kernel, 
+                    if None, kernel_std will be estimated from initial MD with `adaptive_std_freq*update_freq` steps
+        adaptive_std: if adaptive kernel standad deviation is enabled
+        adaptive_std_freq: time for estimation of standard deviation in units of `update_freq`
+        explore: enables the OPES explore mode, 
         energy_barr: free energy barrier that the bias should help to overcome [kJ/mol]
-        update_freq: interval of md steps in which new kernels should be
-        approximate_norm: enables approximation of norm factor
-        exact_norm: enables exact calculation of norm factor, if both are enabled, exact is used every 100 updates
+        update_freq: interval of md steps in which new kernels should be created
+        approximate_norm: enables linear scaling approximation of norm factor
         merge_threshold: threshold distance for kde-merging in units of std, "np.inf" disables merging
-        recursion_merge: enables recursive merging
-        bias_factor: allows setting a default bias factor instead of calculating it from energy barrier
-        print_pmf: enables calculation of pmf on the fly
-        adaptive_sigma: enables adaptive sigma calculation nontheless with rescaling
-        unbiased_time: time in update frequencies for unbiased estimation of sigma if no input is given
-        fixed_sigma: disables bandwidth rescaling and uses input sigma for all kernels
-        enable_eabf: enables eABF biasing, if False only OPES is applied
-
+        recursive_merge: enables recursive merging until seperation of all kernels is above threshold distance
+        bias_factor: bias factor of target distribution, default is `beta * energy_barr` 
+        numerical_forces: read forces from grid instead of calculating sum of kernels in every step, only for 1D CVs
+        equil_temp: equilibrium temperature of MD
+        verbose: print verbose information
+        kinetics: calculate necessary data to obtain kinetics of reaction
+        f_conf: force constant for confinement of CVs to the range of interest with harmonic walls
+        output_freq: frequency in steps for writing outputs
+        periodicity: periodicity of CVs, [[lower_boundary0, upper_boundary0], ...]   
     """
 
     def __init__(
