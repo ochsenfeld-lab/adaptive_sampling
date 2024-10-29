@@ -385,7 +385,7 @@ class OPES(EnhancedSampling):
         self.add_kernel(height, cv, sigma_i)
 
         # Calculate normalization factor
-        self.norm_factor = self.calc_norm_factor()
+        self.norm_factor = self.calc_norm_factor(approximate=self.approximate_norm)
         self.pmf = self.get_pmf()
         if self.numerical_forces:
             self.forces_numerical = np.gradient(self.bias_potential, self.grid[0])
@@ -500,22 +500,21 @@ class OPES(EnhancedSampling):
 
         return kernel_min_ind, min_distance
 
-    def calc_norm_factor(self):
+    def calc_norm_factor(self, approximate: bool=True):
         """Norm factor of probability density (configurational integral)
 
         Returns:
             norm_factor: normalization factor for probability density from kernels
         """
         N = len(self.kernel_center)
-        KDE_norm = self.sum_weights if not self.explore else self.n
 
-        if self.approximate_norm and N > 10:
+        if approximate and N > 10:
             # approximate norm factor to avoid O(N_kernel^2) scaling of exact evaluation
-            KDE_norm = self.sum_weights2 if not self.explore else self.n
+            KDE_norm = self.sum_weights if not self.explore else self.n
             delta_uprob = 0.0
             for j, s in enumerate(self.delta_kernel_center):
 
-                # Calculate change in probability for changed kernels by delta kernel list
+                # Calculate change in probability for changed kernels from delta kernel list
                 sign = -1.0 if self.delta_kernel_height[j] < 0 else 1.0
                 s_diff = s - np.asarray(self.kernel_center)
                 for i in range(self.ncoords):
