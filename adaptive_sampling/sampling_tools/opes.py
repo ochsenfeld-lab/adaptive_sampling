@@ -118,7 +118,7 @@ class OPES(EnhancedSampling):
 
         self.kernel_center = []
         self.kernel_height = []
-        self.kernel_std = []
+        self.kernel_std    = []
         self.bias_pot_traj = []
 
     def step_bias(
@@ -377,9 +377,9 @@ class OPES(EnhancedSampling):
         else:
             sigma_i = np.copy(self.sigma_0)
 
-        height = (
-            weight_coeff * np.prod(self.sigma_0 / sigma_i) if not self.explore else 1.0
-        )
+        height = np.prod(self.sigma_0 / sigma_i)
+        if not self.explore:
+            height *= weight_coeff
 
         # Kernel Density
         self.add_kernel(height, cv, sigma_i)
@@ -511,11 +511,9 @@ class OPES(EnhancedSampling):
 
         if self.approximate_norm and N > 10:
             # approximate norm factor to avoid O(N_kernel^2) scaling of exact evaluation
-
+            KDE_norm = self.sum_weights2 if not self.explore else self.n
             delta_uprob = 0.0
             for j, s in enumerate(self.delta_kernel_center):
-
-                KDE_norm = self.sum_weights
 
                 # Calculate change in probability for changed kernels by delta kernel list
                 sign = -1.0 if self.delta_kernel_height[j] < 0 else 1.0
@@ -554,7 +552,7 @@ class OPES(EnhancedSampling):
 
             new_uprob = self.uprob_old + delta_uprob
             self.uprob_old = new_uprob
-            norm_factor = new_uprob / N / KDE_norm
+            norm_factor = new_uprob / N 
 
         else:
             # analytical calculation of norm factor, inefficient for high number of kernels
@@ -563,7 +561,7 @@ class OPES(EnhancedSampling):
                 sum_gaussians = np.sum(self.calc_gaussians(s))
                 uprob += sum_gaussians
             self.uprob_old = uprob
-            norm_factor = uprob / N / KDE_norm
+            norm_factor = uprob / N 
         return norm_factor
 
     def estimate_kernel_std(self, cv):
