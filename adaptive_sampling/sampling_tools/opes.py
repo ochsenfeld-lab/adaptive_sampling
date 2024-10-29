@@ -507,10 +507,10 @@ class OPES(EnhancedSampling):
             norm_factor: normalization factor for probability density from kernels
         """
         N = len(self.kernel_center)
+        KDE_norm = self.sum_weights if not self.explore else self.n
 
         if approximate and N > 10:
             # approximate norm factor to avoid O(N_kernel^2) scaling of exact evaluation
-            KDE_norm = self.sum_weights if not self.explore else self.n
             delta_uprob = 0.0
             for j, s in enumerate(self.delta_kernel_center):
 
@@ -551,7 +551,7 @@ class OPES(EnhancedSampling):
 
             new_uprob = self.uprob_old + delta_uprob
             self.uprob_old = new_uprob
-            norm_factor = new_uprob / N 
+            norm_factor = new_uprob / N / KDE_norm
 
         else:
             # analytical calculation of norm factor, inefficient for high number of kernels
@@ -560,7 +560,7 @@ class OPES(EnhancedSampling):
                 sum_gaussians = np.sum(self.calc_gaussians(s))
                 uprob += sum_gaussians
             self.uprob_old = uprob
-            norm_factor = uprob / N 
+            norm_factor = uprob / N / KDE_norm 
         return norm_factor
 
     def estimate_kernel_std(self, cv):
