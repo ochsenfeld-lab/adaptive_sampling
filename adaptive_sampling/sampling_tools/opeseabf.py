@@ -51,7 +51,7 @@ class OPESeABF(eABF, OPES, EnhancedSampling):
     def __init__(
         self,
         *args,
-        enable_eabf: bool = False,
+        enable_eabf: bool = True,
         enable_opes: bool = True,
         **kwargs,
     ):
@@ -66,8 +66,6 @@ class OPESeABF(eABF, OPES, EnhancedSampling):
 
     def step_bias(
         self,
-        write_output: bool = False,
-        write_traj: bool = True,
         stabilize: bool = False,
         stabilizer_threshold: float = None,
         output_file: str = "eopesabf.out",
@@ -98,8 +96,8 @@ class OPESeABF(eABF, OPES, EnhancedSampling):
 
         self._propagate()
 
-        mtd_forces = (
-            self.opes_bias(np.copy(self.ext_coords)) / atomic_to_kJmol / kJ_to_kcal
+        opes_forces = (
+            self.opes_bias(np.copy(self.ext_coords)) 
         )
         bias_force = self._extended_dynamics(xi, delta_xi)  # , self.hill_std)
         force_sample = [0 for _ in range(2 * self.ncoords)]
@@ -137,14 +135,14 @@ class OPESeABF(eABF, OPES, EnhancedSampling):
                     if self.enable_opes:
                         self.ext_forces -= (
                             ramp * self.abf_forces[i][bin_la[1], bin_la[0]]
-                            - mtd_forces[i]
+                            - opes_forces[i]
                         )
                     else:
                         self.ext_forces -= (
                             ramp * self.abf_forces[i][bin_la[1], bin_la[0]]
                         )
                 else:
-                    self.ext_forces += mtd_forces[i]
+                    self.ext_forces += opes_forces[i]
 
         # xi-conditioned accumulators for CZAR
         if self._check_boundaries(xi):
@@ -173,22 +171,19 @@ class OPESeABF(eABF, OPES, EnhancedSampling):
         if self.md_state.step % self.out_freq == 0:
             # write output
 
-            if write_traj:
+            if traj_file:
                 self.write_traj(filename=traj_file)
-
-            if write_output:
+            if output_file:
                 self.get_pmf()
                 output = {"hist": self.histogram, "free energy": self.pmf}
                 for i in range(self.ncoords):
-                    output[f"opesforce {i}"] = mtd_forces[i]
+                    output[f"opesforce {i}"] = opes_forces[i]
                     output[f"abf force {i}"] = self.abf_forces[i]
                     output[f"czar force {i}"] = self.czar_force[i]
-                    # TODO: output variance of CZAR for error estimate
-                    # output[f"var force {i}"] = self.var_force[i]
                 output[f"opespot"] = self.potential
-
                 self.write_output(output, filename=output_file)
-                # self.write_restart(filename=restart_file)
+            if restart_file:
+                self.write_restart(filename=restart_file)
         return bias_force
 
     def reinit(self):
@@ -218,12 +213,12 @@ class OPESeABF(eABF, OPES, EnhancedSampling):
             abf_force=self.abf_forces,
             ext_momenta=self.ext_momenta,
             ext_coords=self.ext_coords,
-            sum_weigths=self.sum_weights,
-            sum_weigths_square=self.sum_weights_square,
+            sum_weights=self.sum_weights,
+            sum_weights_square=self.sum_weights2,
             norm_factor=self.norm_factor,
-            kernel_heigth=self.kernel_height,
-            kernel_center=self.kernel_center,
-            kernel_sigma=self.kernel_sigma,
+            height=self.kernel_height,
+            center=self.kernel_center,
+            sigma=self.kernel_std,
             explore=self.explore,
             n=self.n,
         )
@@ -240,24 +235,25 @@ class OPESeABF(eABF, OPES, EnhancedSampling):
         except:
             raise OSError(f" >>> fatal error: restart file {filename}.npz not found!")
 
+        # restart eABF 
         self.histogram = data["hist"]
         self.m2_force = data["m2"]
         self.ext_hist = data["ext_hist"]
         self.correction_czar = data["czar_corr"]
         self.abf_forces = data["abf_force"]
-        self.sum_weights = float(data["sum_weigths"])
-        self.sum_weights_square = float(data["sum_weigths_square"])
-        self.norm_factor = float(data["norm_factor"])
-        self.kernel_height = data["kernel_height"]
-        self.kernel_center = data["kernel_center"]
-        self.kernel_sigma = data["kernel_sigma"]
-        self.explore = data["explore"]
-        self.n = data["n"]
         if restart_ext_sys:
             self.ext_momenta = data["ext_momenta"]
             self.ext_coords = data["ext_coords"]
-
-        if self.verbose:
+        # restart OPES
+        self.sum_weights = float(data["sum_weights"])
+        self.sum_weights2 = float(data["sum_weights_square"])
+        self.norm_factor = float(data["norm_factor"])
+        self.kernel_height = data["height"]
+        self.kernel_center = data["center"]
+        self.kernel_std = data["sigma"]
+        self.explore = data["explore"]
+        self.n = data["n"]
+        if self.verbose and self.md_state.step % self.update_freq == 0:
             print(f" >>> Info: Adaptive sampling restarted from {filename}!")
 
     def write_traj(self, filename: str = "CV_traj.dat"):
@@ -275,50 +271,3 @@ class OPESeABF(eABF, OPES, EnhancedSampling):
         self.epot = [self.epot[-1]]
         self.temp = [self.temp[-1]]
 
-    def czar_pmf_history1d(
-        self,
-        grid: np.array,
-        cv_x: np.array,
-        cv_la: np.array,
-        ext_sigma: float,
-        pmf_hist_res: int = 100,
-    ):
-        """Calculate PMF history for CZAR
-
-        Args:
-            grid: grid for CZAR
-            cv_x: trajectory of CV
-            cv_la: extended system trajectory
-            ext_sigma: thermal width of coupling between CV and extended variable
-            pmf_hist_res: resolution of PMF history
-
-        Returns:
-            pmf_hist: PMF history
-            scattered_time: scattered time points
-            rho_hist: density history
-        """
-
-        dx = grid[1] - grid[0]
-        n = int(len(cv_x) / pmf_hist_res)
-        scattered_time = []
-        pmf_hist = []
-        rho_hist = []
-        print(
-            "-------------------------------------------------------------------------------"
-        )
-        print("Integrating CZAR...")
-        for j in range(pmf_hist_res):
-            if j % 10 == 0:
-                print(f"Progress: Iteration {j} of {pmf_hist_res}")
-            n_sample = j * n + n
-            scattered_time.append(n_sample)
-            czar_grad = czar(grid, cv_x[0:n_sample], cv_la[0:n_sample], ext_sigma)
-            pmf, rho = integrate(czar_grad, dx)
-            pmf_hist.append(pmf)
-            rho_hist.append(rho)
-        print("CZAR done!")
-        print(
-            "-------------------------------------------------------------------------------"
-        )
-
-        return pmf_hist, scattered_time, rho_hist

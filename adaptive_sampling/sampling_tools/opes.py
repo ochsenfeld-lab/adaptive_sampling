@@ -14,10 +14,9 @@ class OPES(EnhancedSampling):
         adaptive_std_freq: int=10,
         explore: bool=False,
         energy_barr: float = 20.0,
-        update_freq: int = 1000,
+        update_freq: int = 100,
         approximate_norm: bool = True,
-        exact_norm: bool = False,
-        merge_threshold: float = 1.0,
+        merge_threshold: float = np.inf,
         recursive_merge: bool = False,
         bias_factor: float = None,
         numerical_forces: bool = False,
@@ -25,14 +24,15 @@ class OPES(EnhancedSampling):
     ):
         super().__init__(*args, **kwargs)
 
-        if kernel_std is None:
-            print(f" >>> INFO: estimating kernel standard deviation from initial unbiased MD ({update_freq*adaptive_std_freq} steps)")
+        if kernel_std is None or kernel_std[0] is None:
+            if self.verbose:
+                print(f" >>> INFO: estimating kernel standard deviation from initial unbiased MD ({update_freq*adaptive_std_freq} steps)")
         self.adaptive_std = adaptive_std
-        self.adaptive_std_stride = adaptive_std_freq * self.update_freq
+        self.adaptive_std_stride = adaptive_std_freq * update_freq
         self.adaptive_counter = 0
         self.welford_m2 = np.zeros(self.ncoords)
         self.welford_mean = np.zeros(self.ncoords)        
-        if self.adaptive_std:
+        if self.adaptive_std or not kernel_std:
             self.sigma_0 = np.full((self.ncoords,), np.nan)
         elif not hasattr(kernel_std, "__len__"):
             self.sigma_0 = np.asarray([kernel_std])
@@ -42,7 +42,6 @@ class OPES(EnhancedSampling):
         self.explore = explore
         self.update_freq = update_freq
         self.approximate_norm = approximate_norm
-        self.exact_norm = exact_norm
         self.merge_threshold = merge_threshold
         self.merge = True
         if self.merge_threshold == np.inf:
@@ -78,6 +77,9 @@ class OPES(EnhancedSampling):
             if not self.explore 
             else self.n           
         )
+
+        self.bias_potential = np.zeros_like(self.histogram)
+        self.potential = 0.0
 
         self.kernel_center = []
         self.kernel_height = []
@@ -224,7 +226,8 @@ class OPES(EnhancedSampling):
         Returns:
             bias force: len(ncoords) array of bias forces
         """
-        if self.sigma_0[0]==None and self.md_state.step < self.adaptive_std_stride:
+        # estimate initial `sigma_0` from MD
+        if np.isnan(self.sigma_0)[0] and self.md_state.step < self.adaptive_std_stride:
             self.adaptive_counter += 1
             tau = self.adaptive_std_stride
             if self.adaptive_counter < self.adaptive_std_stride:
@@ -232,11 +235,11 @@ class OPES(EnhancedSampling):
             self.welford_mean, self.welford_m2, self.welford_var = welford_var(
                 self.md_state.step, self.welford_mean, self.welford_m2, cv, tau
             )
-            return np.zeros_like(self.the_md.coords)
-        
+            return np.zeros_like(self.the_md.coords)        
         elif self.md_state.step == self.adaptive_std_stride:
             self.sigma_0 = np.sqrt(self.welford_var)
         
+        # adaptive sigma estimation
         if self.adaptive_std:
             self.adaptive_counter += 1
             tau = self.adaptive_std_stride
@@ -248,6 +251,7 @@ class OPES(EnhancedSampling):
             factor = self.gamma if not self.explore else 1.0
             self.sigma_0 = np.sqrt(self.welford_var / factor)
 
+        # On-the-fly KDE estimate of probability density 
         if self.md_state.step % self.update_freq == 0:
             self.update_kde(cv)
 
