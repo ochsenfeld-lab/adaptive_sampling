@@ -26,24 +26,24 @@ class OPESeABF(eABF, OPES, EnhancedSampling):
         seed_in: random seed for Langevin dynamics of extended-system
         nfull: Number of force samples per bin where full bias is applied,
                if nsamples < nfull the bias force is scaled down by nsamples/nfull
-        kernel_std: standard deviation of first kernel, 
+        kernel_std: standard deviation of first kernel,
                     if None, kernel_std will be estimated from initial MD with `adaptive_std_freq*update_freq` steps
         adaptive_std: if adaptive kernel standad deviation is enabled
         adaptive_std_freq: time for estimation of standard deviation in units of `update_freq`
-        explore: enables the OPES explore mode, 
+        explore: enables the OPES explore mode,
         energy_barr: free energy barrier that the bias should help to overcome [kJ/mol]
         update_freq: interval of md steps in which new kernels should be created
         approximate_norm: enables linear scaling approximation of norm factor
         merge_threshold: threshold distance for kde-merging in units of std, "np.inf" disables merging
         recursive_merge: enables recursive merging until seperation of all kernels is above threshold distance
-        bias_factor: bias factor of target distribution, default is `beta * energy_barr` 
+        bias_factor: bias factor of target distribution, default is `beta * energy_barr`
         numerical_forces: read forces from grid instead of calculating sum of kernels in every step, only for 1D CVs
         equil_temp: equilibrium temperature of MD
         verbose: print verbose information
         kinetics: calculate necessary data to obtain kinetics of reaction
         f_conf: force constant for confinement of CVs to the range of interest with harmonic walls
         output_freq: frequency in steps for writing outputs
-        periodicity: periodicity of CVs, [[lower_boundary0, upper_boundary0], ...]   
+        periodicity: periodicity of CVs, [[lower_boundary0, upper_boundary0], ...]
     """
 
     def __init__(
@@ -94,9 +94,7 @@ class OPESeABF(eABF, OPES, EnhancedSampling):
 
         self._propagate()
 
-        opes_forces = (
-            self.opes_bias(np.copy(self.ext_coords)) 
-        )
+        opes_forces = self.opes_bias(np.copy(self.ext_coords))
         bias_force = self._extended_dynamics(xi, delta_xi)  # , self.hill_std)
         force_sample = [0 for _ in range(2 * self.ncoords)]
 
@@ -160,10 +158,12 @@ class OPESeABF(eABF, OPES, EnhancedSampling):
             self._kinetics(delta_xi)
 
         # Save values for traj
-        self.ext_traj = np.append(self.ext_traj, [self.ext_coords], axis=0)
-        self.traj = np.append(self.traj, [xi], axis=0)
-        self.epot.append(self.md_state.epot)
-        self.temp.append(self.md_state.temp)
+        if traj_file:
+            self.ext_traj = np.append(self.ext_traj, [self.ext_coords], axis=0)
+            self.traj = np.append(self.traj, [xi], axis=0)
+            self.epot.append(self.md_state.epot)
+            self.temp.append(self.md_state.temp)
+
         self._up_momenta()
 
         if self.md_state.step % self.out_freq == 0:
@@ -233,7 +233,7 @@ class OPESeABF(eABF, OPES, EnhancedSampling):
         except:
             raise OSError(f" >>> fatal error: restart file {filename}.npz not found!")
 
-        # restart eABF 
+        # restart eABF
         self.histogram = data["hist"]
         self.m2_force = data["m2"]
         self.ext_hist = data["ext_hist"]
@@ -268,4 +268,3 @@ class OPESeABF(eABF, OPES, EnhancedSampling):
         self.ext_traj = np.array([self.ext_traj[-1]])
         self.epot = [self.epot[-1]]
         self.temp = [self.temp[-1]]
-

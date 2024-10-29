@@ -104,7 +104,9 @@ def get_rmsd(
     ndim: int = 3,
 ):
     """root-mean-square deviation"""
-    return torch.sqrt(get_msd(V, W, periodicity=periodicity, indices=indices, ndom=ndim))
+    return torch.sqrt(
+        get_msd(V, W, periodicity=periodicity, indices=indices, ndom=ndim)
+    )
 
 
 def get_msd(
@@ -115,7 +117,7 @@ def get_msd(
     ndim: int = 3,
 ):
     """mean-square deviation"""
-    if len(V)%ndim == 0:
+    if len(V) % ndim == 0:
         V = V.view(int(torch.numel(V) / ndim), ndim).float()
         W = W.view(int(torch.numel(W) / ndim), ndim).float()
     if indices != None:

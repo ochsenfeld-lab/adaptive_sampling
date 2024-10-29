@@ -127,8 +127,8 @@ class AdaptiveSamplingOpenMM:
         for i in range(int(nsteps / update_bias_freq)):
 
             # update bias force
-            if hasattr(self, "the_bias"):                    
-                bias_force = np.zeros_like(self.coords).reshape((self.natoms,3))
+            if hasattr(self, "the_bias"):
+                bias_force = np.zeros_like(self.coords).reshape((self.natoms, 3))
                 for bias in self.the_bias:
                     bias_force += bias.step_bias(**kwargs).reshape((self.natoms, 3))
                 for i, idx in enumerate(self.cv_atoms):

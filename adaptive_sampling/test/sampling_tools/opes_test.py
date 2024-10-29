@@ -90,11 +90,15 @@ def test_calc_min_dist():
 
 
 def test_calc_pot():
-    assert the_bias.calc_pot(1.0)*atomic_to_kJmol*kJ_to_kcal == pytest.approx(-4.039473105783248)
+    assert the_bias.calc_pot(1.0) * atomic_to_kJmol * kJ_to_kcal == pytest.approx(
+        -4.039473105783248
+    )
 
 
 def test_calculate_forces():
-    assert the_bias.calculate_forces(1.0, 0.2)*atomic_to_kJmol*kJ_to_kcal == pytest.approx(0.07912062349399933)
+    assert the_bias.calculate_forces(
+        1.0, 0.2
+    ) * atomic_to_kJmol * kJ_to_kcal == pytest.approx(0.07912062349399933)
 
 
 def test_calc_norm_factor_exact():

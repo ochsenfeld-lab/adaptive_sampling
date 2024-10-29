@@ -207,7 +207,9 @@ class PathCV:
 
         return self.path_cv
 
-    def calculate_gpath(self, coords: torch.tensor, distance_threshold: float=None) -> torch.tensor:
+    def calculate_gpath(
+        self, coords: torch.tensor, distance_threshold: float = None
+    ) -> torch.tensor:
         """Calculate geometric PathCV according to
         Leines et al., Phys. Ref. Lett. (2012): https://doi.org/10.1103/PhysRevLett.109.020601
 
@@ -331,13 +333,23 @@ class PathCV:
         if q != None:
             self.n_updates += 1
             s = self._project_coords_on_line(z, q)
-            dist_ij = self.get_distance(self.path[0], self.path[1], metric=self.metric, periodicity=self.periodicity)
+            dist_ij = self.get_distance(
+                self.path[0],
+                self.path[1],
+                metric=self.metric,
+                periodicity=self.periodicity,
+            )
             for j, _ in enumerate(self.path[1:-1], start=1):
                 w = max(
                     [
                         0,
                         1
-                        - self.get_distance(self.path[j], s, metric=self.metric, periodicity=self.periodicity)
+                        - self.get_distance(
+                            self.path[j],
+                            s,
+                            metric=self.metric,
+                            periodicity=self.periodicity,
+                        )
                         / dist_ij,
                     ]
                 )
@@ -526,12 +538,19 @@ class PathCV:
         d = []
         for i in range(self.nnodes):
             self.path[i] = self.path[i].detach().to(self.device)
-            d.append(self.get_distance(z, self.path[i], metric=self.metric, periodicity=self.periodicity))
+            d.append(
+                self.get_distance(
+                    z, self.path[i], metric=self.metric, periodicity=self.periodicity
+                )
+            )
         return d
 
     @staticmethod
     def get_distance(
-        coords: torch.tensor, reference: torch.tensor, metric: str = "RMSD", periodicity: list = None
+        coords: torch.tensor,
+        reference: torch.tensor,
+        metric: str = "RMSD",
+        periodicity: list = None,
     ) -> torch.tensor:
         """Get distance between coordinates and reference calculated by `metric`
 
@@ -566,9 +585,10 @@ class PathCV:
             d = kabsch_rmsd(coords, reference)
 
         elif metric.lower() == "distance":
-            diff = coords - reference 
+            diff = coords - reference
             if periodicity:
                 from ..sampling_tools.utils import correct_periodicity
+
                 for i, d in enumerate(diff):
                     diff[i] = correct_periodicity(diff[i], periodicity=periodicity[i])
             d = torch.linalg.norm(diff)
