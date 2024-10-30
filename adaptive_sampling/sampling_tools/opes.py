@@ -56,26 +56,34 @@ class OPES(EnhancedSampling):
     ):
         super().__init__(*args, **kwargs)
 
-        if kernel_std is None:
-            if self.verbose:
-                print(
-                    f" >>> INFO: estimating kernel standard deviation from initial unbiased MD ({update_freq*adaptive_std_freq} steps)"
-                )
+        # kernel standard deviation
         self.adaptive_std = adaptive_std
         self.adaptive_std_stride = adaptive_std_freq * update_freq
         self.adaptive_counter = 0
         self.welford_m2 = np.zeros(self.ncoords)
         self.welford_mean = np.zeros(self.ncoords)
-        self.initial_sigma_estimate = False
-        if self.adaptive_std or not kernel_std:
-            self.sigma_0 = np.full((self.ncoords,), np.nan)
+
+        if not hasattr(kernel_std, "__len__") and not kernel_std:
             self.initial_sigma_estimate = True
+        elif any(std is None for std in kernel_std):
+            self.initial_sigma_estimate = True
+        else:
+            self.initial_sigma_estimate = False
+
+        if self.verbose and self.initial_sigma_estimate:
+            print(
+                f" >>> INFO: estimating kernel standard deviation from initial unbiased MD ({self.adaptive_std_stride} steps)"
+            )
+
+        if self.adaptive_std or self.initial_sigma_estimate:
+            self.sigma_0 = np.full((self.ncoords,), np.nan)
         elif not hasattr(kernel_std, "__len__"):
             self.sigma_0 = np.asarray([kernel_std])
         else:
             self.sigma_0 = np.asarray(kernel_std)
-        self.bandwidth_rescaling = bandwidth_rescaling
 
+        # other parameters
+        self.bandwidth_rescaling = bandwidth_rescaling
         self.explore = explore
         self.update_freq = update_freq
         self.approximate_norm = approximate_norm
@@ -99,6 +107,7 @@ class OPES(EnhancedSampling):
         )
         if self.gamma == np.inf:
             self.gamma_prefac = 1.0
+            self.gamma = 1.0
         else:
             self.gamma_prefac = self.gamma - 1 if self.explore else 1 - 1 / self.gamma
         self.epsilon = np.exp((-self.beta * self.energy_barr) / self.gamma_prefac)
@@ -186,7 +195,7 @@ class OPES(EnhancedSampling):
                 val_gaussians = self.calc_gaussians(cv)
                 prob_dist[0, i] = np.sum(val_gaussians)
         else:
-            return np.zeros_like(self.grid)
+            return np.zeros_like(self.histogram)
 
         self.bias_potential = self.calc_potential(prob_dist)
         pmf = -self.bias_potential / self.gamma_prefac
@@ -547,7 +556,7 @@ class OPES(EnhancedSampling):
                         )
                     )
                 )
-                delta_uprob += delta_sum_uprob
+                delta_uprob += delta_sum_uprob 
 
             new_uprob = self.uprob_old + delta_uprob
             self.uprob_old = new_uprob
