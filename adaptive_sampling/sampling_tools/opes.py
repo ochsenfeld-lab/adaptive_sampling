@@ -86,7 +86,7 @@ class OPES(EnhancedSampling):
         # other parameters
         self.explore = explore
         self.update_freq = update_freq
-        self.normfactor_method = approximate_norm
+        self.approximate_norm = approximate_norm
         self.merge_threshold = merge_threshold
         self.merge = True
         if self.merge_threshold == np.inf:
@@ -396,7 +396,7 @@ class OPES(EnhancedSampling):
         self.add_kernel(height, cv, sigma_i)
 
         # Calculate normalization factor
-        self.norm_factor = self.calc_norm_factor(method=self.normfactor_method)
+        self.norm_factor = self.calc_norm_factor(approximate=self.approximate_norm)
         self.pmf = self.get_pmf()
         if self.numerical_forces:
             self.forces_numerical = np.gradient(self.bias_potential, self.grid[0])
@@ -511,7 +511,7 @@ class OPES(EnhancedSampling):
 
         return kernel_min_ind, min_distance
 
-    def calc_norm_factor(self, method: str = None):
+    def calc_norm_factor(self, approximate: str = True):
         """Norm factor of probability density (configurational integral)
 
         Returns:
@@ -519,15 +519,7 @@ class OPES(EnhancedSampling):
         """
         N = len(self.kernel_center)
 
-        if method.lower() == "numerical":
-            prob_dist = np.zeros_like(self.grid)
-            for i, cv in enumerate(self.grid[0]):
-                val_gaussians = self.calc_gaussians(cv)
-                prob_dist[0, i] = np.sum(val_gaussians)
-            prob_dist /= self.KDE_norm
-            norm_factor = prob_dist.sum()
-
-        elif method.lower() == "approximate" and N > 10:
+        if approximate and N > 10:
             # approximate norm factor to avoid O(N_kernel^2) scaling of exact evaluation
             delta_uprob = 0.0
             for j, s in enumerate(self.delta_kernel_center):
