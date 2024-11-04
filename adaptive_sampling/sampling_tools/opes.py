@@ -141,7 +141,7 @@ class OPES(EnhancedSampling):
         if self.verbose:
             print(" >>> INFO: OPES Parameters:")
             print("\t ---------------------------------------------")
-            print(f"\t Kernel_std:\t{self.sigma_0}")
+            print(f"\t Kernel_std:\t{self.sigma_0 if not self.initial_sigma_estimate else 'estimate from initial MD'}")
             print(f"\t Rescaling:\t{self.bandwidth_rescaling}")
             print(f"\t Adaptive:\t{self.adaptive_std}\t({self.adaptive_std_stride} steps)")
             print(f"\t Normalize:\t{self.normalize}\t(approximated: {self.approximate_norm})")
