@@ -26,7 +26,7 @@ class OPES(EnhancedSampling):
         explore: enables the OPES explore mode,
         normalize: normalize OPES probability density over explored space
         approximate_norm: enables linear scaling approximation of norm factor
-        merge_threshold: threshold distance for kde-merging in units of std, "np.inf" disables merging
+        merge_threshold: threshold distance for kde-merging in units of std, `np.inf` disables merging
         recursive_merge: enables recursive merging until seperation of all kernels is above threshold distance
         bias_factor: bias factor of target distribution, default is `beta * energy_barr`
         numerical_forces: read forces from grid instead of calculating sum of kernels in every step, only for 1D CVs
@@ -50,10 +50,10 @@ class OPES(EnhancedSampling):
         explore: bool = False,
         normalize: bool = True,
         approximate_norm: bool = True,
-        merge_threshold: float = np.inf,
-        recursive_merge: bool = False,
+        merge_threshold: float = 1.0,
+        recursive_merge: bool = True,
         bias_factor: float = None,
-        numerical_forces: bool = False,
+        numerical_forces: bool = True,
         **kwargs,
     ):
         super().__init__(*args, **kwargs)
@@ -135,7 +135,7 @@ class OPES(EnhancedSampling):
         self.bias_pot_traj = []       
 
         self.pmf = self.get_pmf() 
-        self.bias_pot = self.pmf[0]
+        self.bias_pot = self.pmf.flatten()[0]
         self.bias_pot_traj = []    
 
         if self.verbose:

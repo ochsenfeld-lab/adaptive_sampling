@@ -102,7 +102,7 @@ def welford_var(
         )
 
     if count == 0:
-        return 0.0, 0.0, 0.0
+        return np.zeros_like(mean), np.zeros_like(mean), np.zeros_like(mean)
 
     delta = newValue - mean
     if tau == None:
