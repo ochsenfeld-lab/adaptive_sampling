@@ -118,7 +118,7 @@ class OPES(EnhancedSampling):
 
         self.kernel_center = []
         self.kernel_height = []
-        self.kernel_std    = []
+        self.kernel_std = []
         self.bias_pot_traj = []
 
     def step_bias(
@@ -500,7 +500,7 @@ class OPES(EnhancedSampling):
 
         return kernel_min_ind, min_distance
 
-    def calc_norm_factor(self, approximate: bool=True):
+    def calc_norm_factor(self, approximate: bool = True):
         """Norm factor of probability density (configurational integral)
 
         Returns:
@@ -560,7 +560,7 @@ class OPES(EnhancedSampling):
                 sum_gaussians = np.sum(self.calc_gaussians(s))
                 uprob += sum_gaussians
             self.uprob_old = uprob
-            norm_factor = uprob / N / KDE_norm 
+            norm_factor = uprob / N / KDE_norm
         return norm_factor
 
     def estimate_kernel_std(self, cv):
@@ -616,7 +616,7 @@ class OPES(EnhancedSampling):
                 " >>> Error: 1D weighted pmf history can only be calculated for one-dimensional CV spaces!"
             )
 
-        dx = cv_1[1]-cv_1[0]  # Bin size
+        dx = cv_1[1] - cv_1[0]  # Bin size
         dx2 = dx / 2.0
 
         n = int(len(cv_1) / hist_res)
@@ -683,8 +683,8 @@ class OPES(EnhancedSampling):
                 " >>> Error: 2D weighted pmf history can only be calculated for two-dimensional CV spaces!"
             )
 
-        dx = grid_1[1]-grid_1[0]  # Bin size dimension 1
-        dy = grid_2[1]-grid_2[0]  # Bin size dimension 2
+        dx = grid_1[1] - grid_1[0]  # Bin size dimension 1
+        dy = grid_2[1] - grid_2[0]  # Bin size dimension 2
         dx2 = dx / 2.0
         dy2 = dy / 2.0
 
@@ -715,7 +715,6 @@ class OPES(EnhancedSampling):
                     )
                     probability_hist[i, j] = (
                         np.sum(np.exp(self.beta * cv_pot[indices_hist[0]])) / KDE_norm
-
                     )
             probability_hist /= np.array(probability_hist).sum()
             potential_hist = -np.log(probability_hist) / self.beta / kJ_to_kcal
@@ -726,5 +725,3 @@ class OPES(EnhancedSampling):
         print("Done")
 
         return pmf_hist, scattered_time
-
-    

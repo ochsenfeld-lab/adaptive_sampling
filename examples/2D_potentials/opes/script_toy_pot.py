@@ -11,29 +11,29 @@ from adaptive_sampling.sampling_tools.opeseabf import OPESeABF
 # ------------------------------------------------------------------------------------
 # Parameters
 
-nsteps = 5e6                        # number of steps
-update_freq = 200                   # update frequency tau_G
-explore = False                     # enable explore mode
-adaptive_std = True                 # enable adaptive sigma rescaling
-energy_barrier = 30.0               # approximated energy barrier
-merge_threshold: float = np.inf     # merging threshold, np.inf disables merging
-recursive_merge = True              # enable recursive merging
-approximate_norm: bool = True       # linear scaling norm factor approximation
+nsteps = 5e6  # number of steps
+update_freq = 200  # update frequency tau_G
+explore = False  # enable explore mode
+adaptive_std = True  # enable adaptive sigma rescaling
+energy_barrier = 30.0  # approximated energy barrier
+merge_threshold: float = np.inf  # merging threshold, np.inf disables merging
+recursive_merge = True  # enable recursive merging
+approximate_norm: bool = True  # linear scaling norm factor approximation
 
 # ------------------------------------------------------------------------------------
 # Setup CV
 
-cv_atoms = []           # not needed for 2D potentials
-min_1 = -60.0           # minimum of CV 1
-max_1 = 60.0            # maximum of CV 1
-bin_width_1 = 2.0       # bin width along CV 1
-min_2 = -40.0           # minimum of CV 2
-max_2 = 40.0            # minimum of CV 2
-bin_width_2 = 2.0       # bin width along CV 2
+cv_atoms = []  # not needed for 2D potentials
+min_1 = -60.0  # minimum of CV 1
+max_1 = 60.0  # maximum of CV 1
+bin_width_1 = 2.0  # bin width along CV 1
+min_2 = -40.0  # minimum of CV 2
+max_2 = 40.0  # minimum of CV 2
+bin_width_2 = 2.0  # bin width along CV 2
 
 collective_var = [
     ["x", cv_atoms, min_1, max_1, bin_width_1],
-#    ["y", cv_atoms, min_2, max_2, bin_width_2],
+    #    ["y", cv_atoms, min_2, max_2, bin_width_2],
 ]
 
 periodicity = None
@@ -44,10 +44,10 @@ grid_2 = np.arange(min_2, max_2, bin_width_2)
 # ------------------------------------------------------------------------------------
 # Setup MD
 
-mass = 10.0         # mass of particle in a.u.
-seed = 42           # random seed
-dt = 5.0e0          # stepsize in fs
-temp = 300.0        # temperature in K
+mass = 10.0  # mass of particle in a.u.
+seed = 42  # random seed
+dt = 5.0e0  # stepsize in fs
+temp = 300.0  # temperature in K
 coords_in = [-50.0, 0.0]
 
 
@@ -66,7 +66,7 @@ the_md.calc_etvp()
 # Setup the sampling algorithm
 # --------------------------------------------------------------------------------------
 output_freq = 1000  # frequency of writing outputs
-kernel_std = np.array([None]) # std of initial kernel, if None it will be estimated
+kernel_std = np.array([None])  # std of initial kernel, if None it will be estimated
 
 the_bias = OPES(
     the_md,
@@ -95,6 +95,7 @@ if True:
 
 the_bias.step_bias()
 
+
 def print_output(the_md, the_bias, t):
     print(
         "%11.2f\t%14.6f\t%14.6f\t%14.6f\t%14.6f\t%14.6f\t%14.6f\t%14d\t%14.6f\t%14.6f\t%14.6f"
@@ -113,6 +114,7 @@ def print_output(the_md, the_bias, t):
         )
     )
     sys.stdout.flush()
+
 
 # --------------------------------------------------------------------------------------
 # Run MD
