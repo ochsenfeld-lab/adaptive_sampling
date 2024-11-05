@@ -536,7 +536,7 @@ class OPES(EnhancedSampling):
 
         return kernel_min_ind, min_distance
 
-    def calc_norm_factor(self, approximate: str = True):
+    def calc_norm_factor(self, approximate: bool = True):
         """Norm factor of probability density (configurational integral)
 
         Returns:
@@ -614,3 +614,138 @@ class OPES(EnhancedSampling):
         deriv_log = 1. / (prob_dist / self.norm_factor + self.epsilon)
         deriv_pot = (self.gamma_prefac / self.beta) * deriv_log * (deriv_prob_dist / self.norm_factor)
         return deriv_pot
+
+    def pmf_history_1d(
+        self,
+        cv_1: np.array,
+        cv_pot: np.array,
+        grid_1: np.array,
+        hist_res: int = 40,
+    ) -> np.array:
+        """calculate pmf history from reweighting parts of the trajectory
+
+        Args:
+            cv_1: trajectory of first CV
+            cv_pot: potential energy for trajectory points
+            grid_1: grid along CV
+            hist_res: number of time points in history
+
+        Returns:
+            pmf_hist: pmf history from reweighting
+            scattered_time: time points of history
+        """
+
+        if self.ncoords != 1:
+            raise ValueError(
+                " >>> Error: 1D weighted pmf history can only be calculated for one-dimensional CV spaces!"
+            )
+
+        dx = cv_1[1] - cv_1[0]  # Bin size
+        dx2 = dx / 2.0
+
+        n = int(len(cv_1) / hist_res)
+        scattered_time, pmf_hist = [], []
+        KDE_norm = self.sum_weights if not self.explore else self.n
+        print(
+            "-------------------------------------------------------------------------------"
+        )
+        print("Initialize 1D history reweighting ...")
+        for j in range(hist_res):
+            n_sample = j * n + n
+            if j % 10 == 0:
+                print(f"Progress: History entry {j} of {hist_res}")
+            scattered_time.append(n_sample)
+            probability_hist = np.zeros(len(grid_1))
+            for i, x in enumerate(grid_1):
+                indices_hist = np.where(
+                    np.logical_and(
+                        (cv_1[0:n_sample] >= x - dx2), (cv_1[0:n_sample] < x + dx2)
+                    )
+                )
+                probability_hist[i] = (
+                    np.sum(np.exp(self.beta * cv_pot[indices_hist])) / KDE_norm
+                )
+            probability_hist /= probability_hist.sum()
+            potential_hist = (-np.log(probability_hist) / self.beta) / kJ_to_kcal
+            potential_hist -= potential_hist.min()
+            potential_hist = np.where(potential_hist == np.inf, 0, potential_hist)
+            pmf_hist.append(potential_hist)
+
+        print("1D history reweighting done!")
+        print(
+            "-------------------------------------------------------------------------------"
+        )
+
+        return pmf_hist, scattered_time
+
+    def pmf_history_2d(
+        self,
+        cv_1: np.array,
+        cv_2: np.array,
+        cv_pot: np.array,
+        grid_1: np.array,
+        grid_2: np.array,
+        hist_res: int = 40,
+    ) -> np.array:
+        """calculate pmf history from reweighting parts of the trajectory
+
+        Args:
+            cv_1: trajectory of CV 1
+            cv_2: trajectory of CV 2
+            cv_pot: potential energy for trajectory points
+            grid_1: grid along CV 1
+            grid_2: grid along CV 2
+            hist_res: number of time points in history
+
+        Returns:
+            pmf_hist: pmf history from reweighting
+            scattered_time: time points of history
+        """
+
+        if self.ncoords > 2:
+            raise ValueError(
+                " >>> Error: 2D weighted pmf history can only be calculated for two-dimensional CV spaces!"
+            )
+
+        dx = grid_1[1] - grid_1[0]  # Bin size dimension 1
+        dy = grid_2[1] - grid_2[0]  # Bin size dimension 2
+        dx2 = dx / 2.0
+        dy2 = dy / 2.0
+
+        n = int(len(cv_1) / hist_res)
+        scattered_time, pmf_hist = [], []
+        KDE_norm = self.sum_weights if not self.explore else self.n
+
+        print("Initialize pmf history calculation.")
+        for j in range(hist_res):
+            if j % 2 == 0:
+                print(f"Progress: History entry {j} of {hist_res}")
+            n_sample = j * n + n
+            scattered_time.append(n_sample)
+            probability_hist = np.zeros((len(grid_1), len(grid_2)))
+            for i, x in enumerate(grid_1):  # Loop over grid so that i are bin centers
+                for j, y in enumerate(grid_2):
+                    indices_hist = np.where(
+                        np.logical_and(
+                            np.logical_and(
+                                (cv_1[0:n_sample] >= x - dx2),
+                                (cv_1[0:n_sample] < x + dx2),
+                            ),
+                            np.logical_and(
+                                (cv_2[0:n_sample] >= y - dy2),
+                                (cv_2[0:n_sample] < y + dy2),
+                            ),
+                        )
+                    )
+                    probability_hist[i, j] = (
+                        np.sum(np.exp(self.beta * cv_pot[indices_hist[0]])) / KDE_norm
+                    )
+            probability_hist /= np.array(probability_hist).sum()
+            potential_hist = -np.log(probability_hist) / self.beta / kJ_to_kcal
+            potential_hist -= potential_hist.min()
+            potential_hist = np.where(potential_hist == np.inf, 0, potential_hist)
+            pmf_hist.append(potential_hist)
+
+        print("Done")
+
+        return pmf_hist, scattered_time
