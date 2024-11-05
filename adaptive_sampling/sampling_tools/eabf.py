@@ -241,6 +241,7 @@ class eABF(ABF, EnhancedSampling):
                 print(
                     " >>> Info: On-the-fly integration only available for 1D coordinates"
                 )
+        return self.pmf
 
     def shared_bias(
         self,

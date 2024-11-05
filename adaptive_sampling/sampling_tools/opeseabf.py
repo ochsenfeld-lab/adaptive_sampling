@@ -11,33 +11,33 @@ from adaptive_sampling.processing_tools.thermodynamic_integration import *
 class OPESeABF(eABF, OPES, EnhancedSampling):
     """Well-Tempered Metadynamics extended-system Adaptive Biasing Force method
 
-       see: Fu et. al., J. Phys. Chem. Lett. (2018); https://doi.org/10.1021/acs.jpclett.8b01994
-
     The collective variable is coupled to a fictitious particle with an harmonic force.
-    The dynamics of the fictitious particel is biased using a combination of ABF and Metadynamics.
+    The dynamics of the fictitious particel is biased using a combination of ABF and OPES.
 
     Args:
         ext_sigma: thermal width of coupling between collective and extended variable
         ext_mass: mass of extended variable in atomic units
         md: Object of the MD Interface
         cv_def: definition of the Collective Variable (CV) (see adaptive_sampling.colvars)
-                [["cv_type", [atom_indices], minimum, maximum, bin_width], [possible second dimension]]
+            [["cv_type", [atom_indices], minimum, maximum, bin_width], [possible second dimension]]
         friction: friction coefficient for Langevin dynamics of the extended-system
         seed_in: random seed for Langevin dynamics of extended-system
         nfull: Number of force samples per bin where full bias is applied,
-               if nsamples < nfull the bias force is scaled down by nsamples/nfull
+            if nsamples < nfull the bias force is scaled down by nsamples/nfull
         kernel_std: standard deviation of first kernel,
-                    if None, kernel_std will be estimated from initial MD with `adaptive_std_freq*update_freq` steps
-        adaptive_std: if adaptive kernel standad deviation is enabled
-        adaptive_std_freq: time for estimation of standard deviation in units of `update_freq`
-        explore: enables the OPES explore mode,
-        energy_barr: free energy barrier that the bias should help to overcome [kJ/mol]
+            if None, kernel_std will be estimated from initial MD with `adaptive_std_freq*update_freq` steps
         update_freq: interval of md steps in which new kernels should be created
+        energy_barr: free energy barrier that the bias should help to overcome [kJ/mol], default: 125.52 kJ/mol (30.0 kcal/mol)
+        bandwidth_rescaling: if True, `kernel_std` shrinks during simulation to refine KDE
+        adaptive_std: if adaptive kernel standard deviation is enabled, kernel_std will be updated according to std deviation of CV in MD
+        adaptive_std_freq: time for estimation of standard deviation is set to `update_freq * adaptive_std_freq` MD steps
+        explore: enables the OPES explore mode,
+        normalize: normalize OPES probability density over explored space
         approximate_norm: enables linear scaling approximation of norm factor
-        merge_threshold: threshold distance for kde-merging in units of std, "np.inf" disables merging
+        merge_threshold: threshold distance for kde-merging in units of std, `np.inf` disables merging
         recursive_merge: enables recursive merging until seperation of all kernels is above threshold distance
         bias_factor: bias factor of target distribution, default is `beta * energy_barr`
-        numerical_forces: read forces from grid instead of calculating sum of kernels in every step, only for 1D CVs
+        numerical_forces: read forces from grid instead of calculating sum of kernels in every step, only for 1D CVs       
         equil_temp: equilibrium temperature of MD
         verbose: print verbose information
         kinetics: calculate necessary data to obtain kinetics of reaction
@@ -175,10 +175,8 @@ class OPESeABF(eABF, OPES, EnhancedSampling):
                 self.get_pmf()
                 output = {"hist": self.histogram, "free energy": self.pmf}
                 for i in range(self.ncoords):
-                    output[f"opesforce {i}"] = opes_forces[i]
-                    output[f"abf force {i}"] = self.abf_forces[i]
                     output[f"czar force {i}"] = self.czar_force[i]
-                output[f"opespot"] = self.potential
+                output[f"opespot"] = self.bias_potential
                 self.write_output(output, filename=output_file)
             if restart_file:
                 self.write_restart(filename=restart_file)

@@ -134,8 +134,8 @@ class OPES(EnhancedSampling):
         self.kernel_std = []
         self.bias_pot_traj = []       
 
-        self.pmf = self.get_pmf() 
-        self.bias_pot = self.pmf.flatten()[0]
+        self.bias_potential = np.copy(self.histogram)
+        self.bias_pot = 0.0
         self.bias_pot_traj = []    
 
         if self.verbose:
@@ -222,7 +222,6 @@ class OPES(EnhancedSampling):
         else:
             self.bias_potential = np.zeros_like(self.histogram)
             return np.zeros_like(self.histogram)
-
         prob_dist /= self.KDE_norm
         self.bias_potential = self.calc_potential(prob_dist)
         if self.numerical_forces:
@@ -298,7 +297,7 @@ class OPES(EnhancedSampling):
 
         Args:
             cv: new value of CV
-
+            
         Returns:
             bias force: len(ncoords) array of bias forces
         """
@@ -341,7 +340,7 @@ class OPES(EnhancedSampling):
         
         return opes_force
 
-    def update_kde(self, cv):
+    def update_kde(self, cv: np.array):
         """on-the-fly update of kernel density estimation of probability density along CVs
 
         Args:
