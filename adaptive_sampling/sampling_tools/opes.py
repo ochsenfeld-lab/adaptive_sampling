@@ -29,7 +29,7 @@ class OPES(EnhancedSampling):
         merge_threshold: threshold distance for kde-merging in units of std, `np.inf` disables merging
         recursive_merge: enables recursive merging until seperation of all kernels is above threshold distance
         bias_factor: bias factor of target distribution, default is `beta * energy_barr`
-        numerical_forces: read forces from grid instead of calculating sum of kernels in every step, only for 1D CVs
+        force_from_grid: read forces from grid instead of calculating sum of kernels in every step
         equil_temp: equilibrium temperature of MD
         verbose: print verbose information
         kinetics: calculate necessary data to obtain kinetics of reaction
@@ -53,7 +53,7 @@ class OPES(EnhancedSampling):
         merge_threshold: float = 1.0,
         recursive_merge: bool = True,
         bias_factor: float = None,
-        numerical_forces: bool = True,
+        force_from_grid: bool = False,
         **kwargs,
     ):
         super().__init__(*args, **kwargs)
@@ -94,24 +94,27 @@ class OPES(EnhancedSampling):
         self.recursive_merge = recursive_merge
         self.bias_factor = bias_factor
         self.normalize = normalize
-        self.numerical_forces = numerical_forces
-        if self.numerical_forces and self.ncoords > 1:
-            if self.verbose:
-                print(" >>> INFO: Numerical forces disabled as ndim > 1!")
-            self.numerical_forces = False
+        self.numerical_forces = force_from_grid
 
         self.temperature = self.equil_temp
         self.beta = 1.0 / (kB_in_atomic * self.temperature)
         self.energy_barr = energy_barr / atomic_to_kJmol 
+        if not energy_barr > 0.0:
+            raise ValueError(" >>> OPES: The barrier should be > 0 ")
         self.gamma = (
             self.beta * self.energy_barr if bias_factor == None else bias_factor
         )
+        if self.gamma <= 1.0:
+            raise ValueError(" >>> OPES: The bias factor should be > 1")
         if self.gamma == np.inf:
             self.gamma_prefac = 1.0
-            self.gamma = 1.0
+            self.gamma = np.inf
         else:
             self.gamma_prefac = self.gamma - 1 if self.explore else 1 - 1 / self.gamma
+
         self.epsilon = np.exp((-self.beta * self.energy_barr) / self.gamma_prefac)
+        if self.epsilon<0.0:
+            raise ValueError(" >>> OPES: epsilon needs to be positive. The `energy_barr` might be too high.")
         if self.normalize:
             self.norm_factor = np.power(self.epsilon, self.gamma_prefac)
         else:
@@ -128,11 +131,14 @@ class OPES(EnhancedSampling):
         self.KDE_norm = self.sum_weights if not self.explore else self.n
         self.old_KDE_norm = np.copy(self.KDE_norm)
         self.old_nker = 0
- 
+        self.rct = (1. / self.beta) * np.log(self.sum_weights)
+        
         self.kernel_center = []
         self.kernel_height = []
         self.kernel_std = []
-        self.bias_pot_traj = []       
+        self.bias_pot_traj = [] 
+        self.rct_traj = []
+        self.zed_traj = []      
 
         self.bias_potential = np.copy(self.histogram)
         self.bias_pot = 0.0
@@ -148,7 +154,9 @@ class OPES(EnhancedSampling):
             print(f"\t Explore:\t{self.explore}")
             print(f"\t Barrier:\t{self.energy_barr*atomic_to_kJmol*kJ_to_kcal} kcal/mol")
             print(f"\t Bias factor:\t{self.gamma}")
+            print(f"\t Force grid:\t{self.numerical_forces}")
             print("\t ---------------------------------------------")
+
 
     def step_bias(
         self,
@@ -174,7 +182,6 @@ class OPES(EnhancedSampling):
         bias_force = self.harmonic_walls(cv, grad_cv)
         for i in range(self.ncoords):
             bias_force += forces[i] * grad_cv[i]
-        self.bias_pot_traj.append(self.bias_pot)
 
         # store biased histogram along CV for output
         if out_file and self._check_boundaries(cv):
@@ -186,6 +193,9 @@ class OPES(EnhancedSampling):
             self.traj = np.append(self.traj, [cv], axis=0)
             self.epot.append(self.md_state.epot)
             self.temp.append(self.md_state.temp)
+            self.bias_pot_traj.append(self.bias_pot)
+            self.zed_traj.append(self.norm_factor)
+            self.rct_traj.append(self.rct)
 
         # Write output
         if self.md_state.step % self.out_freq == 0:
@@ -220,8 +230,16 @@ class OPES(EnhancedSampling):
                     derivative[0][0, i] = kde_der
                 prob_dist[0, i] = np.sum(val_gaussians)
         else:
-            self.bias_potential = np.zeros_like(self.histogram)
-            return np.zeros_like(self.histogram)
+            for i, x in enumerate(self.grid[0]):
+                for j, y in enumerate(self.grid[1]):
+                    if not self.numerical_forces:
+                        val_gaussians = self.calc_gaussians(np.asarray([x,y]))
+                    else:
+                        val_gaussians, kde_der = self.calc_gaussians(np.asarray([x,y]), requires_grad=True)
+                        derivative[0][j, i] = kde_der[0]
+                        derivative[1][j, i] = kde_der[1]
+                    prob_dist[j, i] = np.sum(val_gaussians) 
+
         prob_dist /= self.KDE_norm
         self.bias_potential = self.calc_potential(prob_dist)
         if self.numerical_forces:
@@ -232,11 +250,13 @@ class OPES(EnhancedSampling):
         return pmf
 
     def write_traj(self, filename="CV_traj.dat"):
-        data = {}
-        data["Epot [H]"] = self.epot
-        data["T [K]"] = self.temp
-        data["Bias pot"] = self.bias_pot_traj
-
+        data = {
+            "Epot [Ha]": self.epot,
+            "T [K]": self.temp,
+            "Biaspot [Ha]": self.bias_pot_traj,
+            "Zed": self.zed_traj,
+            "C(t) [Ha]": self.rct_traj,
+        }
         self._write_traj(data, filename=filename)
 
         # Reset trajectories to save memory
@@ -244,6 +264,8 @@ class OPES(EnhancedSampling):
         self.epot = [self.epot[-1]]
         self.temp = [self.temp[-1]]
         self.bias_pot_traj = [self.bias_pot_traj[-1]]
+        self.zed_traj = [self.zed_traj[-1]]
+        self.rct_traj = [self.rct_traj[-1]]
 
     def shared_bias(self):
         raise ValueError(
@@ -350,15 +372,9 @@ class OPES(EnhancedSampling):
         self.delta_kernel_center = []
         self.delta_kernel_sigma = []
 
-        self.n += 1
-        self.old_KDE_norm = np.copy(self.KDE_norm)
-        self.old_nker = len(self.kernel_height)
+        self.n += 1 # counter for total kernels
 
         # Calculate weight coefficients
-        #gaussians = self.calc_gaussians(cv, requires_grad=False)
-        #self.prob_dist = np.sum(gaussians) / self.KDE_norm
-        #self.bias_pot = self.calc_potential(self.prob_dist)
-        
         weight_coeff = np.exp(self.beta * self.bias_pot)
         self.sum_weights += weight_coeff
         self.sum_weights2 += weight_coeff * weight_coeff
@@ -370,6 +386,7 @@ class OPES(EnhancedSampling):
             if not self.explore
             else self.n
         )
+        self.rct = (1. / self.beta) * np.log(self.sum_weights / self.n)
 
         if self.bandwidth_rescaling and len(self.kernel_std) > 0:
             sigma_i = self.sigma_0 * np.power(
@@ -530,6 +547,7 @@ class OPES(EnhancedSampling):
         distance = np.sqrt(
             np.sum(np.square(np.divide(s_diff, np.asarray(self.kernel_std))), axis=1)
         )
+        
         kernel_min_ind = np.argmin(distance[:-1]) if len(distance) > 1 else None
         min_distance = distance[kernel_min_ind]
 
@@ -588,6 +606,10 @@ class OPES(EnhancedSampling):
                 sum_gaussians = np.sum(self.calc_gaussians(s))
                 sum_uprob += sum_gaussians
 
+        # store KDEnorm and nker for next update
+        self.old_KDE_norm = np.copy(self.KDE_norm)
+        self.old_nker = n_ker
+ 
         return sum_uprob / n_ker / self.KDE_norm
 
     def estimate_kernel_std(self, cv):
@@ -613,138 +635,3 @@ class OPES(EnhancedSampling):
         deriv_log = 1. / (prob_dist / self.norm_factor + self.epsilon)
         deriv_pot = (self.gamma_prefac / self.beta) * deriv_log * (deriv_prob_dist / self.norm_factor)
         return deriv_pot
-
-    def pmf_history_1d(
-        self,
-        cv_1: np.array,
-        cv_pot: np.array,
-        grid_1: np.array,
-        hist_res: int = 40,
-    ) -> np.array:
-        """calculate pmf history from reweighting parts of the trajectory
-
-        Args:
-            cv_1: trajectory of first CV
-            cv_pot: potential energy for trajectory points
-            grid_1: grid along CV
-            hist_res: number of time points in history
-
-        Returns:
-            pmf_hist: pmf history from reweighting
-            scattered_time: time points of history
-        """
-
-        if self.ncoords != 1:
-            raise ValueError(
-                " >>> Error: 1D weighted pmf history can only be calculated for one-dimensional CV spaces!"
-            )
-
-        dx = cv_1[1] - cv_1[0]  # Bin size
-        dx2 = dx / 2.0
-
-        n = int(len(cv_1) / hist_res)
-        scattered_time, pmf_hist = [], []
-        KDE_norm = self.sum_weights if not self.explore else self.n
-        print(
-            "-------------------------------------------------------------------------------"
-        )
-        print("Initialize 1D history reweighting ...")
-        for j in range(hist_res):
-            n_sample = j * n + n
-            if j % 10 == 0:
-                print(f"Progress: History entry {j} of {hist_res}")
-            scattered_time.append(n_sample)
-            probability_hist = np.zeros(len(grid_1))
-            for i, x in enumerate(grid_1):
-                indices_hist = np.where(
-                    np.logical_and(
-                        (cv_1[0:n_sample] >= x - dx2), (cv_1[0:n_sample] < x + dx2)
-                    )
-                )
-                probability_hist[i] = (
-                    np.sum(np.exp(self.beta * cv_pot[indices_hist])) / KDE_norm
-                )
-            probability_hist /= probability_hist.sum()
-            potential_hist = (-np.log(probability_hist) / self.beta) / kJ_to_kcal
-            potential_hist -= potential_hist.min()
-            potential_hist = np.where(potential_hist == np.inf, 0, potential_hist)
-            pmf_hist.append(potential_hist)
-
-        print("1D history reweighting done!")
-        print(
-            "-------------------------------------------------------------------------------"
-        )
-
-        return pmf_hist, scattered_time
-
-    def pmf_history_2d(
-        self,
-        cv_1: np.array,
-        cv_2: np.array,
-        cv_pot: np.array,
-        grid_1: np.array,
-        grid_2: np.array,
-        hist_res: int = 40,
-    ) -> np.array:
-        """calculate pmf history from reweighting parts of the trajectory
-
-        Args:
-            cv_1: trajectory of CV 1
-            cv_2: trajectory of CV 2
-            cv_pot: potential energy for trajectory points
-            grid_1: grid along CV 1
-            grid_2: grid along CV 2
-            hist_res: number of time points in history
-
-        Returns:
-            pmf_hist: pmf history from reweighting
-            scattered_time: time points of history
-        """
-
-        if self.ncoords > 2:
-            raise ValueError(
-                " >>> Error: 2D weighted pmf history can only be calculated for two-dimensional CV spaces!"
-            )
-
-        dx = grid_1[1] - grid_1[0]  # Bin size dimension 1
-        dy = grid_2[1] - grid_2[0]  # Bin size dimension 2
-        dx2 = dx / 2.0
-        dy2 = dy / 2.0
-
-        n = int(len(cv_1) / hist_res)
-        scattered_time, pmf_hist = [], []
-        KDE_norm = self.sum_weights if not self.explore else self.n
-
-        print("Initialize pmf history calculation.")
-        for j in range(hist_res):
-            if j % 2 == 0:
-                print(f"Progress: History entry {j} of {hist_res}")
-            n_sample = j * n + n
-            scattered_time.append(n_sample)
-            probability_hist = np.zeros((len(grid_1), len(grid_2)))
-            for i, x in enumerate(grid_1):  # Loop over grid so that i are bin centers
-                for j, y in enumerate(grid_2):
-                    indices_hist = np.where(
-                        np.logical_and(
-                            np.logical_and(
-                                (cv_1[0:n_sample] >= x - dx2),
-                                (cv_1[0:n_sample] < x + dx2),
-                            ),
-                            np.logical_and(
-                                (cv_2[0:n_sample] >= y - dy2),
-                                (cv_2[0:n_sample] < y + dy2),
-                            ),
-                        )
-                    )
-                    probability_hist[i, j] = (
-                        np.sum(np.exp(self.beta * cv_pot[indices_hist[0]])) / KDE_norm
-                    )
-            probability_hist /= np.array(probability_hist).sum()
-            potential_hist = -np.log(probability_hist) / self.beta / kJ_to_kcal
-            potential_hist -= potential_hist.min()
-            potential_hist = np.where(potential_hist == np.inf, 0, potential_hist)
-            pmf_hist.append(potential_hist)
-
-        print("Done")
-
-        return pmf_hist, scattered_time

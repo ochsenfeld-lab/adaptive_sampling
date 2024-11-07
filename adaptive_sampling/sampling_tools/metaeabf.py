@@ -10,7 +10,8 @@ from ..units import *
 class WTMeABF(eABF, WTM, EnhancedSampling):
     """Well-Tempered Metadynamics extended-system Adaptive Biasing Force method
 
-       see: Fu et. al., J. Phys. Chem. Lett. (2018); https://doi.org/10.1021/acs.jpclett.8b01994
+    References:
+       Fu et. al., J. Phys. Chem. Lett. (2018); https://doi.org/10.1021/acs.jpclett.8b01994
 
     The collective variable is coupled to a fictitious particle with an harmonic force.
     The dynamics of the fictitious particle is biased using a combination of ABF and Metadynamics.
@@ -39,9 +40,9 @@ class WTMeABF(eABF, WTM, EnhancedSampling):
 
     """
 
-    def __init__(self, *args, apply_abf=True, **kwargs):
+    def __init__(self, *args, enable_abf=True, **kwargs):
         super().__init__(*args, **kwargs)
-        self.apply_abf = apply_abf
+        self.apply_abf = enable_abf
         self.abf_forces = np.zeros_like(self.bias)
 
     def step_bias(

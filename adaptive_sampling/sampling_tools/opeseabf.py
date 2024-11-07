@@ -49,18 +49,12 @@ class OPESeABF(eABF, OPES, EnhancedSampling):
     def __init__(
         self,
         *args,
-        enable_eabf: bool = True,
-        enable_opes: bool = True,
+        enable_abf: bool = True,
         **kwargs,
     ):
         super().__init__(*args, **kwargs)
         self.abf_forces = np.zeros_like(self.bias)
-        self.enable_eabf = enable_eabf
-        self.enable_opes = enable_opes
-        if self.enable_eabf == False and self.enable_opes == False:
-            raise ValueError(
-                " >>> Error: At least one biasing method has to be enabled!"
-            )
+        self.enable_abf = enable_abf
 
     def step_bias(
         self,
@@ -94,7 +88,7 @@ class OPESeABF(eABF, OPES, EnhancedSampling):
 
         self._propagate()
 
-        opes_forces = self.opes_bias(np.copy(self.ext_coords))
+        opes_force = self.opes_bias(np.copy(self.ext_coords))
         bias_force = self._extended_dynamics(xi, delta_xi)  # , self.hill_std)
         force_sample = [0 for _ in range(2 * self.ncoords)]
 
@@ -105,7 +99,7 @@ class OPESeABF(eABF, OPES, EnhancedSampling):
 
             for i in range(self.ncoords):
 
-                if self.enable_eabf:
+                if self.enable_abf:
 
                     # linear ramp function
                     ramp = (
@@ -128,17 +122,11 @@ class OPESeABF(eABF, OPES, EnhancedSampling):
                         self.m2_force[i][bin_la[1], bin_la[0]],
                         force_sample[i],
                     )
-                    if self.enable_opes:
-                        self.ext_forces -= (
-                            ramp * self.abf_forces[i][bin_la[1], bin_la[0]]
-                            - opes_forces[i]
-                        )
-                    else:
-                        self.ext_forces -= (
-                            ramp * self.abf_forces[i][bin_la[1], bin_la[0]]
-                        )
+                    self.ext_forces -= (
+                        ramp * self.abf_forces[i][bin_la[1], bin_la[0]] - opes_force[i]
+                    )
                 else:
-                    self.ext_forces += opes_forces[i]
+                    self.ext_forces += opes_force[i]
 
         # xi-conditioned accumulators for CZAR
         if self._check_boundaries(xi):
