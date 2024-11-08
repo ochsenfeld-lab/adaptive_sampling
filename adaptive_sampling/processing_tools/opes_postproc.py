@@ -44,7 +44,8 @@ def pmf_from_reweighting(
 
     if history_points == 1:
         pmf_weights, rho_weights = pmf_from_weights(grid, cv, W, equil_temp=equil_temp, dx=dx)
-        pmf_hist.append(pmf_weights * atomic_to_kJmol)
+        pmf_weights -= pmf_weights.min()
+        pmf_hist.append(pmf_weights)
         rho_hist.append(rho_weights)
     else:
         n = int(len(cv) / history_points)
@@ -54,7 +55,8 @@ def pmf_from_reweighting(
                 print(f" >>> Progress: History entry {j} of {history_points}")
             scattered_time.append(n_sample)
             pmf_weights, rho_weights = pmf_from_weights(grid, cv[0:n_sample], W[0:n_sample], equil_temp=equil_temp, dx=dx)
-            pmf_hist.append(pmf_weights * atomic_to_kJmol)
+            pmf_weights -= pmf_weights.min()
+            pmf_hist.append(pmf_weights)
             rho_hist.append(rho_weights)
 
     return pmf_hist, rho_hist, scattered_time, history_points
@@ -69,7 +71,7 @@ def pmf_from_kernels(
     equil_temp: float = 300.0,
     energy_barrier: float = 20.0,
     explore: bool = False,
-    periodicity: List = None,
+    periodicity: List = [None],
 ):
     """Get Potential of Mean Force (PMF) from superpositions of kernels with data from restart file
 
@@ -126,7 +128,7 @@ def pmf_from_kernels(
     bias_pot = 1/beta * np.log(P/norm_factor + epsilon)
     bias_pot = -gamma * bias_pot if explore else gamma_prefac * bias_pot 
     pmf_kernels = bias_pot/-gamma_prefac if not explore else bias_pot
-    #pmf_kernels -= pmf_kernels.min()
+    pmf_kernels -= pmf_kernels.min()
     probability_kernels = P/P.max()
 
     return pmf_kernels * atomic_to_kJmol, probability_kernels
