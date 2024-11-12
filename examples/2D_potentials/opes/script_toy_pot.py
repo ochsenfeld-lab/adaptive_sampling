@@ -6,37 +6,43 @@ import os, sys, time
 from adaptive_sampling.units import *
 from adaptive_sampling.interface.interfaceMD_2D import MD
 from adaptive_sampling.sampling_tools.opes import OPES
-from adaptive_sampling.sampling_tools.opeseabf import OPESeABF
 
 # ------------------------------------------------------------------------------------
 # Parameters
 
-nsteps = 5e6  # number of steps
-update_freq = 200  # update frequency tau_G
-explore = False  # enable explore mode
-adaptive_std = True  # enable adaptive sigma rescaling
-energy_barrier = 30.0  # approximated energy barrier
-merge_threshold: float = np.inf  # merging threshold, np.inf disables merging
-recursive_merge = True  # enable recursive merging
-approximate_norm: bool = True  # linear scaling norm factor approximation
+nsteps = 2e6                        # number of steps
+update_freq = 100                   # update frequency tau_G
+explore = False                     # enable explore mode
+adaptive_std = False                 # enable adaptive sigma rescaling
+energy_barrier = 127.218               # approximated energy barrier
+merge_threshold: float = 1.0        # merging threshold, np.inf disables merging
+recursive_merge = True              # enable recursive merging
+approximate_norm: bool = True       # linear scaling norm factor approximation
 
 # ------------------------------------------------------------------------------------
 # Setup CV
 
-cv_atoms = []  # not needed for 2D potentials
-min_1 = -60.0  # minimum of CV 1
-max_1 = 60.0  # maximum of CV 1
-bin_width_1 = 2.0  # bin width along CV 1
-min_2 = -40.0  # minimum of CV 2
-max_2 = 40.0  # minimum of CV 2
-bin_width_2 = 2.0  # bin width along CV 2
+# remove old output
+if os.path.isfile('CV_traj.dat'):
+    print('Removing old trajectory')
+    os.system("rm CV_traj.dat")
+if os.path.isfile('restart_opes.npz'):
+    os.system("rm restart_opes.npz") 
+
+cv_atoms = []          # not needed for 2D potentials
+min_1 = -0.3           # minimum of CV 1
+max_1 = 2.5            # maximum of CV 1
+bin_width_1 = 0.05     # bin width along CV 1
+min_2 = -1.5           # minimum of CV 2
+max_2 = 1.5            # minimum of CV 2
+bin_width_2 = 0.05     # bin width along CV 2
 
 collective_var = [
     ["x", cv_atoms, min_1, max_1, bin_width_1],
-    #    ["y", cv_atoms, min_2, max_2, bin_width_2],
+#    ["y", cv_atoms, min_2, max_2, bin_width_2],
 ]
 
-periodicity = None
+periodicity = [None]
 
 grid_1 = np.arange(min_1, max_1, bin_width_1)
 grid_2 = np.arange(min_2, max_2, bin_width_2)
@@ -44,17 +50,17 @@ grid_2 = np.arange(min_2, max_2, bin_width_2)
 # ------------------------------------------------------------------------------------
 # Setup MD
 
-mass = 10.0  # mass of particle in a.u.
-seed = 42  # random seed
-dt = 5.0e0  # stepsize in fs
-temp = 300.0  # temperature in K
-coords_in = [-50.0, 0.0]
+mass = 10.0         # mass of particle in a.u.
+seed = 42           # random seed
+dt = 1.0e0          # stepsize in fs
+temp = 300.0        # temperature in K
+coords_in = [0.0, 0.0]
 
 
 the_md = MD(
     mass_in=mass,
     coords_in=coords_in,
-    potential="2",
+    potential="4",
     dt_in=dt,
     target_temp_in=temp,
     seed_in=seed,
@@ -66,7 +72,7 @@ the_md.calc_etvp()
 # Setup the sampling algorithm
 # --------------------------------------------------------------------------------------
 output_freq = 1000  # frequency of writing outputs
-kernel_std = np.array([None])  # std of initial kernel, if None it will be estimated
+kernel_std = np.array([0.07]) # std of initial kernel, if None it will be estimated
 
 the_bias = OPES(
     the_md,
@@ -82,23 +88,17 @@ the_bias = OPES(
     merge_threshold=merge_threshold,
     bias_factor=None,
     approximate_norm=approximate_norm,
-    f_conf=100.0,
+    f_conf=0.0,
     numerical_forces=False,
     verbose=False,
+    kinetics=True
 )
-
-# remove old output
-if True:
-    os.system("rm CV_traj.dat")
-    os.system("rm restart_opes.npz")
-    os.system("rm pmf_hist.npz")
 
 the_bias.step_bias()
 
-
 def print_output(the_md, the_bias, t):
     print(
-        "%11.2f\t%14.6f\t%14.6f\t%14.6f\t%14.6f\t%14.6f\t%14.6f\t%14d\t%14.6f\t%14.6f\t%14.6f"
+        "%11.2f\t%14.6f\t%14.6f\t%14.6f\t%14.6f\t%14.6f\t%14.6f\t%14d\t%14.6f\t%14.6f"
         % (
             the_md.step * the_md.dt * atomic_to_fs,
             the_md.coords[0],
@@ -108,13 +108,12 @@ def print_output(the_md, the_bias, t):
             the_bias.n_eff,
             the_md.temp,
             len(the_bias.kernel_center),
-            the_bias.potential * kJ_to_kcal,
+            #the_bias.bias_potential * kJ_to_kcal,
             t,
             the_bias.kernel_std[-1][0] if len(the_bias.kernel_std) > 0 else 0.0,
         )
     )
     sys.stdout.flush()
-
 
 # --------------------------------------------------------------------------------------
 # Run MD
@@ -122,10 +121,9 @@ def print_output(the_md, the_bias, t):
 traj_freq = 10
 x, y, kernel_number, potentials = [], [], [], []
 biased = True
-pmf_hist = True
 
 print(
-    "%11s\t%14s\t%14s\t%14s\t%14s\t%14s\t%14s\t%14s\t%14s\t%14s\t%14s"
+    "%11s\t%14s\t%14s\t%14s\t%14s\t%14s\t%14s\t%14s\t%14s\t%14s"
     % (
         "time [fs]",
         "x",
@@ -135,7 +133,7 @@ print(
         "N_eff",
         "Temp",
         "n Kernel",
-        "Bias Potential",
+        #"Bias Potential",
         "Wall time",
         "last sigma",
     )
@@ -151,7 +149,7 @@ while the_md.step < nsteps:
     t0 = time.perf_counter()
     if biased:
         the_md.forces += the_bias.step_bias()
-        potentials.append(the_bias.potential)
+        potentials.append(the_bias.bias_potential)
         if the_md.step % the_bias.update_freq == 0:
             kernel_number.append(len(the_bias.kernel_center))
 
@@ -169,25 +167,3 @@ while the_md.step < nsteps:
 # Save full trajectory for alternative reweighting
 if True:
     np.savez("full_traj.npz", x=x, y=y)
-
-
-# weighted PMF history
-if True:
-    cv_traj = np.loadtxt("CV_traj.dat", skiprows=1)
-    full_traj = np.load("full_traj.npz")
-    cv_1 = np.array(full_traj["x"])
-    cv_2 = np.array(full_traj["y"])
-    cv_pot = np.array(cv_traj[:, 4])
-    pmf_history_1d, scattered_time_1d = the_bias.pmf_history_1d(
-        cv_1, cv_pot, grid_1, hist_res=50
-    )
-    pmf_history_2d, scattered_time_2d = the_bias.pmf_history_2d(
-        cv_1, cv_2, cv_pot, grid_1, grid_2, hist_res=50
-    )
-    np.savez(
-        "pmf_hist.npz",
-        pmf_history_1d=pmf_history_1d,
-        scattered_time_1d=scattered_time_1d,
-        pmf_weight_history_2d=pmf_history_2d,
-        scattered_time_2d=scattered_time_2d,
-    )
