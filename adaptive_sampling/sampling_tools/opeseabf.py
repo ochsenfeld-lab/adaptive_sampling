@@ -58,16 +58,16 @@ class OPESeABF(eABF, OPES, EnhancedSampling):
         if self.verbose and self.enable_abf:
             print(f" >>> INFO: ABF enabled for OPES-eABF (N_full={self.nfull})")
         elif self.verbose:
-            print(f" >>> INFO: ABF disabled!")
+            print(f" >>> INFO: ABF disabled. Running eOPES!")
 
 
     def step_bias(
         self,
         stabilize: bool = False,
         stabilizer_threshold: float = None,
-        output_file: str = "eopesabf.out",
+        output_file: str = "opeseabf.out",
         traj_file: str = "CV_traj.dat",
-        restart_file: str = "restart_eopesabf",
+        restart_file: str = "restart_opeseabf",
         **kwargs,
     ) -> np.ndarray:
         """Apply OPES-eABF to MD simulation
@@ -87,6 +87,25 @@ class OPESeABF(eABF, OPES, EnhancedSampling):
 
         self.md_state = self.the_md.get_sampling_data()
         (xi, delta_xi) = self.get_cv(**kwargs)
+
+        # obtain coupling strength from initial MD
+        if (self.estimate_sigma
+            and self.md_state.step < self.adaptive_coupling_stride
+        ):
+            self.ext_sigma = self.estimate_coupling(xi) * self.adaptive_coupling_scaling
+            return np.zeros_like(self.md_state.coords)  
+        
+        elif self.md_state.step == self.adaptive_coupling_stride:
+            self.ext_sigma = self.estimate_coupling(xi) * self.adaptive_coupling_scaling
+            self.ext_k = (kB_in_atomic * self.equil_temp) / (
+                self.ext_sigma * self.ext_sigma
+            )
+            if self.ext_sigma < self.adaptive_coupling_min:
+                print(f" >>> WARNING: estimated coupling of extended-system is suspiciously small ({self.ext_sigma}). Resetting to minimum {self.adaptive_coupling_min}.")
+                self.ext_sigma = self.adaptive_coupling_min
+            if self.verbose:
+                print(f" >>> INFO: setting coupling width of extended-system to {self.ext_sigma}!")
+            self.reinit_ext_system(xi)
 
         if stabilize and len(self.traj) > 0:
             self.stabilizer(xi, threshold=stabilizer_threshold)
@@ -162,7 +181,7 @@ class OPESeABF(eABF, OPES, EnhancedSampling):
         if self.md_state.step % self.out_freq == 0:
             # write output
 
-            if traj_file:
+            if traj_file and len(self.traj) >= self.out_freq:
                 self.write_traj(filename=traj_file)
             if output_file:
                 self.get_pmf()

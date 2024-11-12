@@ -91,13 +91,14 @@ class OPES(EnhancedSampling):
         self.approximate_norm = approximate_norm
         self.merge_threshold = merge_threshold
         self.merge = False if self.merge_threshold == np.inf else True 
+        if self.verbose and self.merge_threshold <= 0.0:
+            raise ValueError(" >>> OPES: Merge threshold should be > 0")
         self.recursive_merge = recursive_merge
         self.bias_factor = bias_factor
         self.normalize = normalize
         self.numerical_forces = force_from_grid
 
-        self.temperature = self.equil_temp
-        self.beta = 1.0 / (kB_in_atomic * self.temperature)
+        self.beta = 1.0 / (kB_in_atomic * self.equil_temp)
         self.energy_barr = energy_barr / atomic_to_kJmol 
         if not energy_barr > 0.0:
             raise ValueError(" >>> OPES: The barrier should be > 0 ")
@@ -200,7 +201,7 @@ class OPES(EnhancedSampling):
 
         # Write output
         if self.md_state.step % self.out_freq == 0:
-            if traj_file:
+            if traj_file and len(self.traj) >= self.out_freq:
                 self.write_traj(filename=traj_file)
             if out_file:
                 self.pmf = self.get_pmf()
@@ -530,7 +531,7 @@ class OPES(EnhancedSampling):
         return kernel_min_ind, min_distance
 
     def calc_norm_factor(self, approximate: bool = True):
-        """Norm factor of probability density (configurational integral)
+        """Norm factor of probability density
 
         Returns:
             norm_factor: normalization factor for probability density from kernels
@@ -631,13 +632,11 @@ class OPES(EnhancedSampling):
 
     def calc_potential(self, prob_dist: float):
         """calc the OPES bias potential from the probability density"""
-        potential = (self.gamma_prefac / self.beta) * np.log(
+        return (self.gamma_prefac / self.beta) * np.log(
             prob_dist / self.norm_factor + self.epsilon
         )
-        return potential
 
     def calc_forces(self, prob_dist: float, deriv_prob_dist: float) -> float:
         """calc the OPES bias forces from the probability density and its derivative"""
         deriv_log = 1. / (prob_dist / self.norm_factor + self.epsilon)
-        deriv_pot = (self.gamma_prefac / self.beta) * deriv_log * (deriv_prob_dist / self.norm_factor)
-        return deriv_pot
+        return (self.gamma_prefac / self.beta) * deriv_log * (deriv_prob_dist / self.norm_factor)
