@@ -53,7 +53,7 @@ class OPES(EnhancedSampling):
         merge_threshold: float = 1.0,
         recursive_merge: bool = True,
         bias_factor: float = None,
-        force_from_grid: bool = False,
+        force_from_grid: bool = True,
         **kwargs,
     ):
         super().__init__(*args, **kwargs)
@@ -154,7 +154,8 @@ class OPES(EnhancedSampling):
             print(f"\t Explore:\t{self.explore}")
             print(f"\t Barrier:\t{self.energy_barr*atomic_to_kJmol*kJ_to_kcal} kcal/mol")
             print(f"\t Bias factor:\t{self.gamma}")
-            print(f"\t Force grid:\t{self.numerical_forces}")
+            print(f"\t Read force:\t{self.numerical_forces}")
+            print(f"\t Kernel merge:\t{self.merge}\t(threshold: {self.merge_threshold})")
             print("\t ---------------------------------------------")
 
 
@@ -202,6 +203,7 @@ class OPES(EnhancedSampling):
             if traj_file:
                 self.write_traj(filename=traj_file)
             if out_file:
+                self.pmf = self.get_pmf()
                 output = {
                     "hist": self.histogram,
                     "free energy": self.pmf * atomic_to_kJmol,
@@ -219,32 +221,6 @@ class OPES(EnhancedSampling):
         Returns:
             pmf: current PMF estimate from OPES kernels
         """
-        prob_dist = np.zeros_like(self.histogram)
-        derivative = np.zeros_like(self.bias)
-        if self.ncoords == 1:
-            for i, cv in enumerate(self.grid[0]):
-                if not self.numerical_forces:
-                    val_gaussians = self.calc_gaussians(cv)
-                else:
-                    val_gaussians, kde_der = self.calc_gaussians(cv, requires_grad=True)
-                    derivative[0][0, i] = kde_der
-                prob_dist[0, i] = np.sum(val_gaussians)
-        else:
-            for i, x in enumerate(self.grid[0]):
-                for j, y in enumerate(self.grid[1]):
-                    if not self.numerical_forces:
-                        val_gaussians = self.calc_gaussians(np.asarray([x,y]))
-                    else:
-                        val_gaussians, kde_der = self.calc_gaussians(np.asarray([x,y]), requires_grad=True)
-                        derivative[0][j, i] = kde_der[0]
-                        derivative[1][j, i] = kde_der[1]
-                    prob_dist[j, i] = np.sum(val_gaussians) 
-
-        prob_dist /= self.KDE_norm
-        self.bias_potential = self.calc_potential(prob_dist)
-        if self.numerical_forces:
-            for i in range(self.ncoords):
-                self.bias[i] = self.calc_forces(prob_dist, derivative[i])
         pmf = -self.bias_potential / self.gamma_prefac if not self.explore else -self.bias_potential
         pmf -= pmf.min()
         return pmf
@@ -405,7 +381,7 @@ class OPES(EnhancedSampling):
         # Calculate normalization factor
         if self.normalize:
             self.norm_factor = self.calc_norm_factor(approximate=self.approximate_norm)
-        self.pmf = self.get_pmf()
+        self.grid_potential()
 
     def calc_gaussians(self, cv, requires_grad: bool = False) -> np.array:
         """Get normalized value of gaussian hills
@@ -611,6 +587,36 @@ class OPES(EnhancedSampling):
         self.old_nker = n_ker
  
         return sum_uprob / n_ker / self.KDE_norm
+
+    def grid_potential(self):
+        """Calculate bias potential and forces from kernels in bins of `self.grid`
+        """
+        prob_dist = np.zeros_like(self.histogram)
+        derivative = np.zeros_like(self.bias)
+        if self.ncoords == 1:
+            for i, cv in enumerate(self.grid[0]):
+                if not self.numerical_forces:
+                    val_gaussians = self.calc_gaussians(cv)
+                else:
+                    val_gaussians, kde_der = self.calc_gaussians(cv, requires_grad=True)
+                    derivative[0][0, i] = kde_der
+                prob_dist[0, i] = np.sum(val_gaussians)
+        else:
+            for i, x in enumerate(self.grid[0]):
+                for j, y in enumerate(self.grid[1]):
+                    if not self.numerical_forces:
+                        val_gaussians = self.calc_gaussians(np.asarray([x,y]))
+                    else:
+                        val_gaussians, kde_der = self.calc_gaussians(np.asarray([x,y]), requires_grad=True)
+                        derivative[0][j, i] = kde_der[0]
+                        derivative[1][j, i] = kde_der[1]
+                    prob_dist[j, i] = np.sum(val_gaussians) 
+
+        prob_dist /= self.KDE_norm
+        self.bias_potential = self.calc_potential(prob_dist)
+        if self.numerical_forces:
+            for i in range(self.ncoords):
+                self.bias[i] = self.calc_forces(prob_dist, derivative[i])
 
     def estimate_kernel_std(self, cv):
         """Adaptive estimate of optimal kernel standard deviation from trajectory"""

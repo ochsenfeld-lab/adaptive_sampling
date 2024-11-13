@@ -55,6 +55,11 @@ class OPESeABF(eABF, OPES, EnhancedSampling):
         super().__init__(*args, **kwargs)
         self.abf_forces = np.zeros_like(self.bias)
         self.enable_abf = enable_abf
+        if self.verbose and self.enable_abf:
+            print(f" >>> INFO: ABF enabled for OPES-eABF (N_full={self.nfull})")
+        elif self.verbose:
+            print(f" >>> INFO: ABF disabled!")
+
 
     def step_bias(
         self,
