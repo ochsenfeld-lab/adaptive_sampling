@@ -93,12 +93,13 @@ def pmf_from_kernels(
     """
 
     ncoords = len(kernel_center[0])
+    if ncoords != 1:
+        raise ValueError(" >>> ERROR: Only 1D PMFs are supported for now...")
     n_kernel = len(kernel_center)
     beta = 1. / (kB_in_atomic * equil_temp)
     gamma = beta * (energy_barrier / atomic_to_kJmol)
     gamma_prefac = gamma - 1 if explore else 1 - 1 / gamma
     epsilon = np.exp((-beta * energy_barrier) / gamma_prefac)
-    KDE_norm = sum_weights if not explore else n_iter
 
     # Analytic calculation of norm factor
     sum_uprob = 0.0
@@ -114,17 +115,17 @@ def pmf_from_kernels(
                 -0.5 * np.sum(np.square(np.divide(s_diff, np.asarray(kernel_std))), axis=1)
             )
         sum_uprob += np.sum(gaussians)
-    norm_factor = sum_uprob / n_kernel / KDE_norm
+    norm_factor = sum_uprob / n_kernel
 
     # 1D
     P = np.zeros_like(grid)
-    divisor = sum_weights if not explore else n_iter
     for i in range(len(grid)):
         s_diff = grid[i] - np.asarray(kernel_center)
         for l in range(ncoords):
             s_diff[l] = correct_periodicity(s_diff[l], periodicity[l])
         val_gaussians = np.asarray(kernel_height) * np.exp(-0.5 * np.sum(np.square(np.divide(s_diff, np.asarray(kernel_std))),axis=1))
-        P[i] = np.sum(val_gaussians) / divisor
+        P[i] = np.sum(val_gaussians)
+    P /= P.sum()
     bias_pot = 1/beta * np.log(P/norm_factor + epsilon)
     bias_pot = -gamma * bias_pot if explore else gamma_prefac * bias_pot 
     pmf_kernels = bias_pot/-gamma_prefac if not explore else bias_pot
