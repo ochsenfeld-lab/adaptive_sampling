@@ -10,8 +10,8 @@ from adaptive_sampling.sampling_tools.opes import OPES
 # ------------------------------------------------------------------------------------
 # MD Parameters
 
-nsteps = 2e6                        # number of steps
-energy_barrier = 127.218            # energy barrier in kJ/mol
+nsteps = 1e6                        # number of steps
+energy_barrier = 20                 # energy barrier in kJ/mol
 traj_freq  = 10                     # frequency of writing trajectory
 print_freq = 1000                   # frequency of printing output
 biased     = True                   # enables biased simulation
@@ -24,7 +24,7 @@ if os.path.isfile('CV_traj.dat'):
     print('Removing old trajectory')
     os.system("rm CV_traj.dat")
 if os.path.isfile('restart_opes.npz'):
-    os.system("rm restart_opes.npz") 
+    os.system("rm restart_opes.npz")
 
 cv_atoms = []          # not needed for 2D potentials
 min_1 = -0.3           # minimum of CV 1
@@ -76,7 +76,7 @@ opes_output_freq         = 1000    # frequency of writing outputs
 opes_explore             = False   # enable explore mode 
 
 the_bias = OPES(
-    the_md, 
+    the_md,
     collective_var,
     kernel_std=np.asarray([opes_hill_std]),
     energy_barr=energy_barrier,
@@ -92,7 +92,7 @@ the_bias = OPES(
     merge_threshold=1.0,
     recursive_merge=True,
     force_from_grid=False,
-    output_freq=opes_output_freq,       
+    output_freq=opes_output_freq,
     f_conf=0.0,             # confinement force of CV at boundaries
     equil_temp=temp,        # equilibrium temperature of simulation
     kinetics=True,          # calculate importent metrics to get accurate kinetics
