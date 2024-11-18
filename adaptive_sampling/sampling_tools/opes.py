@@ -43,7 +43,7 @@ class OPES(EnhancedSampling):
         *args,
         kernel_std: np.array = None,
         update_freq: int = 500,
-        energy_barr: float = 125.52, # 30 kcal/mol
+        energy_barr: float = 125.52,  # 30 kcal/mol
         bandwidth_rescaling: bool = True,
         adaptive_std: bool = False,
         adaptive_std_freq: int = 10,
@@ -73,11 +73,6 @@ class OPES(EnhancedSampling):
         else:
             self.initial_sigma_estimate = False
 
-        if self.verbose and self.initial_sigma_estimate:
-            print(
-                f" >>> INFO: estimating kernel standard deviation from initial unbiased MD ({self.adaptive_std_stride} steps)"
-            )
-
         if self.initial_sigma_estimate:
             self.sigma_0 = np.full((self.ncoords,), np.nan)
         elif not hasattr(kernel_std, "__len__"):
@@ -90,7 +85,7 @@ class OPES(EnhancedSampling):
         self.update_freq = update_freq
         self.approximate_norm = approximate_norm
         self.merge_threshold = merge_threshold
-        self.merge = False if self.merge_threshold == np.inf else True 
+        self.merge = False if self.merge_threshold == np.inf else True
         if self.verbose and self.merge_threshold <= 0.0:
             raise ValueError(" >>> OPES: Merge threshold should be > 0")
         self.recursive_merge = recursive_merge
@@ -99,7 +94,7 @@ class OPES(EnhancedSampling):
         self.numerical_forces = force_from_grid
 
         self.beta = 1.0 / (kB_in_atomic * self.equil_temp)
-        self.energy_barr = energy_barr / atomic_to_kJmol 
+        self.energy_barr = energy_barr / atomic_to_kJmol
         if not energy_barr > 0.0:
             raise ValueError(" >>> OPES: The barrier should be > 0 ")
         self.gamma = (
@@ -114,16 +109,20 @@ class OPES(EnhancedSampling):
             self.gamma_prefac = self.gamma - 1 if self.explore else 1 - 1 / self.gamma
 
         self.epsilon = np.exp((-self.beta * self.energy_barr) / self.gamma_prefac)
-        if self.epsilon<0.0:
-            raise ValueError(" >>> OPES: epsilon needs to be positive. The `energy_barr` might be too high.")
+        if self.epsilon < 0.0:
+            raise ValueError(
+                " >>> OPES: epsilon needs to be positive. The `energy_barr` might be too high."
+            )
         if self.normalize:
             self.norm_factor = np.power(self.epsilon, self.gamma_prefac)
         else:
             self.norm_factor = 1.0
 
         self.n = 0
-        self.sum_weights = np.power(self.epsilon, self.gamma_prefac)
-        self.sum_weights2 = np.square(self.sum_weights)
+        self.sum_weights = (
+            np.power(self.epsilon, self.gamma_prefac) if self.normalize else 1.0
+        )
+        self.sum_weights2 = np.square(self.sum_weights) if self.normalize else 1.0
         self.n_eff = (
             np.square(1.0 + self.sum_weights) / (1.0 + self.sum_weights2)
             if not self.explore
@@ -132,33 +131,42 @@ class OPES(EnhancedSampling):
         self.KDE_norm = self.sum_weights if not self.explore else self.n
         self.old_KDE_norm = np.copy(self.KDE_norm)
         self.old_nker = 0
-        self.rct = (1. / self.beta) * np.log(self.sum_weights)
-        
+        self.rct = (1.0 / self.beta) * np.log(self.sum_weights)
+
         self.kernel_center = []
         self.kernel_height = []
         self.kernel_std = []
-        self.bias_pot_traj = [] 
+        self.bias_pot_traj = []
         self.rct_traj = []
-        self.zed_traj = []      
+        self.zed_traj = []
 
         self.bias_potential = np.copy(self.histogram)
         self.bias_pot = 0.0
-        self.bias_pot_traj = []    
+        self.bias_pot_traj = []
 
         if self.verbose:
             print(" >>> INFO: OPES Parameters:")
             print("\t ---------------------------------------------")
-            print(f"\t Kernel_std:\t{self.sigma_0 if not self.initial_sigma_estimate else 'estimate from initial MD'}")
+            print(
+                f"\t Kernel_std:\t{self.sigma_0 if not self.initial_sigma_estimate else f'estimate from {self.adaptive_std_stride} steps'}"
+            )
             print(f"\t Rescaling:\t{self.bandwidth_rescaling}")
-            print(f"\t Adaptive:\t{self.adaptive_std}\t({self.adaptive_std_stride} steps)")
-            print(f"\t Normalize:\t{self.normalize}\t(approximated: {self.approximate_norm})")
+            print(
+                f"\t Adaptive:\t{self.adaptive_std}\t({self.adaptive_std_stride} steps)"
+            )
+            print(
+                f"\t Normalize:\t{self.normalize}\t(approximated: {self.approximate_norm})"
+            )
             print(f"\t Explore:\t{self.explore}")
-            print(f"\t Barrier:\t{self.energy_barr*atomic_to_kJmol*kJ_to_kcal} kcal/mol")
+            print(
+                f"\t Barrier:\t{self.energy_barr*atomic_to_kJmol*kJ_to_kcal} kcal/mol"
+            )
             print(f"\t Bias factor:\t{self.gamma}")
             print(f"\t Read force:\t{self.numerical_forces}")
-            print(f"\t Kernel merge:\t{self.merge}\t(threshold: {self.merge_threshold})")
+            print(
+                f"\t Kernel merge:\t{self.merge}\t(threshold: {self.merge_threshold})"
+            )
             print("\t ---------------------------------------------")
-
 
     def step_bias(
         self,
@@ -222,7 +230,11 @@ class OPES(EnhancedSampling):
         Returns:
             pmf: current PMF estimate from OPES kernels
         """
-        pmf = -self.bias_potential / self.gamma_prefac if not self.explore else -self.bias_potential
+        pmf = (
+            -self.bias_potential / self.gamma_prefac
+            if not self.explore
+            else -self.bias_potential
+        )
         pmf -= pmf.min()
         return pmf
 
@@ -296,7 +308,7 @@ class OPES(EnhancedSampling):
 
         Args:
             cv: new value of CV
-            
+
         Returns:
             bias force: len(ncoords) array of bias forces
         """
@@ -321,12 +333,12 @@ class OPES(EnhancedSampling):
                 self.sigma_0 = std
                 if not self.explore:
                     self.sigma_0 /= np.sqrt(self.gamma)
- 
+
         # get bias potential and forces
         if self.numerical_forces and self._check_boundaries(cv):
             idx = self.get_index(cv)
             self.bias_pot = self.bias_potential[idx[1], idx[0]]
-            opes_force = [self.bias[i][idx[1],idx[0]] for i in range(self.ncoords)]
+            opes_force = [self.bias[i][idx[1], idx[0]] for i in range(self.ncoords)]
         else:
             gaussians, kde_derivative = self.calc_gaussians(cv, requires_grad=True)
             self.prob_dist = np.sum(gaussians) / self.KDE_norm
@@ -336,7 +348,7 @@ class OPES(EnhancedSampling):
         # OPES KDE update
         if self.md_state.step % self.update_freq == 0:
             self.update_kde(cv)
-        
+
         return opes_force
 
     def update_kde(self, cv: np.array):
@@ -349,21 +361,21 @@ class OPES(EnhancedSampling):
         self.delta_kernel_center = []
         self.delta_kernel_sigma = []
 
-        self.n += 1 # counter for total kernels
+        self.n += 1  # counter for total kernels
 
         # Calculate weight coefficients
         weight_coeff = np.exp(self.beta * self.bias_pot)
         self.sum_weights += weight_coeff
         self.sum_weights2 += weight_coeff * weight_coeff
         self.KDE_norm = self.sum_weights if not self.explore else self.n
-        
+
         # Bandwidth rescaling
         self.n_eff = (
             np.square(1.0 + self.sum_weights) / (1.0 + self.sum_weights2)
             if not self.explore
             else self.n
         )
-        self.rct = (1. / self.beta) * np.log(self.sum_weights / self.n)
+        self.rct = (1.0 / self.beta) * np.log(self.sum_weights / self.n)
 
         if self.bandwidth_rescaling and len(self.kernel_std) > 0:
             sigma_i = self.sigma_0 * np.power(
@@ -398,7 +410,7 @@ class OPES(EnhancedSampling):
 
         if len(self.kernel_center) == 0:
             if requires_grad:
-                return 0.0, np.zeros(self.ncoords) 
+                return 0.0, np.zeros(self.ncoords)
             return 0.0
 
         # distance to kernel centers
@@ -408,13 +420,18 @@ class OPES(EnhancedSampling):
 
         # evaluate values of kernels at cv
         gaussians = np.asarray(self.kernel_height) * np.exp(
-            -0.5 * np.sum(np.square(np.divide(s_diff, np.asarray(self.kernel_std))), axis=1)
+            -0.5
+            * np.sum(np.square(np.divide(s_diff, np.asarray(self.kernel_std))), axis=1)
         )
         if requires_grad:
-            kde_derivative = np.sum(
-                -gaussians * np.divide(s_diff, np.square(np.asarray(self.kernel_std))).T,
-                axis=1,
-             ) / self.KDE_norm
+            kde_derivative = (
+                np.sum(
+                    -gaussians
+                    * np.divide(s_diff, np.square(np.asarray(self.kernel_std))).T,
+                    axis=1,
+                )
+                / self.KDE_norm
+            )
             return gaussians, kde_derivative
 
         return gaussians
@@ -524,7 +541,7 @@ class OPES(EnhancedSampling):
         distance = np.sqrt(
             np.sum(np.square(np.divide(s_diff, np.asarray(self.kernel_std))), axis=1)
         )
-        
+
         kernel_min_ind = np.argmin(distance[:-1]) if len(distance) > 1 else None
         min_distance = distance[kernel_min_ind]
 
@@ -574,7 +591,9 @@ class OPES(EnhancedSampling):
                         )
                     )
                 )
-            sum_uprob = self.norm_factor * self.old_KDE_norm * self.old_nker + delta_sum_uprob
+            sum_uprob = (
+                self.norm_factor * self.old_KDE_norm * self.old_nker + delta_sum_uprob
+            )
 
         else:
             # analytical calculation of norm factor, inefficient for high number of kernels
@@ -586,12 +605,11 @@ class OPES(EnhancedSampling):
         # store KDEnorm and nker for next update
         self.old_KDE_norm = np.copy(self.KDE_norm)
         self.old_nker = n_ker
- 
+
         return sum_uprob / n_ker / self.KDE_norm
 
     def grid_potential(self):
-        """Calculate bias potential and forces from kernels in bins of `self.grid`
-        """
+        """Calculate bias potential and forces from kernels in bins of `self.grid`"""
         prob_dist = np.zeros_like(self.histogram)
         derivative = np.zeros_like(self.bias)
         if self.ncoords == 1:
@@ -606,12 +624,14 @@ class OPES(EnhancedSampling):
             for i, x in enumerate(self.grid[0]):
                 for j, y in enumerate(self.grid[1]):
                     if not self.numerical_forces:
-                        val_gaussians = self.calc_gaussians(np.asarray([x,y]))
+                        val_gaussians = self.calc_gaussians(np.asarray([x, y]))
                     else:
-                        val_gaussians, kde_der = self.calc_gaussians(np.asarray([x,y]), requires_grad=True)
+                        val_gaussians, kde_der = self.calc_gaussians(
+                            np.asarray([x, y]), requires_grad=True
+                        )
                         derivative[0][j, i] = kde_der[0]
                         derivative[1][j, i] = kde_der[1]
-                    prob_dist[j, i] = np.sum(val_gaussians) 
+                    prob_dist[j, i] = np.sum(val_gaussians)
 
         prob_dist /= self.KDE_norm
         self.bias_potential = self.calc_potential(prob_dist)
@@ -638,5 +658,9 @@ class OPES(EnhancedSampling):
 
     def calc_forces(self, prob_dist: float, deriv_prob_dist: float) -> float:
         """calc the OPES bias forces from the probability density and its derivative"""
-        deriv_log = 1. / (prob_dist / self.norm_factor + self.epsilon)
-        return (self.gamma_prefac / self.beta) * deriv_log * (deriv_prob_dist / self.norm_factor)
+        deriv_log = 1.0 / (prob_dist / self.norm_factor + self.epsilon)
+        return (
+            (self.gamma_prefac / self.beta)
+            * deriv_log
+            * (deriv_prob_dist / self.norm_factor)
+        )

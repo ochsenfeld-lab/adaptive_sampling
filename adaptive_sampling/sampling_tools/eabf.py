@@ -29,8 +29,8 @@ class eABF(ABF, EnhancedSampling):
         ext_sigma: thermal width of coupling between collective and extended variable
             if None, it will be estimated based on the standard deviation of the CV in an initial MD
         ext_mass: mass of extended variable in atomic units
-        adaptive_coupling_stride: initial MD steps to estimate ext_sigma 
-        adaptive_coupling_scaling: scaling factor for standard deviation of initial MD to ext_sigma 
+        adaptive_coupling_stride: initial MD steps to estimate ext_sigma
+        adaptive_coupling_scaling: scaling factor for standard deviation of initial MD to ext_sigma
         adaptive_coupling_min: minimum for ext_sigma from adaptive estimate
         nfull: Number of force samples per bin where full bias is applied,
                if nsamples < nfull the bias force is scaled down by nsamples/nfull
@@ -46,11 +46,11 @@ class eABF(ABF, EnhancedSampling):
     def __init__(
         self,
         *args,
-        ext_sigma: Union[float,list]=None,
-        ext_mass: Union[float, list]=20.0,
-        adaptive_coupling_stride: int=5000,
-        adaptive_coupling_scaling: float=0.5,
-        adaptive_coupling_min: float=0.01,
+        ext_sigma: Union[float, list] = None,
+        ext_mass: Union[float, list] = 20.0,
+        adaptive_coupling_stride: int = 5000,
+        adaptive_coupling_scaling: float = 0.5,
+        adaptive_coupling_min: float = 0.01,
         friction: float = 1.0e-3,
         seed_in: int = 42,
         **kwargs,
@@ -78,14 +78,6 @@ class eABF(ABF, EnhancedSampling):
 
         (xi, _) = self.get_cv()
 
-        # for dynamics of extended-system
-        if not self.estimate_sigma:
-            self.ext_sigma = self.unit_conversion_cv(np.asarray(ext_sigma))[0]
-            self.ext_k = (kB_in_atomic * self.equil_temp) / (
-                self.ext_sigma * self.ext_sigma
-            )
-            self.reinit_ext_system(xi)
-
         self.ext_mass = np.asarray(ext_mass)
         self.ext_hist = np.zeros_like(self.histogram)
         self.ext_forces = np.zeros(self.ncoords)
@@ -102,7 +94,7 @@ class eABF(ABF, EnhancedSampling):
         self.adaptive_coupling_mean = np.zeros(self.ncoords)
         self.adaptive_coupling_var = np.zeros(self.ncoords)
         self.adaptive_coupling_scaling = adaptive_coupling_scaling
-        self.adaptive_coupling_min = adaptive_coupling_min
+        self.adaptive_coupling_min = np.full(self.ncoords, adaptive_coupling_min)
 
         # set random seed for langevin dynamics
         if type(seed_in) is int:
@@ -115,12 +107,28 @@ class eABF(ABF, EnhancedSampling):
                     print(
                         "\n >>> Warning: The provided seed was neither an int nor a state of random!\n"
                     )
+        # for dynamics of extended-system
+        if not self.estimate_sigma:
+            self.ext_sigma = self.unit_conversion_cv(np.asarray(ext_sigma))[0]
+            self.ext_k = (kB_in_atomic * self.equil_temp) / (
+                self.ext_sigma * self.ext_sigma
+            )
+            self.reinit_ext_system(xi)
+
+        if self.verbose:
+            print(" >>> INFO: Extended-system Parameters:")
+            print("\t ---------------------------------------------")
+            print(
+                f"\t Coupling:\t{self.ext_sigma if not self.estimate_sigma else f'estimate from {self.adaptive_coupling_stride} steps'}"
+            )
+            print(f"\t Masses:\t{self.ext_mass}")
+            print("\t ---------------------------------------------")
 
     def step_bias(
         self,
-        output_file: str = 'eabf.out',
-        traj_file: str = 'CV_traj.dat',
-        restart_file: str = 'restart_eabf',
+        output_file: str = "eabf.out",
+        traj_file: str = "CV_traj.dat",
+        restart_file: str = "restart_eabf",
         stabilize: bool = False,
         stabilizer_threshold: float = None,
         **kwargs,
@@ -141,22 +149,32 @@ class eABF(ABF, EnhancedSampling):
         (xi, delta_xi) = self.get_cv(**kwargs)
 
         # obtain coupling strength from initial MD
-        if (self.estimate_sigma
-            and self.md_state.step < self.adaptive_coupling_stride
-        ):
+        if self.estimate_sigma and self.md_state.step < self.adaptive_coupling_stride:
             self.ext_sigma = self.estimate_coupling(xi) * self.adaptive_coupling_scaling
-            return np.zeros_like(self.md_state.coords)  
-        
-        elif self.md_state.step == self.adaptive_coupling_stride:
+            return np.zeros_like(self.md_state.coords)
+
+        elif (
+            self.estimate_sigma and self.md_state.step == self.adaptive_coupling_stride
+        ):
             self.ext_sigma = self.estimate_coupling(xi) * self.adaptive_coupling_scaling
             self.ext_k = (kB_in_atomic * self.equil_temp) / (
                 self.ext_sigma * self.ext_sigma
             )
-            if self.ext_sigma < self.adaptive_coupling_min:
-                print(f" >>> WARNING: estimated coupling of extended-system is suspiciously small ({self.ext_sigma}). Resetting to {self.adaptive_coupling_min}.")
-                self.ext_sigma = self.adaptive_coupling_min
+            for i, s in enumerate(self.ext_sigma):
+                if s < self.adaptive_coupling_min:
+                    print(
+                        f" >>> WARNING: estimated coupling of extended-system is suspiciously small ({s}). Resetting to {self.adaptive_coupling_min[i]}."
+                    )
+                    self.ext_sigma[i] = self.adaptive_coupling_min[i]
             if self.verbose:
-                print(f" >>> INFO: setting coupling width of extended-system to {self.ext_sigma}!")
+                print(
+                    f" >>> INFO: setting coupling width of extended-system to {self.ext_sigma}!"
+                )
+
+            with open("COUPLING", "w") as out:
+                for s in self.ext_sigma:
+                    out.write(f"{s}")
+
             self.reinit_ext_system(xi)
 
         if stabilize and len(self.traj) > 0:
@@ -224,7 +242,7 @@ class eABF(ABF, EnhancedSampling):
             self.ext_traj = np.append(self.ext_traj, [self.ext_coords], axis=0)
             self.temp.append(self.md_state.temp)
             self.epot.append(self.md_state.epot)
-        
+
         self._up_momenta()
 
         # correction for kinetics
@@ -246,7 +264,7 @@ class eABF(ABF, EnhancedSampling):
                     output[f"czar force {i}"] = self.czar_force[i]
 
                 self.write_output(output, filename=output_file)
-            
+
             if restart_file:
                 self.write_restart(filename=restart_file)
 
@@ -564,8 +582,16 @@ class eABF(ABF, EnhancedSampling):
         tau = self.adaptive_coupling_stride
         if self.adaptive_coupling_counter < self.adaptive_coupling_stride:
             tau = self.adaptive_coupling_counter
-        self.adaptive_coupling_mean, self.adaptive_coupling_m2, self.adaptive_coupling_var = welford_var(
-            self.md_state.step, self.adaptive_coupling_mean, self.adaptive_coupling_m2, cv, tau
+        (
+            self.adaptive_coupling_mean,
+            self.adaptive_coupling_m2,
+            self.adaptive_coupling_var,
+        ) = welford_var(
+            self.md_state.step,
+            self.adaptive_coupling_mean,
+            self.adaptive_coupling_m2,
+            cv,
+            tau,
         )
         return np.sqrt(self.adaptive_coupling_var)
 
@@ -655,7 +681,7 @@ class eABF(ABF, EnhancedSampling):
             data[f"lambda{i}"] = self.ext_traj[:, i]
         return data
 
-    def write_traj(self, filename: str='CV_traj.dat'):
+    def write_traj(self, filename: str = "CV_traj.dat"):
         """save trajectory for post-processing"""
 
         data = self._write_ext_traj()

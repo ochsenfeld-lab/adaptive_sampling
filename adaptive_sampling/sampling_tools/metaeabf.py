@@ -17,13 +17,17 @@ class WTMeABF(eABF, WTM, EnhancedSampling):
     The dynamics of the fictitious particle is biased using a combination of ABF and Metadynamics.
 
     Args:
-        ext_sigma: thermal width of coupling between collective and extended variable
-        ext_mass: mass of extended variable in atomic units
         hill_height: height of Gaussian hills in kJ/mol
         hill_std: standard deviation of Gaussian hills in units of the CV (can be Bohr, Degree, or None)
         md: Object of the MD Interface
         cv_def: definition of the Collective Variable (CV) (see adaptive_sampling.colvars)
                 [["cv_type", [atom_indices], minimum, maximum, bin_width], [possible second dimension]]
+        ext_sigma: thermal width of coupling between collective and extended variable
+            if None, it will be estimated based on the standard deviation of the CV in an initial MD
+        ext_mass: mass of extended variable in atomic units
+        adaptive_coupling_stride: initial MD steps to estimate ext_sigma
+        adaptive_coupling_scaling: scaling factor for standard deviation of initial MD to ext_sigma
+        adaptive_coupling_min: minimum for ext_sigma from adaptive estimate
         friction: friction coefficient for Langevin dynamics of the extended-system
         seed_in: random seed for Langevin dynamics of extended-system
         nfull: Number of force samples per bin where full bias is applied,
@@ -37,9 +41,7 @@ class WTMeABF(eABF, WTM, EnhancedSampling):
         kinetic: calculate necessary data to obtain kinetics of reaction
         f_conf: force constant for confinement of system to the range of interest in CV space
         output_freq: frequency in steps for writing outputs
-
     """
-
     def __init__(self, *args, enable_abf=True, **kwargs):
         super().__init__(*args, **kwargs)
         self.apply_abf = enable_abf
@@ -79,24 +81,32 @@ class WTMeABF(eABF, WTM, EnhancedSampling):
         (xi, delta_xi) = self.get_cv(**kwargs)
 
         # obtain coupling strength from initial MD
-        if (self.estimate_sigma
-            and self.md_state.step < self.adaptive_coupling_stride
-        ):
+        if self.estimate_sigma and self.md_state.step < self.adaptive_coupling_stride:
             self.ext_sigma = self.estimate_coupling(xi) * self.adaptive_coupling_scaling
-            return np.zeros_like(self.md_state.coords)  
-        
-        elif self.md_state.step == self.adaptive_coupling_stride:
+            return np.zeros_like(self.md_state.coords)
+
+        elif (
+            self.estimate_sigma and self.md_state.step == self.adaptive_coupling_stride
+        ):
             self.ext_sigma = self.estimate_coupling(xi) * self.adaptive_coupling_scaling
             self.ext_k = (kB_in_atomic * self.equil_temp) / (
                 self.ext_sigma * self.ext_sigma
             )
-            if self.ext_sigma < self.adaptive_coupling_min:
-                print(f" >>> WARNING: estimated coupling of extended-system is suspiciously small ({self.ext_sigma}). Resetting to minimum {self.adaptive_coupling_min}.")
-                self.ext_sigma = self.adaptive_coupling_min
+            for i, s in enumerate(self.ext_sigma):
+                if s < self.adaptive_coupling_min:
+                    print(
+                        f" >>> WARNING: estimated coupling of extended-system is suspiciously small ({s}). Resetting to {self.adaptive_coupling_min[i]}."
+                    )
+                    self.ext_sigma[i] = self.adaptive_coupling_min[i]
             if self.verbose:
-                print(f" >>> INFO: setting coupling width of extended-system to {self.ext_sigma}!")
+                print(
+                    f" >>> INFO: setting coupling width of extended-system to {self.ext_sigma}!"
+                )
+
             with open("COUPLING", "w") as out:
-                out.write(f"{self.ext_sigma}")
+                for s in self.ext_sigma:
+                    out.write(f"{s}")
+
             self.reinit_ext_system(xi)
 
         if stabilize and len(self.traj) > 0:
