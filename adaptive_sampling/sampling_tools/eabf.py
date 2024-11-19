@@ -20,7 +20,7 @@ class eABF(ABF, EnhancedSampling):
        see: Lesage et. al., J. Phys. Chem. B (2017); https://doi.org/10.1021/acs.jpcb.6b10055
 
     The collective variable is coupled to a fictitious particle with an harmonic force.
-    The dynamics of the fictitious particel is biased with the ABF algorithm.
+    The dynamics of the fictitious particle is biased with the ABF algorithm.
 
     Args:
         md: Object of the MDInterface
@@ -34,11 +34,11 @@ class eABF(ABF, EnhancedSampling):
         adaptive_coupling_min: minimum for ext_sigma from adaptive estimate
         nfull: Number of force samples per bin where full bias is applied,
                if nsamples < nfull the bias force is scaled down by nsamples/nfull
-        friction: friction coefficient for Lagevin dynamics of the extended-system
+        friction: friction coefficient for Langevin dynamics of the extended-system
         seed_in: random seed for Langevin dynamics of extended-system
-        equil_temp: equillibrium temperature of MD
+        equil_temp: equilibrium temperature of MD
         verbose: print verbose information
-        kinetice: calculate necessary data to obtain kinetics of reaction
+        kinetics: calculate necessary data to obtain kinetics of reaction
         f_conf: force constant for confinement of system to the range of interest in CV space
         output_freq: frequency in steps for writing outputs
     """
@@ -157,11 +157,8 @@ class eABF(ABF, EnhancedSampling):
             self.estimate_sigma and self.md_state.step == self.adaptive_coupling_stride
         ):
             self.ext_sigma = self.estimate_coupling(xi) * self.adaptive_coupling_scaling
-            self.ext_k = (kB_in_atomic * self.equil_temp) / (
-                self.ext_sigma * self.ext_sigma
-            )
             for i, s in enumerate(self.ext_sigma):
-                if s < self.adaptive_coupling_min:
+                if s < self.adaptive_coupling_min[i]:
                     print(
                         f" >>> WARNING: estimated coupling of extended-system is suspiciously small ({s}). Resetting to {self.adaptive_coupling_min[i]}."
                     )
@@ -170,6 +167,9 @@ class eABF(ABF, EnhancedSampling):
                 print(
                     f" >>> INFO: setting coupling width of extended-system to {self.ext_sigma}!"
                 )
+            self.ext_k = (kB_in_atomic * self.equil_temp) / (
+                self.ext_sigma * self.ext_sigma
+            )
 
             with open("COUPLING", "w") as out:
                 for s in self.ext_sigma:

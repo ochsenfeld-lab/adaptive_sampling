@@ -4,7 +4,6 @@ from adaptive_sampling.units import *
 from .utils import correct_periodicity
 from .utils import welford_var
 
-
 class OPES(EnhancedSampling):
     """on-the-fly probability enhanced sampling
 
@@ -27,7 +26,7 @@ class OPES(EnhancedSampling):
         normalize: normalize OPES probability density over explored space
         approximate_norm: enables linear scaling approximation of norm factor
         merge_threshold: threshold distance for kde-merging in units of std, `np.inf` disables merging
-        recursive_merge: enables recursive merging until seperation of all kernels is above threshold distance
+        recursive_merge: enables recursive merging until separation of all kernels is above threshold distance
         bias_factor: bias factor of target distribution, default is `beta * energy_barr`
         force_from_grid: read forces from grid instead of calculating sum of kernels in every step
         equil_temp: equilibrium temperature of MD
@@ -43,7 +42,7 @@ class OPES(EnhancedSampling):
         *args,
         kernel_std: np.array = None,
         update_freq: int = 500,
-        energy_barr: float = 125.52,  # 30 kcal/mol
+        energy_barr: float = 30.0 / kJ_to_kcal,  # 30 kcal/mol
         bandwidth_rescaling: bool = True,
         adaptive_std: bool = False,
         adaptive_std_freq: int = 10,
@@ -76,9 +75,9 @@ class OPES(EnhancedSampling):
         if self.initial_sigma_estimate:
             self.sigma_0 = np.full((self.ncoords,), np.nan)
         elif not hasattr(kernel_std, "__len__"):
-            self.sigma_0 = np.asarray([kernel_std])
+            self.sigma_0 = self.unit_conversion_cv(np.asarray([kernel_std]))[0]
         else:
-            self.sigma_0 = np.asarray(kernel_std)
+            self.sigma_0 = self.unit_conversion_cv(np.asarray(kernel_std))[0]
 
         # other parameters
         self.explore = explore

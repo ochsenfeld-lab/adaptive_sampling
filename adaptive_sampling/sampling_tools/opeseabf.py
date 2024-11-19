@@ -100,11 +100,8 @@ class OPESeABF(eABF, OPES, EnhancedSampling):
             self.estimate_sigma and self.md_state.step == self.adaptive_coupling_stride
         ):
             self.ext_sigma = self.estimate_coupling(xi) * self.adaptive_coupling_scaling
-            self.ext_k = (kB_in_atomic * self.equil_temp) / (
-                self.ext_sigma * self.ext_sigma
-            )
             for i, s in enumerate(self.ext_sigma):
-                if s < self.adaptive_coupling_min:
+                if s < self.adaptive_coupling_min[i]:
                     print(
                         f" >>> WARNING: estimated coupling of extended-system is suspiciously small ({s}). Resetting to {self.adaptive_coupling_min[i]}."
                     )
@@ -113,6 +110,9 @@ class OPESeABF(eABF, OPES, EnhancedSampling):
                 print(
                     f" >>> INFO: setting coupling width of extended-system to {self.ext_sigma}!"
                 )
+            self.ext_k = (kB_in_atomic * self.equil_temp) / (
+                self.ext_sigma * self.ext_sigma
+            )
 
             with open("COUPLING", "w") as out:
                 for s in self.ext_sigma:
