@@ -66,8 +66,6 @@ def pmf_from_kernels(
     kernel_center: List,
     kernel_height: List,
     kernel_std: List,
-    sum_weights: float,
-    n_iter: int,
     equil_temp: float = 300.0,
     energy_barrier: float = 20.0,
     explore: bool = False,
@@ -76,7 +74,7 @@ def pmf_from_kernels(
     """Get Potential of Mean Force (PMF) from superpositions of kernels with data from restart file
 
     Args:
-        grid: centroids of grid along cv
+        grid: centroids of grid along cv, for higher dimensions list of 1D grids
         kernel_center: centers of kernels
         kernel_height: heights of kernels
         kernel_std: standard deviations of kernels
@@ -93,8 +91,8 @@ def pmf_from_kernels(
     """
 
     ncoords = len(kernel_center[0])
-    if ncoords != 1:
-        raise ValueError(" >>> ERROR: Only 1D PMFs are supported for now...")
+    #if ncoords != 1:
+    #    raise ValueError(" >>> ERROR: Only 1D PMFs are supported for now...")
     n_kernel = len(kernel_center)
     beta = 1. / (kB_in_atomic * equil_temp)
     gamma = beta * (energy_barrier / atomic_to_kJmol)
@@ -118,33 +116,40 @@ def pmf_from_kernels(
     norm_factor = sum_uprob / n_kernel
 
     # 1D
-    P = np.zeros_like(grid)
-    for i in range(len(grid)):
-        s_diff = grid[i] - np.asarray(kernel_center)
-        for l in range(ncoords):
-            s_diff[l] = correct_periodicity(s_diff[l], periodicity[l])
-        val_gaussians = np.asarray(kernel_height) * np.exp(-0.5 * np.sum(np.square(np.divide(s_diff, np.asarray(kernel_std))),axis=1))
-        P[i] = np.sum(val_gaussians)
-    P /= P.sum()
-    bias_pot = 1/beta * np.log(P/norm_factor + epsilon)
-    bias_pot = -gamma * bias_pot if explore else gamma_prefac * bias_pot 
-    pmf_kernels = bias_pot/-gamma_prefac if not explore else bias_pot
-    pmf_kernels -= pmf_kernels.min()
-    probability_kernels = P/P.max()
+    if ncoords == 1:
+        P = np.zeros_like(grid)
+        for i in range(len(grid)):
+            s_diff = grid[i] - np.asarray(kernel_center)
+            for l in range(ncoords):
+                s_diff[l] = correct_periodicity(s_diff[l], periodicity[l])
+            val_gaussians = np.asarray(kernel_height) * np.exp(-0.5 * np.sum(np.square(np.divide(s_diff, np.asarray(kernel_std))),axis=1))
+            P[i] = np.sum(val_gaussians)
+        P /= P.sum()
+        bias_pot = np.log(P/norm_factor + epsilon) / beta
+        bias_pot = -gamma * bias_pot if explore else gamma_prefac * bias_pot 
+        pmf_kernels = bias_pot/-gamma_prefac if not explore else bias_pot
+        pmf_kernels -= pmf_kernels.min()
+        probability_kernels = P/P.max()
 
-    return pmf_kernels * atomic_to_kJmol, probability_kernels
+        return pmf_kernels * atomic_to_kJmol, probability_kernels
 
     # 2D
-    probability_kernels = np.zeros((len(grid_x), len(grid_y)))
-    divisor = sum_weights if not explore else times_updated
-    for x in range(len(grid_x)):
-        for y in range(len(grid_y)):
-            s_diff = np.array([grid_x[x], grid_y[y]]) - np.asarray(kernel_center)
-            #for l in range(the_bias.ncoords):
-                #s_diff[l] = correct_periodicity(s_diff[l], the_bias.periodicity[l])
-            val_gaussians = np.asarray(kernel_height) * np.exp(-0.5 * np.sum(np.square(np.divide(s_diff, np.asarray(kernel_sigma))),axis=1))
-            probability_kernels[x,y] = np.sum(val_gaussians) /divisor
-    bias_pot = np.log(probability_kernels/norm_factor + epsilon) / beta / kJ_to_kcal
-    bias_pot = -gamma * bias_pot if explore else gamma_prefac * bias_pot 
-    pmf_kernels = bias_pot/-gamma_prefac if not explore else bias_pot
-    pmf_kernels -= pmf_kernels.min()
+    elif ncoords == 2:
+        P = np.zeros([len(grid[0]), len(grid[1])])
+        for i,x in enumerate(grid[0]):
+            for j,y in enumerate(grid[1]):
+                s_diff = np.array([x, y]) - np.asarray(kernel_center)
+                for l in range(ncoords):
+                    s_diff[l] = correct_periodicity(s_diff[l], periodicity[l])
+                val_gaussians = np.asarray(kernel_height) * np.exp(-0.5 * np.sum(np.square(np.divide(s_diff, np.asarray(kernel_std))),axis=1))
+                P[i,j] = np.sum(val_gaussians)
+        bias_pot = np.log(P/norm_factor + epsilon) / beta
+        bias_pot = -gamma * bias_pot if explore else gamma_prefac * bias_pot 
+        pmf_kernels = bias_pot/-gamma_prefac if not explore else bias_pot
+        pmf_kernels -= pmf_kernels.min()
+        probability_kernels = P/P.max()
+
+        return pmf_kernels * atomic_to_kJmol, probability_kernels
+    
+    else:
+        raise ValueError(" >>> ERROR: Only 1D and 2D PMFs are supported for now...")

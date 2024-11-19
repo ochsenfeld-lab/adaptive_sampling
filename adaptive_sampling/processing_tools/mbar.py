@@ -293,15 +293,26 @@ def pmf_from_weights(
     RT = R_in_SI * equil_temp / 1000.0
 
     if dx is None:
-        dx = grid[1] - grid[0]
+        if len(grid.shape) == 1:
+            dx = grid[1] - grid[0]
+        elif len(grid.shape) == 2:
+            grid_dim = int((np.sqrt(len(grid[:,0]))))
+            dx = np.asarray([grid[1,0] - grid[0,0], grid[grid_dim,1] - grid[grid_dim-1,1]])
     dx2 = dx / 2.0
 
     if len(grid.shape) == 1:
         cv = cv[:, np.newaxis]
         grid = grid[:, np.newaxis]
 
+    if len(cv) > 1e6:    
+        print(f'>>> INFO: Started getting pmf from reweighting frames. This might take a while...')
+        
+
     rho = np.zeros(shape=(len(grid),), dtype=float)
+    print_freq = len(grid) / 5
     for ii, center in enumerate(grid):
+        if ii % print_freq == 0:
+                print(f" >>> Progress:{int(ii/print_freq)} of 5")
         indices = np.where(
             np.logical_and(
                 (cv >= center - dx2).all(axis=-1), (cv < center + dx2).all(axis=-1)
