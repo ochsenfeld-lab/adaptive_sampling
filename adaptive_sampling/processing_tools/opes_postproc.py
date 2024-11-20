@@ -43,18 +43,19 @@ def pmf_from_reweighting(
     scattered_time, pmf_hist, rho_hist = [], [], []
 
     if history_points == 1:
-        pmf_weights, rho_weights = pmf_from_weights(grid, cv, W, equil_temp=equil_temp, dx=dx)
+        pmf_weights, rho_weights = pmf_from_weights(grid, cv, W, equil_temp=equil_temp, dx=dx, verbose=True)
         pmf_weights -= pmf_weights.min()
         pmf_hist.append(pmf_weights)
         rho_hist.append(rho_weights)
     else:
         n = int(len(cv) / history_points)
+        print_freq = int(history_points/5)
         for j in range(history_points):
             n_sample = j * n + n
-            if j % 10 == 0:
+            if j % print_freq == 0:
                 print(f" >>> Progress: History entry {j} of {history_points}")
             scattered_time.append(n_sample)
-            pmf_weights, rho_weights = pmf_from_weights(grid, cv[0:n_sample], W[0:n_sample], equil_temp=equil_temp, dx=dx)
+            pmf_weights, rho_weights = pmf_from_weights(grid, cv[0:n_sample], W[0:n_sample], equil_temp=equil_temp, dx=dx, verbose=False)
             pmf_weights -= pmf_weights.min()
             pmf_hist.append(pmf_weights)
             rho_hist.append(rho_weights)
@@ -140,7 +141,7 @@ def pmf_from_kernels(
             for j,y in enumerate(grid[1]):
                 s_diff = np.array([x, y]) - np.asarray(kernel_center)
                 for l in range(ncoords):
-                    s_diff[l] = correct_periodicity(s_diff[l], periodicity[l])
+                    s_diff[:,l] = correct_periodicity(s_diff[:,l], periodicity[l])
                 val_gaussians = np.asarray(kernel_height) * np.exp(-0.5 * np.sum(np.square(np.divide(s_diff, np.asarray(kernel_std))),axis=1))
                 P[i,j] = np.sum(val_gaussians)
         bias_pot = np.log(P/norm_factor + epsilon) / beta
