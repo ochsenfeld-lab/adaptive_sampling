@@ -17,13 +17,17 @@ class WTMeABF(eABF, WTM, EnhancedSampling):
     The dynamics of the fictitious particle is biased using a combination of ABF and Metadynamics.
 
     Args:
-        ext_sigma: thermal width of coupling between collective and extended variable
-        ext_mass: mass of extended variable in atomic units
         hill_height: height of Gaussian hills in kJ/mol
         hill_std: standard deviation of Gaussian hills in units of the CV (can be Bohr, Degree, or None)
         md: Object of the MD Interface
         cv_def: definition of the Collective Variable (CV) (see adaptive_sampling.colvars)
                 [["cv_type", [atom_indices], minimum, maximum, bin_width], [possible second dimension]]
+        ext_sigma: thermal width of coupling between collective and extended variable
+            if None, it will be estimated based on the standard deviation of the CV in an initial MD
+        ext_mass: mass of extended variable in atomic units
+        adaptive_coupling_stride: initial MD steps to estimate ext_sigma
+        adaptive_coupling_scaling: scaling factor for standard deviation of initial MD to ext_sigma
+        adaptive_coupling_min: minimum for ext_sigma from adaptive estimate
         friction: friction coefficient for Langevin dynamics of the extended-system
         seed_in: random seed for Langevin dynamics of extended-system
         nfull: Number of force samples per bin where full bias is applied,
@@ -37,13 +41,15 @@ class WTMeABF(eABF, WTM, EnhancedSampling):
         kinetic: calculate necessary data to obtain kinetics of reaction
         f_conf: force constant for confinement of system to the range of interest in CV space
         output_freq: frequency in steps for writing outputs
-
     """
-
     def __init__(self, *args, enable_abf=True, **kwargs):
         super().__init__(*args, **kwargs)
         self.apply_abf = enable_abf
         self.abf_forces = np.zeros_like(self.bias)
+        if self.verbose and self.apply_abf:
+            print(f" >>> INFO: ABF enabled for WTM-eABF (N_full={self.nfull})")
+        elif self.verbose:
+            print(f" >>> INFO: ABF disabled. Running eWTM!")
 
     def step_bias(
         self,
@@ -71,8 +77,37 @@ class WTMeABF(eABF, WTM, EnhancedSampling):
             bias_force: WTM-eABF biasing force of current step that has to be added to molecular forces
         """
 
-        md_state = self.the_md.get_sampling_data()
+        self.md_state = self.the_md.get_sampling_data()
         (xi, delta_xi) = self.get_cv(**kwargs)
+
+        # obtain coupling strength from initial MD
+        if self.estimate_sigma and self.md_state.step < self.adaptive_coupling_stride:
+            self.ext_sigma = self.estimate_coupling(xi) * self.adaptive_coupling_scaling
+            return np.zeros_like(self.md_state.coords)
+
+        elif (
+            self.estimate_sigma and self.md_state.step == self.adaptive_coupling_stride
+        ):
+            self.ext_sigma = self.estimate_coupling(xi) * self.adaptive_coupling_scaling
+            for i, s in enumerate(self.ext_sigma):
+                if s < self.adaptive_coupling_min[i]:
+                    print(
+                        f" >>> WARNING: estimated coupling of extended-system is suspiciously small ({s}). Resetting to {self.adaptive_coupling_min[i]}."
+                    )
+                    self.ext_sigma[i] = self.adaptive_coupling_min[i]
+            if self.verbose:
+                print(
+                    f" >>> INFO: setting coupling width of extended-system to {self.ext_sigma}!"
+                )
+            self.ext_k = (kB_in_atomic * self.equil_temp) / (
+                self.ext_sigma * self.ext_sigma
+            )
+
+            with open("COUPLING", "w") as out:
+                for s in self.ext_sigma:
+                    out.write(f"{s}")
+
+            self.reinit_ext_system(xi)
 
         if stabilize and len(self.traj) > 0:
             self.stabilizer(xi, threshold=stabilizer_threshold)
@@ -141,18 +176,18 @@ class WTMeABF(eABF, WTM, EnhancedSampling):
 
         self.traj = np.append(self.traj, [xi], axis=0)
         self.ext_traj = np.append(self.ext_traj, [self.ext_coords], axis=0)
-        self.temp.append(md_state.temp)
-        self.epot.append(md_state.epot)
+        self.temp.append(self.md_state.temp)
+        self.epot.append(self.md_state.epot)
         self._up_momenta()
 
         # correction for kinetics
         if self.kinetics:
             self._kinetics(delta_xi)
 
-        if md_state.step % self.out_freq == 0:
+        if self.md_state.step % self.out_freq == 0:
             # write output
 
-            if write_traj:
+            if write_traj and len(self.traj) >= self.out_freq:
                 self.write_traj(filename=traj_file)
 
             if write_output:
@@ -191,8 +226,7 @@ class WTMeABF(eABF, WTM, EnhancedSampling):
             mw_file: name of buffer file for shared-bias
             n_trials: number of attempts to access of buffer file before throwing an error
         """
-        md_state = self.the_md.get_sampling_data()
-        if md_state.step == 0:
+        if self.md_state.step == 0:
             if self.verbose:
                 print(" >>> Info: Creating a new instance for shared-bias eABF.")
                 print(f" >>> Info: Data of local walker stored in `{local_file}.npz`.")
@@ -243,7 +277,7 @@ class WTMeABF(eABF, WTM, EnhancedSampling):
                 print(f" >>> Info: Syncing with buffer file `{mw_file}.npz`.")
 
         # save new samples
-        count = md_state.step % sync_interval
+        count = self.md_state.step % sync_interval
         self.update_samples[count] = force_sample
         self.last_samples_xi[count] = xi
         self.last_samples_la[count] = self.ext_coords

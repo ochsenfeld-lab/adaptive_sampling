@@ -15,11 +15,15 @@ class OPESeABF(eABF, OPES, EnhancedSampling):
     The dynamics of the fictitious particel is biased using a combination of ABF and OPES.
 
     Args:
-        ext_sigma: thermal width of coupling between collective and extended variable
-        ext_mass: mass of extended variable in atomic units
         md: Object of the MD Interface
         cv_def: definition of the Collective Variable (CV) (see adaptive_sampling.colvars)
             [["cv_type", [atom_indices], minimum, maximum, bin_width], [possible second dimension]]
+        ext_sigma: thermal width of coupling between collective and extended variable
+            if None, it will be estimated based on the standard deviation of the CV in an initial MD
+        ext_mass: mass of extended variable in atomic units
+        adaptive_coupling_stride: initial MD steps to estimate ext_sigma
+        adaptive_coupling_scaling: scaling factor for standard deviation of initial MD to ext_sigma
+        adaptive_coupling_min: minimum for ext_sigma from adaptive estimate
         friction: friction coefficient for Langevin dynamics of the extended-system
         seed_in: random seed for Langevin dynamics of extended-system
         nfull: Number of force samples per bin where full bias is applied,
@@ -37,7 +41,7 @@ class OPESeABF(eABF, OPES, EnhancedSampling):
         merge_threshold: threshold distance for kde-merging in units of std, `np.inf` disables merging
         recursive_merge: enables recursive merging until seperation of all kernels is above threshold distance
         bias_factor: bias factor of target distribution, default is `beta * energy_barr`
-        numerical_forces: read forces from grid instead of calculating sum of kernels in every step, only for 1D CVs       
+        numerical_forces: read forces from grid instead of calculating sum of kernels in every step, only for 1D CVs
         equil_temp: equilibrium temperature of MD
         verbose: print verbose information
         kinetics: calculate necessary data to obtain kinetics of reaction
@@ -58,16 +62,15 @@ class OPESeABF(eABF, OPES, EnhancedSampling):
         if self.verbose and self.enable_abf:
             print(f" >>> INFO: ABF enabled for OPES-eABF (N_full={self.nfull})")
         elif self.verbose:
-            print(f" >>> INFO: ABF disabled!")
-
+            print(f" >>> INFO: ABF disabled. Running eOPES!")
 
     def step_bias(
         self,
         stabilize: bool = False,
         stabilizer_threshold: float = None,
-        output_file: str = "eopesabf.out",
+        output_file: str = "opeseabf.out",
         traj_file: str = "CV_traj.dat",
-        restart_file: str = "restart_eopesabf",
+        restart_file: str = "restart_opeseabf",
         **kwargs,
     ) -> np.ndarray:
         """Apply OPES-eABF to MD simulation
@@ -87,6 +90,48 @@ class OPESeABF(eABF, OPES, EnhancedSampling):
 
         self.md_state = self.the_md.get_sampling_data()
         (xi, delta_xi) = self.get_cv(**kwargs)
+
+        # obtain coupling strength from initial MD
+        if self.estimate_sigma and self.md_state.step < self.adaptive_coupling_stride:
+            self.ext_sigma = self.estimate_coupling(xi) * self.adaptive_coupling_scaling
+            return np.zeros_like(self.md_state.coords)
+
+        elif (
+            self.estimate_sigma and self.md_state.step == self.adaptive_coupling_stride
+        ):
+            self.ext_sigma = self.estimate_coupling(xi) * self.adaptive_coupling_scaling
+            for i, s in enumerate(self.ext_sigma):
+                if s < self.adaptive_coupling_min[i]:
+                    print(
+                        f" >>> WARNING: estimated coupling of extended-system is suspiciously small ({s}). Resetting to {self.adaptive_coupling_min[i]}."
+                    )
+                    self.ext_sigma[i] = self.adaptive_coupling_min[i]
+            if self.verbose:
+                print(
+                    f" >>> INFO: setting coupling width of extended-system to {self.ext_sigma}!"
+                )
+            self.ext_k = (kB_in_atomic * self.equil_temp) / (
+                self.ext_sigma * self.ext_sigma
+            )
+
+            with open("COUPLING", "w") as out:
+                for s in self.ext_sigma:
+                    out.write(f"{s}")
+
+            self.reinit_ext_system(xi)
+
+            # setup OPES adaptive kernel std
+            if self.initial_sigma_estimate or self.adaptive_std:
+                self.adaptive_counter = self.adaptive_coupling_counter
+                self.welford_mean = self.adaptive_coupling_mean
+                self.welford_m2 = self.adaptive_coupling_m2
+                self.welford_var = self.adaptive_coupling_var
+                if (
+                    self.initial_sigma_estimate
+                    and self.adaptive_std_stride < self.adaptive_coupling_stride
+                ):
+                    # otherwise OPES sigma_0 would not be set any more
+                    self.sigma_0 = self.ext_sigma / self.adaptive_coupling_scaling
 
         if stabilize and len(self.traj) > 0:
             self.stabilizer(xi, threshold=stabilizer_threshold)
@@ -162,7 +207,7 @@ class OPESeABF(eABF, OPES, EnhancedSampling):
         if self.md_state.step % self.out_freq == 0:
             # write output
 
-            if traj_file:
+            if traj_file and len(self.traj) >= self.out_freq:
                 self.write_traj(filename=traj_file)
             if output_file:
                 self.get_pmf()

@@ -121,7 +121,7 @@ class EnhancedSampling(ABC):
 
         if self.verbose:
             for i in range(self.ncoords):
-                print(f"\n Initialize {self.cv[i]} as collective variable:")
+                print(f"\n >>> INFO: Initialize {self.cv[i]} as collective variable:")
                 if self.cv_type[i] == "angle":
                     output_dat = (
                         self.minx[i] * DEGREES_per_RADIAN,
