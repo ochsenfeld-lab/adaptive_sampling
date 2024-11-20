@@ -297,21 +297,25 @@ def pmf_from_weights(
         if len(grid.shape) == 1:
             dx = grid[1] - grid[0]
         elif len(grid.shape) == 2:
-            cycle1 = int((grid[:,0].max()-grid[:,0].min())/(grid[1,0]-grid[0,0]))
-            dx = np.asarray([grid[1,0]-grid[0,0], grid[cycle1+1,1]-grid[cycle1,1]])
+            cycle1 = int(
+                (grid[:, 0].max() - grid[:, 0].min()) / (grid[1, 0] - grid[0, 0])
+            )
+            dx = np.asarray(
+                [grid[1, 0] - grid[0, 0], grid[cycle1 + 1, 1] - grid[cycle1, 1]]
+            )
             if verbose:
-                print(f'>>> INFO: dx was not provided, calculated as {dx}')
+                print(f">>> INFO: dx was not provided, calculated as {dx}")
     dx2 = dx / 2.0
 
     if len(grid.shape) == 1:
         cv = cv[:, np.newaxis]
-        grid = grid[:, np.newaxis]        
+        grid = grid[:, np.newaxis]
 
     rho = np.zeros(shape=(len(grid),), dtype=float)
     print_freq = int(len(grid) / 5)
     for ii, center in enumerate(grid):
         if ii % print_freq == 0 and verbose:
-                print(f"   > Progress: {int(ii/print_freq)} of 5")
+            print(f"   > Progress: {int(ii/print_freq)} of 5")
         indices = np.where(
             np.logical_and(
                 (cv >= center - dx2).all(axis=-1), (cv < center + dx2).all(axis=-1)
