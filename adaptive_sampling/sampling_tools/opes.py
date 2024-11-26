@@ -4,6 +4,7 @@ from adaptive_sampling.units import *
 from .utils import correct_periodicity
 from .utils import welford_var
 
+
 class OPES(EnhancedSampling):
     """on-the-fly probability enhanced sampling
 

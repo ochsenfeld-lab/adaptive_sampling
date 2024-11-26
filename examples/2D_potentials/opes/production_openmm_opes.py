@@ -1,5 +1,6 @@
 from sys import stdout
 import numpy as np
+import os
 
 from openmm import *
 from openmm.app import *

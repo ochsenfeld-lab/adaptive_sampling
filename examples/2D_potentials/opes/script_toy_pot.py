@@ -6,55 +6,58 @@ import os, sys, time
 from adaptive_sampling.units import *
 from adaptive_sampling.interface.interfaceMD_2D import MD
 from adaptive_sampling.sampling_tools.opes import OPES
-from adaptive_sampling.sampling_tools.opeseabf import OPESeABF
 
 # ------------------------------------------------------------------------------------
-# Parameters
+# MD Parameters
 
-nsteps = 5e6  # number of steps
-update_freq = 200  # update frequency tau_G
-explore = False  # enable explore mode
-adaptive_std = True  # enable adaptive sigma rescaling
-energy_barrier = 30.0  # approximated energy barrier
-merge_threshold: float = np.inf  # merging threshold, np.inf disables merging
-recursive_merge = True  # enable recursive merging
-approximate_norm: bool = True  # linear scaling norm factor approximation
+nsteps = 1e6  # number of steps
+energy_barrier = 20  # energy barrier in kJ/mol
+traj_freq = 10  # frequency of writing trajectory
+print_freq = 1000  # frequency of printing output
+biased = True  # enables biased simulation
 
 # ------------------------------------------------------------------------------------
 # Setup CV
 
+# remove old output
+if os.path.isfile("CV_traj.dat"):
+    print("Removing old trajectory")
+    os.system("rm CV_traj.dat")
+if os.path.isfile("restart_opes.npz"):
+    os.system("rm restart_opes.npz")
+
 cv_atoms = []  # not needed for 2D potentials
-min_1 = -60.0  # minimum of CV 1
-max_1 = 60.0  # maximum of CV 1
-bin_width_1 = 2.0  # bin width along CV 1
-min_2 = -40.0  # minimum of CV 2
-max_2 = 40.0  # minimum of CV 2
-bin_width_2 = 2.0  # bin width along CV 2
+min_1 = -0.3  # minimum of CV 1
+max_1 = 2.5  # maximum of CV 1
+bin_width_1 = 0.05  # bin width along CV 1
+min_2 = -1.5  # minimum of CV 2
+max_2 = 1.5  # minimum of CV 2
+bin_width_2 = 0.05  # bin width along CV 2
 
 collective_var = [
     ["x", cv_atoms, min_1, max_1, bin_width_1],
     #    ["y", cv_atoms, min_2, max_2, bin_width_2],
 ]
 
-periodicity = None
+periodicity = [None]
 
 grid_1 = np.arange(min_1, max_1, bin_width_1)
 grid_2 = np.arange(min_2, max_2, bin_width_2)
 
 # ------------------------------------------------------------------------------------
 # Setup MD
-
 mass = 10.0  # mass of particle in a.u.
-seed = 42  # random seed
-dt = 5.0e0  # stepsize in fs
+seed = np.random.randint(1000)  # random seed
+dt = 1.0e0  # stepsize in fs
 temp = 300.0  # temperature in K
-coords_in = [-50.0, 0.0]
 
+coords_in = [np.random.normal(2.1, 0.07), np.random.normal(0, 0.15)]
+print(f"STARTING MD FROM {coords_in}")
 
 the_md = MD(
     mass_in=mass,
     coords_in=coords_in,
-    potential="2",
+    potential="4",
     dt_in=dt,
     target_temp_in=temp,
     seed_in=seed,
@@ -64,51 +67,54 @@ the_md.calc_etvp()
 
 # --------------------------------------------------------------------------------------
 # Setup the sampling algorithm
-# --------------------------------------------------------------------------------------
-output_freq = 1000  # frequency of writing outputs
-kernel_std = np.array([None])  # std of initial kernel, if None it will be estimated
+opes_hill_std = 0.07  # OPES hill width
+opes_bias_factor = None  # OPES Bias factor gamma
+opes_frequency = 500  # OPES frequency of hill creation
+opes_adaptive_std = False  # Adaptive estimate of kernel standard deviation
+opes_adaptive_std_stride = (
+    10  # time for estimate of kernel std on units of `opes_frequency`
+)
+opes_output_freq = 1000  # frequency of writing outputs
+opes_explore = False  # enable explore mode
 
 the_bias = OPES(
     the_md,
     collective_var,
-    kernel_std=kernel_std,
-    adaptive_std=adaptive_std,
-    adaptive_std_freq=10,
-    explore=explore,
-    periodicity=periodicity,
-    output_freq=output_freq,
-    equil_temp=temp,
+    kernel_std=np.asarray([opes_hill_std]),
     energy_barr=energy_barrier,
-    merge_threshold=merge_threshold,
-    bias_factor=None,
-    approximate_norm=approximate_norm,
-    f_conf=100.0,
-    numerical_forces=False,
-    verbose=False,
+    bias_factor=opes_bias_factor,
+    bandwidth_rescaling=True,
+    adaptive_std=opes_adaptive_std,
+    adaptive_std_stride=opes_adaptive_std_stride,
+    explore=opes_explore,
+    update_freq=opes_frequency,
+    periodicity=periodicity,
+    normalize=True,
+    approximate_norm=True,
+    merge_threshold=1.0,
+    recursive_merge=True,
+    force_from_grid=False,
+    output_freq=opes_output_freq,
+    f_conf=0.0,  # confinement force of CV at boundaries
+    equil_temp=temp,  # equilibrium temperature of simulation
+    kinetics=True,  # calculate importent metrics to get accurate kinetics
+    verbose=True,  # print verbose output
 )
-
-# remove old output
-if True:
-    os.system("rm CV_traj.dat")
-    os.system("rm restart_opes.npz")
-    os.system("rm pmf_hist.npz")
-
 the_bias.step_bias()
 
-
+# --------------------------------------------------------------------------------------
 def print_output(the_md, the_bias, t):
     print(
-        "%11.2f\t%14.6f\t%14.6f\t%14.6f\t%14.6f\t%14.6f\t%14.6f\t%14d\t%14.6f\t%14.6f\t%14.6f"
+        "%11.2f\t%14.6f\t%14.6f\t%14.6f\t%14.6f\t%14.6f\t%14.6f\t%14d\t%14.6f\t%14.6f"
         % (
             the_md.step * the_md.dt * atomic_to_fs,
             the_md.coords[0],
             the_md.coords[1],
             the_md.epot,
             the_md.ekin,
-            the_bias.n_eff,
+            the_md.epot + the_md.ekin,
             the_md.temp,
             len(the_bias.kernel_center),
-            the_bias.potential * kJ_to_kcal,
             t,
             the_bias.kernel_std[-1][0] if len(the_bias.kernel_std) > 0 else 0.0,
         )
@@ -118,30 +124,23 @@ def print_output(the_md, the_bias, t):
 
 # --------------------------------------------------------------------------------------
 # Run MD
-# --------------------------------------------------------------------------------------
-traj_freq = 10
-x, y, kernel_number, potentials = [], [], [], []
-biased = True
-pmf_hist = True
-
 print(
-    "%11s\t%14s\t%14s\t%14s\t%14s\t%14s\t%14s\t%14s\t%14s\t%14s\t%14s"
+    "%11s\t%14s\t%14s\t%14s\t%14s\t%14s\t%14s\t%14s\t%14s\t%14s"
     % (
         "time [fs]",
         "x",
         "y",
         "E_pot",
         "E_kin",
-        "N_eff",
+        "E_tot",
         "Temp",
-        "n Kernel",
-        "Bias Potential",
-        "Wall time",
-        "last sigma",
+        "n kernel",
+        "wall time",
+        "last std",
     )
 )
 print_output(the_md, the_bias, 0)
-
+x, y, kernel_number, bias_potentials = [], [], [], []
 while the_md.step < nsteps:
     the_md.step += 1
 
@@ -151,7 +150,7 @@ while the_md.step < nsteps:
     t0 = time.perf_counter()
     if biased:
         the_md.forces += the_bias.step_bias()
-        potentials.append(the_bias.potential)
+        bias_potentials.append(the_bias.bias_potential)
         if the_md.step % the_bias.update_freq == 0:
             kernel_number.append(len(the_bias.kernel_center))
 
@@ -159,7 +158,7 @@ while the_md.step < nsteps:
     the_md.up_momenta(langevin=True)
     the_md.calc_etvp()
 
-    if the_md.step % output_freq == 0:
+    if the_md.step % opes_output_freq == 0:
         print_output(the_md, the_bias, t)
 
     if the_md.step % traj_freq == 0:
@@ -167,27 +166,5 @@ while the_md.step < nsteps:
         y.append(the_md.coords[1])
 
 # Save full trajectory for alternative reweighting
-if True:
-    np.savez("full_traj.npz", x=x, y=y)
-
-
-# weighted PMF history
-if True:
-    cv_traj = np.loadtxt("CV_traj.dat", skiprows=1)
-    full_traj = np.load("full_traj.npz")
-    cv_1 = np.array(full_traj["x"])
-    cv_2 = np.array(full_traj["y"])
-    cv_pot = np.array(cv_traj[:, 4])
-    pmf_history_1d, scattered_time_1d = the_bias.pmf_history_1d(
-        cv_1, cv_pot, grid_1, hist_res=50
-    )
-    pmf_history_2d, scattered_time_2d = the_bias.pmf_history_2d(
-        cv_1, cv_2, cv_pot, grid_1, grid_2, hist_res=50
-    )
-    np.savez(
-        "pmf_hist.npz",
-        pmf_history_1d=pmf_history_1d,
-        scattered_time_1d=scattered_time_1d,
-        pmf_weight_history_2d=pmf_history_2d,
-        scattered_time_2d=scattered_time_2d,
-    )
+np.savez("full_traj.npz", x=x, y=y)
+np.savez("results.npz", opes_pots=bias_potentials)
