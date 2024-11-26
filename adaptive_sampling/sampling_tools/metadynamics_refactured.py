@@ -1,6 +1,7 @@
 import numpy as np
 from adaptive_sampling.sampling_tools.enhanced_sampling import EnhancedSampling
 from adaptive_sampling.units import *
+from build.lib.adaptive_sampling.sampling_tools.utils import diff
 from .utils import correct_periodicity
 from .utils import welford_var
 
@@ -32,6 +33,7 @@ class WTM(EnhancedSampling):
         estimator: str = "Potential",
         force_from_grid: bool = True,
         verbose: bool = False,
+        bias_factor: float = None,
         **kwargs,
     ):
         super().__init__(*args, **kwargs)
@@ -49,9 +51,12 @@ class WTM(EnhancedSampling):
             raise ValueError(
                 " >>> Error: Effective temperature for Well-Tempered MtD has to be > 0!"
             )
-    
+        if bias_factor is None and well_tempered_temp is None:
+            raise ValueError(
+                " >>> Error: Either bias_factor or well_tempered_temp has to be set!"
+            )
+
         # initialize MtD parameters
-        hill_std = [hill_std] if not hasattr(hill_std, "__len__") else hill_std
         self.numerical_forces = force_from_grid
         self.verbose = verbose
         self.well_tempered_temp = well_tempered_temp
@@ -59,20 +64,32 @@ class WTM(EnhancedSampling):
         self.force_from_grid = force_from_grid
         self.estimator = estimator
         self.hill_drop_freq = hill_drop_freq
+        self.bias_factor = bias_factor
+        if self.bias_factor is not None:
+            self.well_tempered_temp = bias_factor * self.equil_temp - self.equil_temp
+        self.wtm_prefac = (
+            self.equil_temp + self.well_tempered_temp
+        ) / self.well_tempered_temp
 
         # hill parameters
-        if not hasattr(hill_std, "__len__"):
-            self.hill_std = self.unit_conversion_cv(np.asarray([hill_std]))[0]
-        else:
-            self.hill_std = self.unit_conversion_cv(np.asarray(hill_std))[0]
+        hill_std = [hill_std] if not hasattr(hill_std, "__len__") else hill_std
+        self.hill_std = self.unit_conversion_cv(np.asarray(hill_std))[0]
         self.hill_height = hill_height / atomic_to_kJmol
         self.hills_center = []
         self.hills_height = []
         self.hills_std = []
 
-        self.bias_potential = np.copy(self.histogram)
+        self.metapot = np.copy(self.histogram)
         self.bias_pot = 0.0
         self.bias_pot_traj = []
+
+        if self.verbose:
+            print(" >>> INFO: MtD Parameters:")
+            print("\t ---------------------------------------------")
+            print(f"\t Hill_std:\t{self.hill_std}")
+            print(f"\t Bias factor:\t{self.bias_factor}")
+            print(f"\t Read force:\t{self.numerical_forces}")
+            print("\t ---------------------------------------------")
 
     def step_bias(
         self,
@@ -101,7 +118,7 @@ class WTM(EnhancedSampling):
             self._kinetics(grad_cv)
 
         # shared-bias metadynamics
-        #if self.shared:
+        # if self.shared:
         #    self.shared_bias(cv, **kwargs)
 
         # store biased histogram along CV for output
@@ -125,7 +142,7 @@ class WTM(EnhancedSampling):
                 output = {
                     "hist": self.histogram,
                     "free energy": self.pmf * atomic_to_kJmol,
-                    "OPES Pot": self.bias_potential * atomic_to_kJmol,
+                    "OPES Pot": self.metapot * atomic_to_kJmol,
                 }
                 self.write_output(output, filename=out_file)
             if restart_file:
@@ -139,7 +156,9 @@ class WTM(EnhancedSampling):
         Returns:
             pmf: current PMF estimate from OPES kernels
         """
-
+        pmf = -self.metapot
+        if self.well_tempered:
+            pmf *= self.wtm_prefac
         pmf -= pmf.min()
         return pmf
 
@@ -206,14 +225,14 @@ class WTM(EnhancedSampling):
         # get bias potential and forces
         if self.numerical_forces and self._check_boundaries(cv):
             idx = self.get_index(cv)
-            self.bias_pot = self.bias_potential[idx[1], idx[0]]
+            self.bias_pot = self.metapot[idx[1], idx[0]]
             mtd_force = [self.bias[i][idx[1], idx[0]] for i in range(self.ncoords)]
         else:
-            gaussians = self.calc_gaussians(cv)
-            mtd_force = gaussians
+            self.bias_pot, derivative = self.calc_gaussians(cv, requires_grad=True)
+            mtd_force = derivative
 
-        # OPES KDE update
-        if self.md_state.step % self.update_freq == 0:
+        # MtD KDE update
+        if self.md_state.step % self.hill_drop_freq == 0:
             self.update_kde(cv)
 
         return mtd_force
@@ -246,12 +265,9 @@ class WTM(EnhancedSampling):
             * np.sum(np.square(np.divide(s_diff, np.asarray(self.hills_std))), axis=1)
         )
         if requires_grad:
-            kde_derivative = (
-                np.sum(
-                    -gaussians
-                    * np.divide(s_diff, np.square(np.asarray(self.hills_std))).T,
-                    axis=1,
-                )
+            kde_derivative = np.sum(
+                -gaussians * np.divide(s_diff, np.square(np.asarray(self.hills_std))).T,
+                axis=1,
             )
             return gaussians, kde_derivative
 
@@ -274,36 +290,30 @@ class WTM(EnhancedSampling):
             s_new: hills position
             std_new: hills standard deviation
         """
-        self.hills_height.append(h_new)
+        if self.well_tempered:
+            w = h_new * np.exp(
+                -self.bias_pot / (kB_in_atomic * self.well_tempered_temp)
+            )
+        else:
+            w = h_new
+
+        self.hills_height.append(w)
         self.hills_center.append(s_new)
         self.hills_std.append(std_new)
 
     def grid_potential(self):
         """Calculate bias potential and forces from kernels in bins of `self.grid`"""
-        potential = np.zeros_like(self.histogram)
-        derivative = np.zeros_like(self.bias)
         if self.ncoords == 1:
             for i, cv in enumerate(self.grid[0]):
-                if not self.numerical_forces:
-                    val_gaussians = self.calc_gaussians(cv)
-                else:
-                    val_gaussians, kde_der = self.calc_gaussians(cv, requires_grad=True)
-                    derivative[0][0, i] = kde_der
-                potential[0, i] = np.sum(val_gaussians)
-        else:
-            for i, x in enumerate(self.grid[0]):
-                for j, y in enumerate(self.grid[1]):
-                    if not self.numerical_forces:
-                        val_gaussians = self.calc_gaussians(np.asarray([x, y]))
-                    else:
-                        val_gaussians, kde_der = self.calc_gaussians(
-                            np.asarray([x, y]), requires_grad=True
-                        )
-                        derivative[0][j, i] = kde_der[0]
-                        derivative[1][j, i] = kde_der[1]
-                    potential[j, i] = np.sum(val_gaussians)
-
-        self.bias_potential = potential
-        if self.numerical_forces:
-            for i in range(self.ncoords):
-                self.bias[i] = potential * derivative[i]
+                dx = diff(cv, np.asarray(self.hills_center[-1]), self.periodicity[0])
+                self.metapot[0, i] += self.hills_height[-1] * np.exp(
+                    (np.square(dx)) / (2.0 * np.square(self.hills_std[-1]))
+                )
+                if self.numerical_forces:
+                    kde_derivative = (
+                        -self.metapot[0, i]
+                        * np.divide(dx, np.square(np.asarray(self.hills_std))).T
+                    )
+                    self.bias[0][0, i] = kde_derivative
+        elif self.ncoords == 2:
+            print(" >>> ERROR: 2D MtD not implemented yet!")
