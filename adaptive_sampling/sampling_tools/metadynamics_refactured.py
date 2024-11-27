@@ -42,15 +42,6 @@ class WTM(EnhancedSampling):
             raise ValueError(" >>> Error: Update interval has to be int > 0!")
         if hill_height <= 0:
             raise ValueError(" >>> Error: Gaussian height for MtD has to be > 0!")
-        if well_tempered_temp is None:
-            if self.verbose:
-                print(
-                    " >>> Info: Well-tempered scaling of MtD hill_height switched off"
-                )
-        elif well_tempered_temp <= 0:
-            raise ValueError(
-                " >>> Error: Effective temperature for Well-Tempered MtD has to be > 0!"
-            )
         if bias_factor is None and well_tempered_temp is None:
             raise ValueError(
                 " >>> Error: Either bias_factor or well_tempered_temp has to be set!"
@@ -60,7 +51,7 @@ class WTM(EnhancedSampling):
         self.numerical_forces = force_from_grid
         self.verbose = verbose
         self.well_tempered_temp = well_tempered_temp
-        self.well_tempered = False if well_tempered_temp == None else True
+        self.well_tempered = False if well_tempered_temp == None and bias_factor == None else True
         self.force_from_grid = force_from_grid
         self.estimator = estimator
         self.hill_drop_freq = hill_drop_freq
@@ -70,6 +61,15 @@ class WTM(EnhancedSampling):
         self.wtm_prefac = (
             self.equil_temp + self.well_tempered_temp
         ) / self.well_tempered_temp
+        if self.well_tempered_temp is None:
+            if self.verbose:
+                print(
+                    " >>> Info: Well-tempered scaling of MtD hill_height switched off"
+                )
+        elif self.well_tempered_temp <= 0:
+            raise ValueError(
+                " >>> Error: Effective temperature for Well-Tempered MtD has to be > 0!"
+            )
 
         # hill parameters
         hill_std = [hill_std] if not hasattr(hill_std, "__len__") else hill_std
@@ -86,19 +86,20 @@ class WTM(EnhancedSampling):
         if self.verbose:
             print(" >>> INFO: MtD Parameters:")
             print("\t ---------------------------------------------")
-            print(f"\t Hill_std:\t{self.hill_std}")
-            print(f"\t Bias factor:\t{self.bias_factor}")
+            print(f"\t Hill std:\t{self.hill_std}")
+            print(f"\t Hill height:\t{self.hill_height * atomic_to_kJmol} kJ/mol")
+            print(f"\t Bias factor:\t{self.bias_factor} {'(WTM temperature: ' + str(self.well_tempered_temp) + ' K)' if self.bias_factor is not None else f'Well tempered temperature: {self.well_tempered_temp} K'}")
             print(f"\t Read force:\t{self.numerical_forces}")
             print("\t ---------------------------------------------")
 
     def step_bias(
         self,
         traj_file: str = "CV_traj.dat",
-        out_file: str = "opes.out",
-        restart_file: str = "restart_opes",
+        out_file: str = "mtd.out",
+        restart_file: str = "restart_mtd",
         **kwargs,
     ) -> np.array:
-        """Apply OPES bias to MD
+        """Apply MtD bias to MD
 
         Returns:
             bias_force: Bias force that has to be added to system forces
@@ -142,7 +143,7 @@ class WTM(EnhancedSampling):
                 output = {
                     "hist": self.histogram,
                     "free energy": self.pmf * atomic_to_kJmol,
-                    "OPES Pot": self.metapot * atomic_to_kJmol,
+                    "MtD Pot": self.metapot * atomic_to_kJmol,
                 }
                 self.write_output(output, filename=out_file)
             if restart_file:
@@ -154,7 +155,7 @@ class WTM(EnhancedSampling):
         """Calculate current PMF estimate on `self.grid`
 
         Returns:
-            pmf: current PMF estimate from OPES kernels
+            pmf: current PMF estimate from Mtd kernels
         """
         pmf = -self.metapot
         if self.well_tempered:
@@ -181,8 +182,8 @@ class WTM(EnhancedSampling):
             " >>> ERROR: Multiple-walker shared bias not available for MtD!"
         )
 
-    def write_restart(self, filename: str = "restart_opes"):
-        """Dumps state of OPES to restart file
+    def write_restart(self, filename: str = "restart_mtd"):
+        """Dumps state of MtD to restart file
 
         Args:
             filename: name of restart file
@@ -194,8 +195,8 @@ class WTM(EnhancedSampling):
             sigma=self.hills_std,
         )
 
-    def restart(self, filename: str = "restart_opes"):
-        """Restart OPES from previous simulation
+    def restart(self, filename: str = "restart_mtd"):
+        """Restart MtD from previous simulation
 
         Args:
             filename: name of restart
@@ -228,7 +229,8 @@ class WTM(EnhancedSampling):
             self.bias_pot = self.metapot[idx[1], idx[0]]
             mtd_force = [self.bias[i][idx[1], idx[0]] for i in range(self.ncoords)]
         else:
-            self.bias_pot, derivative = self.calc_gaussians(cv, requires_grad=True)
+            gaussians, derivative = self.calc_gaussians(cv, requires_grad=True)
+            self.bias_pot = np.sum(gaussians)
             mtd_force = derivative
 
         # MtD KDE update
@@ -249,7 +251,7 @@ class WTM(EnhancedSampling):
             kde_derivative: derivative of KDE, only if requires_grad
         """
 
-        if len(self.kernel_center) == 0:
+        if len(self.hills_center) == 0:
             if requires_grad:
                 return 0.0, np.zeros(self.ncoords)
             return 0.0
@@ -307,7 +309,7 @@ class WTM(EnhancedSampling):
             for i, cv in enumerate(self.grid[0]):
                 dx = diff(cv, np.asarray(self.hills_center[-1]), self.periodicity[0])
                 self.metapot[0, i] += self.hills_height[-1] * np.exp(
-                    (np.square(dx)) / (2.0 * np.square(self.hills_std[-1]))
+                    -(np.square(dx)) / (2.0 * np.square(self.hills_std[-1]))
                 )
                 if self.numerical_forces:
                     kde_derivative = (
