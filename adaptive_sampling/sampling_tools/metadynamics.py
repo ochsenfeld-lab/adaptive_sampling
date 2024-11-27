@@ -66,6 +66,11 @@ class WTM(EnhancedSampling):
 
         self.metapot = np.zeros_like(self.histogram)
         self.center = []
+        self.bias_factor = (self.equil_temp + self.well_tempered_temp) / self.equil_temp if self.well_tempered_temp < np.inf else -1
+        self.beta = 1.0 / (kB_in_atomic * self.equil_temp)
+
+        self.mtd_rct = 0.0
+        self.rew_traj = []
 
     def step_bias(self, write_output: bool = True, write_traj: bool = True, **kwargs):
 
@@ -88,6 +93,7 @@ class WTM(EnhancedSampling):
         self.traj = np.append(self.traj, [xi], axis=0)
         self.temp.append(md_state.temp)
         self.epot.append(md_state.epot)
+        self.rew_traj.append(self.mtd_rct)
 
         # correction for kinetics
         if self.kinetics:
@@ -265,6 +271,7 @@ class WTM(EnhancedSampling):
         bias_force = [0, 0]
         if is_in_bounds:
             bias_force = self._accumulate_wtm_force(xi)
+            self.get_rct()
 
         if not is_in_bounds or not self.force_from_grid:
             bias_force, _ = self._analytic_wtm_force(xi)
@@ -464,6 +471,16 @@ class WTM(EnhancedSampling):
             centers=new_centers,
         )
 
+    def get_rct(self):
+        """get reweighting factor for metadynamics
+        """
+        minusBetaF = self.beta * self.bias_factor / (self.bias_factor - 1.) if self.bias_factor != -1 else self.beta
+        minusBetaFplusV = self.beta / (self.bias_factor - 1.) if self.bias_factor != -1 else 0.0
+        max_bias = self.metapot.max() # to avoid overflow
+        Z_0 = np.sum(np.exp(minusBetaF * (self.metapot - max_bias)))
+        Z_V = np.sum(np.exp(minusBetaFplusV * (self.metapot - max_bias))) 
+        self.mtd_rct = (1. / self.beta) * np.log(Z_0/Z_V) + max_bias
+
     def write_restart(self, filename: str = "restart_wtm"):
         """write restart file
 
@@ -532,6 +549,7 @@ class WTM(EnhancedSampling):
         data = {
             "Epot [H]": self.epot,
             "T [K]": self.temp,
+            "C(T)": self.rew_traj,
         }
         self._write_traj(data)
 
@@ -539,3 +557,4 @@ class WTM(EnhancedSampling):
         self.traj = np.array([self.traj[-1]])
         self.epot = [self.epot[-1]]
         self.temp = [self.temp[-1]]
+        self.rew_traj = [self.rew_traj[-1]]

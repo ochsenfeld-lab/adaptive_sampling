@@ -300,6 +300,11 @@ class EnhancedSampling(ABC):
                 delta_xi[0], (1.0 / np.repeat(self.the_md.mass, 3)) * delta_xi[0]
             )
 
+    def reinit_cv(self):
+        """Reinit collective variable, can be useful for adaptive CVs"""
+        from ..colvars import CV
+        self.the_cv = CV(self.the_md, requires_grad=True)
+
     def write_output(self, data: dict, filename="free_energy.dat"):
         """write results to output file
 
