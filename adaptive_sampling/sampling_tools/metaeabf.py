@@ -42,6 +42,7 @@ class WTMeABF(eABF, WTM, EnhancedSampling):
         f_conf: force constant for confinement of system to the range of interest in CV space
         output_freq: frequency in steps for writing outputs
     """
+
     def __init__(self, *args, enable_abf=True, **kwargs):
         super().__init__(*args, **kwargs)
         self.apply_abf = enable_abf
