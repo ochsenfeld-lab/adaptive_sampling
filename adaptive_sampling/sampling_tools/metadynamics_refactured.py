@@ -48,6 +48,7 @@ class WTM(EnhancedSampling):
             )
 
         # initialize MtD parameters
+        self.beta = 1.0 / (kB_in_atomic * self.equil_temp)
         self.numerical_forces = force_from_grid
         self.verbose = verbose
         self.well_tempered_temp = well_tempered_temp
@@ -81,7 +82,9 @@ class WTM(EnhancedSampling):
 
         self.metapot = np.copy(self.histogram)
         self.bias_pot = 0.0
+        self.mtd_rct = 0.0
         self.bias_pot_traj = []
+        self.rct_traj = []
 
         if self.verbose:
             print(" >>> INFO: MtD Parameters:")
@@ -133,6 +136,7 @@ class WTM(EnhancedSampling):
             self.epot.append(self.md_state.epot)
             self.temp.append(self.md_state.temp)
             self.bias_pot_traj.append(self.bias_pot)
+            self.rct_traj.append(self.mtd_rct)
 
         # Write output
         if self.md_state.step % self.out_freq == 0:
@@ -168,6 +172,7 @@ class WTM(EnhancedSampling):
             "Epot [Ha]": self.epot,
             "T [K]": self.temp,
             "Biaspot [Ha]": self.bias_pot_traj,
+            "C(t) [Ha]": self.rct_traj,
         }
         self._write_traj(data, filename=filename)
 
@@ -176,6 +181,7 @@ class WTM(EnhancedSampling):
         self.epot = [self.epot[-1]]
         self.temp = [self.temp[-1]]
         self.bias_pot_traj = [self.bias_pot_traj[-1]]
+        self.rct_traj = [self.rct_traj[-1]]
 
     def shared_bias(self):
         raise ValueError(
@@ -283,6 +289,7 @@ class WTM(EnhancedSampling):
         """
         self.add_kernel(self.hill_height, cv, self.hill_std)
         self.grid_potential()
+        self.get_rct()
 
     def add_kernel(self, h_new: float, s_new: np.array, std_new: np.array):
         """Add new Kernel to KDE
@@ -302,6 +309,16 @@ class WTM(EnhancedSampling):
         self.hills_height.append(w)
         self.hills_center.append(s_new)
         self.hills_std.append(std_new)
+    
+    def get_rct(self):
+        """get reweighting factor for metadynamics
+        """
+        minusBetaF = self.beta * self.bias_factor / (self.bias_factor - 1.) if self.bias_factor != -1 else self.beta
+        minusBetaFplusV = self.beta / (self.bias_factor - 1.) if self.bias_factor != -1 else 0.0
+        max_bias = self.metapot.max() # to avoid overflow
+        Z_0 = np.sum(np.exp(minusBetaF * (self.metapot - max_bias)))
+        Z_V = np.sum(np.exp(minusBetaFplusV * (self.metapot - max_bias))) 
+        self.mtd_rct = (1. / self.beta) * np.log(Z_0/Z_V) + max_bias
 
     def grid_potential(self):
         """Calculate bias potential and forces from kernels in bins of `self.grid`"""
