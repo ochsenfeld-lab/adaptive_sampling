@@ -72,7 +72,7 @@ class Hyperreactor(Reactor, aMD):
         return bias_force
 
     def step_bias(self, *args, **kwargs):
-        amd_bias = aMD.step_bias(self, *args, **kwargs)
+        amd_bias = aMD.step_bias(self, write_output=False, write_traj=False,*args, **kwargs)
 
         return  amd_bias + self._spherical_bias()
     
