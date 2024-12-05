@@ -1,4 +1,5 @@
 #!/usr/bin/env python
+import sys
 import os, time
 import numpy as np
 import random
@@ -101,7 +102,7 @@ class AseMD:
         init_momenta: str = "random",
         restart_file: str = None,
         init_temp: float = 298.15e0,
-        time: bool = False
+        time_reset: bool = False
     ):
         """Initial calculation of energy, forces, momenta
 
@@ -110,9 +111,9 @@ class AseMD:
             biaspots: list of bias potentials from `adaptive_sampling.sampling_tools`
             restart_file: filename for restart file, if init_momenta='read'
             init_temp: initial temperature, if init_momenta='random'
-            time: boolean, whether the time step should be reset to -1
+            time_reset: boolean, whether the time step should be reset to -1
         """
-        if time:
+        if time_reset:
             self.step = -1
 
         self.calc()
@@ -159,6 +160,7 @@ class AseMD:
         if bool(self.explorationpots):
             print("Res: %14s  %14s  %14s  %14s  %14s  %14s %10s %10s %10s %10s\n" % 
                  ("Time [fs]", "Epot [a.u.]", "Ekin [a.u.]", "Etot [a.u.]", "Temp [K]", "Pressure [bar]", "Radius [A]", "Wall [s]", "Pot_max [a.u.]", "Pot_min [a.u.]"))
+            sys.stdout.flush()
 
     def set_biaspots(self, biaspots: list = []):
         if hasattr(biaspots, "__len__"):
@@ -219,7 +221,7 @@ class AseMD:
 
             self.up_momenta()
             self.calc_etvp()
- 
+    
             if restart_freq != None and self.step % restart_freq == 0:
                 self.write_restart(prefix=prefix)
 
@@ -232,8 +234,9 @@ class AseMD:
                 self.print_geom(prefix=prefix)
                 if bool(self.explorationpots):
                     for explore in self.explorationpots:
-                        print ("Res: %14.7f  %14.7f  %14.7f  %14.7f  %14.7f  %14.7f  %10.7f  %8.3f %14.7f %14.7f" % 
+                        print("Res: %14.7f  %14.7f  %14.7f  %14.7f  %14.7f  %14.7f  %10.7f  %8.3f %14.7f %14.7f" % 
                           (self.step*self.dt,self.epot,self.ekin,self.epot+self.ekin,self.temp,self.pres,explore.radius*units.BOHR_to_ANGSTROM,time.perf_counter()-start_time,explore.pot_max,explore.pot_min))
+                        sys.stdout.flush()
                         bo = self.molecule.calc.get_property("bond-orders")
                         explore.write_bond_order_output(prefix=prefix, bo=bo)
                 
