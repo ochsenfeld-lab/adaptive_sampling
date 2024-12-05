@@ -33,7 +33,6 @@ class Reactor(ABC):
 
         self.r_max = r_max/BOHR_to_ANGSTROM
         self.r_min = r_min/BOHR_to_ANGSTROM
-
      
         
     @abstractmethod

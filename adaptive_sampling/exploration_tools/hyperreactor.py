@@ -58,17 +58,17 @@ class Hyperreactor(Reactor, aMD):
                 r  = np.sqrt(xx*xx+yy*yy+zz*zz)
                 mass = self.the_md.mass[i]
 
-            if r == 0.e0:
-                dbase = 0.e0
-            else:
-                maxr = np.max([0,r-self.radius])
-                bias_pot += 0.5e0 * self.k_conf * np.power(maxr,2.e0) * mass
+                if r == 0.e0:
+                    dbase = 0.e0
+                else:
+                    maxr = np.max([0,r-self.radius])
+                    bias_pot += 0.5e0 * self.k_conf * np.power(maxr,2.e0) * mass
 
-                dbase = self.k_conf * maxr/r * mass
-            bias_force[i*3+0] += xx * dbase
-            bias_force[i*3+1] += yy * dbase
-            bias_force[i*3+2] += zz * dbase
-
+                    dbase = self.k_conf * maxr/r * mass
+                bias_force[i*3+0] += xx * dbase
+                bias_force[i*3+1] += yy * dbase
+                bias_force[i*3+2] += zz * dbase
+                
         return bias_force
 
     def step_bias(self, *args, **kwargs):
