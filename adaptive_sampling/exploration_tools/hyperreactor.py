@@ -47,26 +47,27 @@ class Hyperreactor(Reactor, aMD):
         bias_force = np.zeros_like(md_state.forces)
         bias_pot = md_state.epot
 
-        t = md_state.step * md_state.dt
-        self.radius = min(self.r_max + (self.r_max - self.r_min) * np.sin(np.pi/2*np.cos(t/self.t_total*2*np.pi)), self.r_max)
+        if md_state.step > self.equil_steps:
+            t = (md_state.step - self.equil_steps) * md_state.dt
+            self.radius = min(self.r_max + (self.r_max - self.r_min) * np.sin(np.pi/2*np.cos(t/self.t_total*2*np.pi)), self.r_max)
 
-        for i in range(self.the_md.natoms):
-            xx = self.the_md.coords[3*i+0]
-            yy = self.the_md.coords[3*i+1]
-            zz = self.the_md.coords[3*i+2]
-            r  = np.sqrt(xx*xx+yy*yy+zz*zz)
-            mass = self.the_md.mass[i]
+            for i in range(self.the_md.natoms):
+                xx = self.the_md.coords[3*i+0]
+                yy = self.the_md.coords[3*i+1]
+                zz = self.the_md.coords[3*i+2]
+                r  = np.sqrt(xx*xx+yy*yy+zz*zz)
+                mass = self.the_md.mass[i]
 
-        if r == 0.e0:
-            dbase = 0.e0
-        else:
-            maxr = np.max([0,r-self.radius])
-            bias_pot += 0.5e0 * self.k_conf * np.power(maxr,2.e0) * mass
+            if r == 0.e0:
+                dbase = 0.e0
+            else:
+                maxr = np.max([0,r-self.radius])
+                bias_pot += 0.5e0 * self.k_conf * np.power(maxr,2.e0) * mass
 
-            dbase = self.k_conf * maxr/r * mass
-        bias_force[i*3+0] += xx * dbase
-        bias_force[i*3+1] += yy * dbase
-        bias_force[i*3+2] += zz * dbase
+                dbase = self.k_conf * maxr/r * mass
+            bias_force[i*3+0] += xx * dbase
+            bias_force[i*3+1] += yy * dbase
+            bias_force[i*3+2] += zz * dbase
 
         return bias_force
 

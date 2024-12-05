@@ -109,7 +109,11 @@ class AseMD:
             biaspots: list of bias potentials from `adaptive_sampling.sampling_tools`
             restart_file: filename for restart file, if init_momenta='read'
             init_temp: initial temperature, if init_momenta='random'
+            time: boolean, whether the time step should be reset to -1
         """
+        if time:
+            self.step = -1
+
         self.calc()
 
         # Init momenta
