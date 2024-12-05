@@ -101,6 +101,7 @@ class AseMD:
         init_momenta: str = "random",
         restart_file: str = None,
         init_temp: float = 298.15e0,
+        time: bool = False
     ):
         """Initial calculation of energy, forces, momenta
 
