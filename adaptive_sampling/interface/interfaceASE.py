@@ -468,7 +468,7 @@ class AseMD:
                 raise
 
         else:
-            self.pop_list.append([self.step*self.dt, pop[0]])
+            self.pop_list.append([self.step*self.dt, pop])
         pop_array = np.array(self.pop_list, dtype="object")
         np.save(prefix + "_pop.npy", pop_array)
 

@@ -58,16 +58,22 @@ class Hyperreactor(Reactor, aMD):
                 r  = np.sqrt(xx*xx+yy*yy+zz*zz)
                 mass = self.the_md.mass[i]
                 dbase = 0.e0
+                rconf = 0.e0
 
                 if r == 0.e0:
                     dbase = 0.e0
                 else:
-                    if self.radius < self.r_max: # confine
-                        maxr = np.max([0,r-self.radius])
-                    else:
-                        maxr = np.max([0,self.radius-r]) # expand
-                    bias_pot += 0.5e0 * self.k_conf * np.power(maxr,2.e0) * mass
-                    dbase = self.k_conf * maxr/r * mass
+                    if self.radius < self.r_max: # contraction
+                        rconf = np.max([0,r-self.radius])
+                    else: # expansion
+                        if r < self.r_min:
+                            rconf = r - self.r_min
+                        elif r > self.r_max:
+                            rconf = r - self.r_max
+                        else:
+                            rconf = 0.e0
+                    bias_pot += 0.5e0 * self.k_conf * np.power(rconf,2.e0) * mass
+                    dbase = self.k_conf * rconf/r * mass
 
                 bias_force[i*3+0] += xx * dbase
                 bias_force[i*3+1] += yy * dbase
