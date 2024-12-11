@@ -90,6 +90,7 @@ class AseMD:
         self.pres = 0.0e0
         self.dcd = None
         self.time_per_step = []
+        self.pop_list = []
 
         # self.calc() is run in `scratch_dir` to redirect input and output files of the `calculator`
         self.cwd = os.getcwd()
@@ -239,6 +240,7 @@ class AseMD:
                         sys.stdout.flush()
                         bo = self.molecule.calc.get_property("bond-orders")
                         explore.write_bond_order_output(prefix=prefix, bo=bo)
+                        self.print_pop(prefix=prefix)
                 
                         
     def heat(
@@ -450,11 +452,31 @@ class AseMD:
             self.momenta[i * 3 + 1] -= v_ext[1] * self.mass[i]
             self.momenta[i * 3 + 2] -= v_ext[2] * self.mass[i]
 
+    def print_pop(self, prefix: str = "aseMD"):
+        """Print Mulliken population analysis to file
+        
+        Args:
+            prefix: prefix for filename of output file
+        """
+        pop = self.molecule.calc.get_property("charges")
+        if self.molecule.calc._uhf != 0:
+            try:
+                self.pop_list.append([self.step*self.dt, pop[0], pop[1]])
+            except NotImplementedError:
+                print("Unrestricted not implemented yet in the interface!")
+                sys.stdout.flush()
+                raise
+
+        else:
+            self.pop_list.append([self.step*self.dt, pop[0]])
+        pop_array = np.array(self.pop_list, dtype="object")
+        np.save(prefix + "_pop.npy", pop_array)
+
     def print_energy(self, prefix: str = "aseMD"):
         """Print/add energy to file
 
         Args:
-            filename: name of output file
+            prefix: name of output file
         """
         if self.step == 0:
             with open(f"{prefix}.out", "w") as f:
