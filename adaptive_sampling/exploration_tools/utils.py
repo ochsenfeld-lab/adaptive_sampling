@@ -137,6 +137,7 @@ def bo_matrix_from_npz(natoms: int, npz_file: str = "bond_order.npz") -> np.arra
     """Read bond order matrix from npz file.
 
     Args:
+        natoms: number of atoms in system
         npz_file: path to npz file
     Returns:
         bo_matrices_list: list of bond order matrices
