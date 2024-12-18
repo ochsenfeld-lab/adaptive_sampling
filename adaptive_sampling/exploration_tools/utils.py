@@ -123,3 +123,51 @@ def spheric_fib_init(mols, nmolecules, dr):
     mol = temp_mol
 
     return mol, drad
+
+def write_compressed_bo(bo_list: list, output_file: str = "bond_order") -> None:
+    """Compress bond order file to npz file.
+
+    Args:
+        bond_list: list of sparse, upper triangular, indexed bond orders for a corresponding time step (index + 1) * out_freq
+        output_file: output file to be saved
+    """
+    np.savez_compressed(f"{output_file}.npz", *bo_list)
+
+def bo_matrix_from_npz(natoms: int, npz_file: str = "bond_order.npz") -> np.array:
+    """Read bond order matrix from npz file.
+
+    Args:
+        npz_file: path to npz file
+    Returns:
+        bo_matrices_list: list of bond order matrices
+    """
+    loaded_data = np.load(npz_file)
+    bond_order_indexed = [loaded_data[key] for key in loaded_data]
+    timesteps = len(bond_order_indexed)
+    bo_matrices_list = []
+    for t in range(timesteps):
+        bond_order_matrix = np.zeros((natoms, natoms))
+        for bo in bond_order_indexed[t]:
+            bond_order_matrix[int(bo[1]), int(bo[2])] = bo[0]
+            bond_order_matrix[int(bo[2]), int(bo[1])] = bo[0]
+        bo_matrices_list.append(bond_order_matrix)
+    return bo_matrices_list
+
+def triu_bo_sparse(bo: np.array, zero_tresh: float = 0.5) -> np.array:
+    """Reduce sparse bond order matrix to indexed non-zero bond orders in upper triangular matrix.
+
+    Args:
+        bo: sparse bond order matrix
+        zero_tresh: threshold, under which bond order matrix entries are rounded to zero
+    Returns:
+        bo_indexed: array of form ([bo,i,j],...) with non-zero bond orders and corresponding indices in bo-matrix
+    """
+    bo_rounded = np.copy(bo)
+    bo_rounded[bo < zero_tresh] = 0.0
+    natoms = bo.shape[0]
+    bo_indexed = []
+    for i in range(0,natoms):
+        for j in range(i+1,natoms):
+            if bo_rounded[i,j] != 0.0:
+                bo_indexed.append([float(bo_rounded[i][j]), int(i), int(j)])
+    return np.array(bo_indexed)

@@ -4,6 +4,7 @@ import os, time
 import numpy as np
 import random
 from adaptive_sampling import units
+from adaptive_sampling.exploration_tools.utils import triu_bo_sparse, write_compressed_bo
 
 
 class AseMD:
@@ -60,6 +61,7 @@ class AseMD:
         self.bias_forces = np.zeros_like(self.forces)
         self.explorationpots = []
         self.biaspots = []
+        self.bo_list = []
 
         # active and frozen atoms
         if len(active_atoms):
@@ -238,7 +240,9 @@ class AseMD:
                           (self.step*self.dt,self.epot,self.ekin,self.epot+self.ekin,self.temp,self.pres,explore.radius*units.BOHR_to_ANGSTROM,time.perf_counter()-start_time,explore.pot_max,explore.pot_min))
                         sys.stdout.flush()
                         bo = self.molecule.calc.get_property("bond-orders")
-                        explore.write_bond_order_output(prefix=prefix, bo=bo)
+                        bo_sparse_ind = triu_bo_sparse(bo)
+                        self.bo_list.append(bo_sparse_ind)
+                        write_compressed_bo(self.bo_list)
                 
                         
     def heat(
@@ -582,6 +586,7 @@ class AseMD:
                 " >>> AseMD: `get_sampling_data()` is missing `adaptive_sampling` package"
             ) from e
         
+    
 
 
         
