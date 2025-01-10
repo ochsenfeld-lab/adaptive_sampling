@@ -282,7 +282,6 @@ def pmf_from_weights(
     weights: np.ndarray,
     equil_temp: float = 300.0,
     dx: np.ndarray = None,
-    verbose: bool = False,
 ) -> Tuple[np.ndarray, np.ndarray]:
     """Get Potential of Mean Force (PMF) from statistical weights obtained by MBAR
        Note: for higher dimensional PMFs, they need to be reshaped,
@@ -291,10 +290,11 @@ def pmf_from_weights(
     Args:
         grid: centroids of grid along cv,
               shape=(N, d) for N centroids of d-dimension
-        cv: trajectory of cv shape=(#frames, d)
+        cv: trajectory of cv, shape=(#frames, d)
         weights: boltzmann weights of frames in trajectory
         equil_temp: Temperature of simulation
-
+        dx: bin width for grid, automatically determined from grid for 1D and 2D if not provided
+        
     Returns:
         pmf: Potential of mean force (PMF) in kJ/mol
         rho: probability density
@@ -311,8 +311,6 @@ def pmf_from_weights(
             dx = np.asarray(
                 [grid[1, 0] - grid[0, 0], grid[cycle1 + 1, 1] - grid[cycle1, 1]]
             )
-            if verbose:
-                print(f">>> INFO: dx was not provided, calculated as {dx}")
     dx2 = dx / 2.0
 
     if len(grid.shape) == 1:

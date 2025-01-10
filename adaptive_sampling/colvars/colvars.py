@@ -162,7 +162,7 @@ class CV:
         q12_n = torch.linalg.norm(q12)
         q23_n = torch.linalg.norm(q23)
 
-        q12_u = q12 / q12_
+        q12_u = q12 / q12_n
         q23_u = q23 / q23_n
 
         self.cv = torch.arccos(torch.dot(-q12_u, q23_u))
