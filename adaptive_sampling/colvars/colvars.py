@@ -162,7 +162,7 @@ class CV:
         q12_n = torch.linalg.norm(q12)
         q23_n = torch.linalg.norm(q23)
 
-        q12_u = q12 / q12_n
+        q12_u = q12 / q12_
         q23_u = q23 / q23_n
 
         self.cv = torch.arccos(torch.dot(-q12_u, q23_u))
@@ -632,6 +632,28 @@ class CV:
 
         return float(self.cv)
 
+    def mlcolvar(self, mlcolvar_def: dict, **kwargs):
+        """Collective Variable from PyTorch ML model"""
+        if not hasattr(self, "the_graphcv"):
+            from .mlcolvar import MLCOLVAR
+
+            self.the_mlcolvar = MLCOLVAR(
+                model=mlcolvar_def.get('model', None),
+                coordinate_system=mlcolvar_def.get('coordinate_system', 'cv_space'),
+                cv_def=mlcolvar_def.get("cv_def", None),
+                component=mlcolvar_def.get('component', None),
+                unit_conversion_factor=mlcolvar_def.get('unit_conversion_factor', 1.0),
+                ndim=mlcolvar_def.get('ndim', 3),
+            )
+
+        self.update_coords()
+        self.cv = self.the_mlcolvar.calc(self.coords, **kwargs)
+
+        if self.requires_grad:
+            self.gradient = self.the_mlcolvar.gradient
+
+        return float(self.cv)
+
     def get_cv(self, cv: str, atoms: list, **kwargs) -> Tuple[float, np.ndarray]:
         """get state of collective variable from cv definition of sampling_tools
 
@@ -711,6 +733,9 @@ class CV:
             self.type = None
         elif cv.lower() == "plumed":
             xi = self.plumed_cv(atoms)
+            self.type = atoms.get("type", None)
+        elif cv.lower() == "mlcolvar":
+            xi = self.mlcolvar(atoms)
             self.type = atoms.get("type", None)
         else:
             print(" >>> Error in CV: Unknown Collective Variable")

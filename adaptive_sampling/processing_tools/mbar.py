@@ -184,7 +184,6 @@ def build_boltzmann(
     # build boltzmann factors
     if progress_bar:
         from tqdm import tqdm
-
         meta_f = tqdm(meta_f)
 
     exp_U = []
@@ -217,6 +216,7 @@ def get_windows(
     sigma: Union[float, np.ndarray],
     equil_temp: float = 300.0,
     dx: np.ndarray = None,
+    progress_bar: bool = False,
 ) -> Tuple[List[np.ndarray], np.ndarray, np.ndarray]:
     """generate mixture distribution of Gaussian shaped windows from eABF trajectory
 
@@ -250,6 +250,11 @@ def get_windows(
     traj_list = []
     index_list = np.array([])
 
+    # build boltzmann factors
+    if progress_bar:
+        from tqdm import tqdm
+        centers = tqdm(centers)
+
     for center in centers:
         indices = np.where(
             np.logical_and(
@@ -258,6 +263,9 @@ def get_windows(
         )
         index_list = np.append(index_list, indices[0])
         traj_list += [xi[indices]]
+
+    if progress_bar:
+        centers = centers.iterable
 
     meta_f = np.zeros(shape=(3, *centers.shape))
     meta_f[1] = centers
@@ -312,10 +320,7 @@ def pmf_from_weights(
         grid = grid[:, np.newaxis]
 
     rho = np.zeros(shape=(len(grid),), dtype=float)
-    print_freq = int(len(grid) / 5)
     for ii, center in enumerate(grid):
-        if ii % print_freq == 0 and verbose:
-            print(f"   > Progress: {int(ii/print_freq)} of 5")
         indices = np.where(
             np.logical_and(
                 (cv >= center - dx2).all(axis=-1), (cv < center + dx2).all(axis=-1)

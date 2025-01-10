@@ -116,7 +116,7 @@ class OPESeABF(eABF, OPES, EnhancedSampling):
 
             with open("COUPLING", "w") as out:
                 for s in self.ext_sigma:
-                    out.write(f"{s}")
+                    out.write(f"{s}\t")
 
             self.reinit_ext_system(xi)
 

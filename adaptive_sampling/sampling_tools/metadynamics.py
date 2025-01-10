@@ -87,13 +87,16 @@ class WTM(EnhancedSampling):
 
             for i in range(self.ncoords):
                 bias_force += mtd_force[i] * delta_xi[i]
+            
+            self.rew_traj.append(np.exp(self.beta*(self.metapot[bink[1], bink[0]]-self.mtd_rct)))
+        else:
+            self.rew_traj.append(np.nan)
 
         bias_force += self.harmonic_walls(xi, delta_xi)  # , 1.6 * self.hill_std)
 
         self.traj = np.append(self.traj, [xi], axis=0)
         self.temp.append(md_state.temp)
         self.epot.append(md_state.epot)
-        self.rew_traj.append(self.mtd_rct)
 
         # correction for kinetics
         if self.kinetics:
