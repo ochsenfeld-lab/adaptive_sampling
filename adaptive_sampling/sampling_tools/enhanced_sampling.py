@@ -312,12 +312,12 @@ class EnhancedSampling(ABC):
             data: results to write
             filename: name of output file
         """
-        grid = np.copy(self.grid)
+        grid = self.grid.copy()
         for i in range(self.ncoords):
             if self.the_cv.type == "angle":
-                grid *= DEGREES_per_RADIAN
+                grid[i] *= DEGREES_per_RADIAN
             elif self.the_cv.type == "distance":
-                grid *= BOHR_to_ANGSTROM
+                grid[i] *= BOHR_to_ANGSTROM
 
         # head of data columns
         with open(filename, "w") as fout:
