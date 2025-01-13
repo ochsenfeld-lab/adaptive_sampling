@@ -12,7 +12,7 @@ class WTM(EnhancedSampling):
 
     Args:
         hill_height: height of Gaussian hills in kJ/mol
-        hill_std: standard deviation of Gaussian hills in units of the CVs (can be Bohr, Degree, or None)
+        hill_std: standard deviation of Gaussian hills in units of the CVs (can be Angstrom, Degree, or None)
         hill_drop_freq: frequency of hill creation in steps
         well_tempered_temp: effective temperature for WTM, if np.inf, hills are not scaled down (normal metadynamics)
         bias_factor: bias factor for WTM, if not None, overwrites `well_tempered_temp` 
@@ -37,7 +37,7 @@ class WTM(EnhancedSampling):
         if hill_height <= 0:
             raise ValueError(" >>> Error: Hill height for WTM has to be > 0!")
 
-        hill_std = np.array([hill_std]) if not hasattr(hill_std, "__len__") else hill_std # convert to array if float
+        hill_std = np.array([hill_std]) if not hasattr(hill_std, "__len__") else np.asarray(hill_std) # convert to array if float
         if (hill_std <= 0).any():
             raise ValueError(" >>> Error: Hill standard deviation for WTM has to be > 0!")        
 
@@ -254,7 +254,7 @@ class WTM(EnhancedSampling):
                     self.restart(filename=mw_file)
                     os.chmod(mw_file + ".npz", 0o444)  # other walkers can access again
                     self.num_hills_last_sync = len(self.hills_center)
-                    self.hist_last_sync = self.histogram
+                    self.hist_last_sync = np.copy(self.histogram)
                     if self.verbose:
                         print(
                             f" >>> Info: Synced bias with `{mw_file}.npz` after {trial} attempts."
@@ -282,11 +282,11 @@ class WTM(EnhancedSampling):
             self.metapot = np.zeros_like(self.metapot).flatten()
             self.bias = np.zeros_like(self.bias).reshape((len(self.metapot), self.ncoords))
             for i, bin_coords in enumerate(grid_full): 
-                pot, der = self.calc_gaussians(bin_coords, requires_grad=True)
+                pot, der = self.calc_hills(bin_coords, requires_grad=True)
                 self.metapot[i] = np.sum(pot)
                 self.bias[i] = der
             self.metapot = self.metapot.reshape(shape)
-            self.bias = self.bias.reshape((self.ncoords,) + shape)
+            self.bias = np.rollaxis(self.bias.reshape(shape + (self.ncoords,)), -1)
                 
     def _update_wtm(self, 
                     filename: str, 
@@ -297,9 +297,13 @@ class WTM(EnhancedSampling):
         """updates shared bias buffer"""
         with np.load(f"{filename}.npz") as data:
             new_hist = data["hist"] + delta_hist
-            new_centers = np.append(data["center"], new_hill_centers)
             new_heights = np.append(data["height"], new_hill_heights)
-            new_stds = np.append(data["sigma"], new_hill_stds)
+            if self.ncoords == 1:
+                new_centers = np.append(data["center"], new_hill_centers)
+                new_stds = np.append(data["sigma"], new_hill_stds)
+            else:
+                new_centers = np.vstack((data["center"], new_hill_centers))
+                new_stds = np.vstack((data["sigma"], new_hill_stds))
 
         self._write_restart(
             filename=filename,
@@ -361,26 +365,26 @@ class WTM(EnhancedSampling):
             self.bias_pot = self.metapot[idx[1], idx[0]]
             mtd_force = [self.bias[i][idx[1], idx[0]] for i in range(self.ncoords)]
         else:
-            gaussians, derivative = self.calc_gaussians(cv, requires_grad=True)
+            gaussians, derivative = self.calc_hills(cv, requires_grad=True)
             self.bias_pot = np.sum(gaussians)
             mtd_force = derivative
 
-        # MtD KDE update
+        # MtD update
         if self.md_state.step % self.hill_drop_freq == 0:
             self.update_kde(cv)
 
         return mtd_force
 
-    def calc_gaussians(self, cv, requires_grad: bool = False) -> np.array:
-        """Get value of sum of gaussian hills
+    def calc_hills(self, cv, requires_grad: bool = False) -> np.array:
+        """Get values of gaussian hills and optionally the gradient of the associated potential
 
         Args:
             cv: value of CV where the kernels should be evaluated
             requires_grad: if True, gradient of mtd potential is returned as second argument
 
         Returns:
-            gaussians: values of gaussians at CV
-            kde_derivative: derivative of KDE, only if requires_grad
+            hills: values of hills at CV
+            derivative: derivative of WTM potential, only returned if requires_grad
         """
 
         if len(self.hills_center) == 0:
@@ -394,18 +398,18 @@ class WTM(EnhancedSampling):
             s_diff[:, i] = correct_periodicity(s_diff[:, i], self.periodicity[i])
 
         # evaluate values of kernels at cv
-        gaussians = np.asarray(self.hills_height) * np.exp(
+        hills = np.asarray(self.hills_height) * np.exp(
             -0.5
             * np.sum(np.square(np.divide(s_diff, np.asarray(self.hills_std))), axis=1)
         )
         if requires_grad:
             derivative = np.sum(
-                -gaussians * np.divide(s_diff, np.square(np.asarray(self.hills_std))).T,
+                -hills * np.divide(s_diff, np.square(np.asarray(self.hills_std))).T,
                 axis=1,
             )
-            return gaussians, derivative
+            return hills, derivative
 
-        return gaussians
+        return hills
 
     def update_kde(self, cv: np.array):
         """on-the-fly update of kernel density estimation of pmf along CVs
