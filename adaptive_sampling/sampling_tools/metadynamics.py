@@ -189,8 +189,15 @@ class WTM(EnhancedSampling):
         sync_interval: int = 50,
         mw_file: str = "shared_bias",
         n_trials: int = 10,
+        sleep_time: int = 0.1,
     ):
-        """ Multiple walker shared bias implementation for metadynamics
+        """ Multiple walker shared-bias implementation for metadynamics
+
+        Args:
+            sync_interval: number of steps between bias syncs
+            mw_file: filename for buffer .npz file
+            n_trials: maximum number of sync trials to open the buffer file before aborting
+            sleep_time: sleep time before new trial to open buffer file
         """
         import os, time
         md_state = self.the_md.get_sampling_data()
@@ -266,11 +273,12 @@ class WTM(EnhancedSampling):
                         print(
                             f" >>> Warning: Retry to open shared buffer file after {trial} failed attempts."
                         )
-                    time.sleep(0.1)
+                    time.sleep(sleep_time)
                 else:
                     raise Exception(
                         f" >>> Fatal Error: Failed to sync bias with `{mw_file}.npz`."
                     )
+            
             if self.ncoords == 1:
                 grid_full = np.asarray(self.grid[0]).reshape((-1,1))
             elif self.ncoords == 2:
