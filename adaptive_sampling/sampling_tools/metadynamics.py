@@ -188,6 +188,7 @@ class WTM(EnhancedSampling):
         self,
         sync_interval: int = 50,
         mw_file: str = "shared_bias",
+        local_file: str = "restart_wtmeabf_local",
         n_trials: int = 10,
         sleep_time: int = 0.1,
     ):
@@ -214,7 +215,7 @@ class WTM(EnhancedSampling):
 
             # create seperate restart file with local data only
             self.write_restart(
-                filename="restart_wtm_local",
+                filename=local_file,
             )
 
             self.num_hills_last_sync = len(self.hills_center)
@@ -237,7 +238,7 @@ class WTM(EnhancedSampling):
             delta_hist = self.histogram - self.hist_last_sync
 
             self._update_wtm(
-                "restart_wtm_local",
+                local_file,
                 delta_hist,
                 new_center,
                 new_height,
@@ -279,13 +280,13 @@ class WTM(EnhancedSampling):
                         f" >>> Fatal Error: Failed to sync bias with `{mw_file}.npz`."
                     )
             
+            # recalculate `self.metapot` and `self.bias` to ensure convergence of WTM potential
             if self.ncoords == 1:
                 grid_full = np.asarray(self.grid[0]).reshape((-1,1))
             elif self.ncoords == 2:
                 xx, yy = np.meshgrid(self.grid[0], self.grid[1])
                 grid_full = np.stack([xx.flatten(), yy.flatten()], axis=1)
             
-            # recalculates `self.metapot` and `self.bias` to ensure convergence of WTM potential
             shape = self.metapot.shape
             self.metapot = np.zeros_like(self.metapot).flatten()
             self.bias = np.zeros_like(self.bias).reshape((len(self.metapot), self.ncoords))
@@ -381,7 +382,7 @@ class WTM(EnhancedSampling):
         if self.md_state.step % self.hill_drop_freq == 0:
             self.update_kde(cv)
 
-        return mtd_force
+        return np.asarray(mtd_force)
 
     def calc_hills(self, cv, requires_grad: bool = False) -> np.array:
         """Get values of gaussian hills and optionally the gradient of the associated potential
@@ -481,7 +482,6 @@ class WTM(EnhancedSampling):
             -0.5 * np.sum(np.square(np.divide(s_diff.T, np.asarray(std_new))), axis=-1)
         ).T
         self.metapot += pot_new
-        if self.force_from_grid:
-            for i in range(self.ncoords):
-                self.bias[i] -= pot_new * np.divide(s_diff[i], np.square(std_new[i]))
+        for i in range(self.ncoords):
+            self.bias[i] -= pot_new * np.divide(s_diff[i], np.square(std_new[i]))
 
