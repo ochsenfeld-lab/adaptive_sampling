@@ -184,6 +184,7 @@ def build_boltzmann(
     # build boltzmann factors
     if progress_bar:
         from tqdm import tqdm
+
         meta_f = tqdm(meta_f)
 
     exp_U = []
@@ -253,6 +254,7 @@ def get_windows(
     # build boltzmann factors
     if progress_bar:
         from tqdm import tqdm
+
         centers = tqdm(centers)
 
     for center in centers:
@@ -294,7 +296,7 @@ def pmf_from_weights(
         weights: boltzmann weights of frames in trajectory
         equil_temp: Temperature of simulation
         dx: bin width for grid, automatically determined from grid for 1D and 2D if not provided
-        
+
     Returns:
         pmf: Potential of mean force (PMF) in kJ/mol
         rho: probability density

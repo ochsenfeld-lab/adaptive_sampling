@@ -610,9 +610,9 @@ class OPES(EnhancedSampling):
 
     def grid_potential(self):
         """Calculate bias potential and forces from kernels in bins of `self.grid`
-        
+
         TODO: update prob_dist and derivative according to `self.delta_kernel_*` lists
-              to avoid unfavourable O(N_gridpoints*N_kernels) scaling 
+              to avoid unfavourable O(N_gridpoints*N_kernels) scaling
         """
         prob_dist = np.zeros_like(self.histogram)
         derivative = np.zeros_like(self.bias)

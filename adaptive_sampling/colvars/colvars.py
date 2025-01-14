@@ -638,12 +638,12 @@ class CV:
             from .mlcolvar import MLCOLVAR
 
             self.the_mlcolvar = MLCOLVAR(
-                model=mlcolvar_def.get('model', None),
-                coordinate_system=mlcolvar_def.get('coordinate_system', 'cv_space'),
+                model=mlcolvar_def.get("model", None),
+                coordinate_system=mlcolvar_def.get("coordinate_system", "cv_space"),
                 cv_def=mlcolvar_def.get("cv_def", None),
-                component=mlcolvar_def.get('component', None),
-                unit_conversion_factor=mlcolvar_def.get('unit_conversion_factor', 1.0),
-                ndim=mlcolvar_def.get('ndim', 3),
+                component=mlcolvar_def.get("component", None),
+                unit_conversion_factor=mlcolvar_def.get("unit_conversion_factor", 1.0),
+                ndim=mlcolvar_def.get("ndim", 3),
             )
 
         self.update_coords()

@@ -3,6 +3,7 @@ from adaptive_sampling.sampling_tools.enhanced_sampling import EnhancedSampling
 from adaptive_sampling.units import *
 from .utils import correct_periodicity
 
+
 class WTM(EnhancedSampling):
     """Well-Tempered Metadynamics
 
@@ -15,7 +16,7 @@ class WTM(EnhancedSampling):
         hill_std: standard deviation of Gaussian hills in units of the CVs (can be Angstrom, Degree, or None)
         hill_drop_freq: frequency of hill creation in steps
         well_tempered_temp: effective temperature for WTM, if np.inf, hills are not scaled down (normal metadynamics)
-        bias_factor: bias factor for WTM, if not None, overwrites `well_tempered_temp` 
+        bias_factor: bias factor for WTM, if not None, overwrites `well_tempered_temp`
         force_from_grid: forces are accumulated on grid for performance (recommended),
                          if False, forces are calculated from sum of Gaussians in every step
     """
@@ -37,9 +38,15 @@ class WTM(EnhancedSampling):
         if hill_height <= 0:
             raise ValueError(" >>> Error: Hill height for WTM has to be > 0!")
 
-        hill_std = np.array([hill_std]) if not hasattr(hill_std, "__len__") else np.asarray(hill_std) # convert to array if float
+        hill_std = (
+            np.array([hill_std])
+            if not hasattr(hill_std, "__len__")
+            else np.asarray(hill_std)
+        )  # convert to array if float
         if (hill_std <= 0).any():
-            raise ValueError(" >>> Error: Hill standard deviation for WTM has to be > 0!")        
+            raise ValueError(
+                " >>> Error: Hill standard deviation for WTM has to be > 0!"
+            )
 
         if int(hill_drop_freq) <= 0:
             raise ValueError(" >>> Error: Update interval for WTM has to be int > 0!")
@@ -58,16 +65,20 @@ class WTM(EnhancedSampling):
         # Well-Tempered parameters
         if bias_factor is not None:
             self.bias_factor = bias_factor
-            self.well_tempered_temp = self.bias_factor * self.equil_temp - self.equil_temp
+            self.well_tempered_temp = (
+                self.bias_factor * self.equil_temp - self.equil_temp
+            )
         else:
             self.well_tempered_temp = well_tempered_temp
-            self.bias_factor = self.well_tempered_temp / self.equil_temp + 1.0 
+            self.bias_factor = self.well_tempered_temp / self.equil_temp + 1.0
         self.well_tempered = False if self.well_tempered_temp == np.inf else True
-        self.wtm_prefac = (self.equil_temp + self.well_tempered_temp) / self.well_tempered_temp if self.well_tempered else 1.0
+        self.wtm_prefac = (
+            (self.equil_temp + self.well_tempered_temp) / self.well_tempered_temp
+            if self.well_tempered
+            else 1.0
+        )
         if not self.well_tempered and self.verbose:
-            print(
-                " >>> Info: Well-tempered scaling of MtD hill_height switched off"
-            )
+            print(" >>> Info: Well-tempered scaling of MtD hill_height switched off")
         elif self.well_tempered_temp <= 0:
             raise ValueError(
                 " >>> Error: Effective temperature for Well-Tempered MtD has to be > 0!"
@@ -92,7 +103,9 @@ class WTM(EnhancedSampling):
             print("\t ---------------------------------------------")
             print(f"\t Hill std:\t{self.hill_std}")
             print(f"\t Hill height:\t{self.hill_height * atomic_to_kJmol} kJ/mol")
-            print(f"\t Bias factor:\t{self.bias_factor}\t\t({self.well_tempered_temp} K)")
+            print(
+                f"\t Bias factor:\t{self.bias_factor}\t\t({self.well_tempered_temp} K)"
+            )
             print(f"\t Read force:\t{self.force_from_grid}")
             print("\t ---------------------------------------------")
 
@@ -192,7 +205,7 @@ class WTM(EnhancedSampling):
         n_trials: int = 10,
         sleep_time: int = 0.1,
     ):
-        """ Multiple walker shared-bias implementation for metadynamics
+        """Multiple walker shared-bias implementation for metadynamics
 
         Args:
             sync_interval: number of steps between bias syncs
@@ -201,6 +214,7 @@ class WTM(EnhancedSampling):
             sleep_time: sleep time before new trial to open buffer file
         """
         import os, time
+
         md_state = self.the_md.get_sampling_data()
         if md_state.step == 0:
 
@@ -210,8 +224,12 @@ class WTM(EnhancedSampling):
                 )
 
             if self.verbose:
-                print(" >>> Info: Creating a new instance for shared-bias metadynamics.")
-                print(" >>> Info: Data of local walker stored in `restart_wtm_local.npz`.")
+                print(
+                    " >>> Info: Creating a new instance for shared-bias metadynamics."
+                )
+                print(
+                    " >>> Info: Data of local walker stored in `restart_wtm_local.npz`."
+                )
 
             # create seperate restart file with local data only
             self.write_restart(
@@ -222,18 +240,22 @@ class WTM(EnhancedSampling):
             self.hist_last_sync = np.copy(self.histogram)
             if not os.path.isfile(mw_file + ".npz"):
                 if self.verbose:
-                    print(f" >>> Info: Creating buffer file for shared-bias metadynamics: `{mw_file}.npz`.")
+                    print(
+                        f" >>> Info: Creating buffer file for shared-bias metadynamics: `{mw_file}.npz`."
+                    )
                 self.write_restart(filename=mw_file)
                 os.chmod(mw_file + ".npz", 0o444)
             elif self.verbose:
-                print(f" >>> Info: Syncing with existing buffer file for shared-bias metadynamics: `{mw_file}.npz`.")
-        
+                print(
+                    f" >>> Info: Syncing with existing buffer file for shared-bias metadynamics: `{mw_file}.npz`."
+                )
+
         if md_state.step % sync_interval == 0:
 
             # get new hills
-            new_center = np.asarray(self.hills_center)[self.num_hills_last_sync:]
-            new_height = np.asarray(self.hills_height)[self.num_hills_last_sync:]
-            new_std = np.asarray(self.hills_std)[self.num_hills_last_sync:]
+            new_center = np.asarray(self.hills_center)[self.num_hills_last_sync :]
+            new_height = np.asarray(self.hills_height)[self.num_hills_last_sync :]
+            new_std = np.asarray(self.hills_std)[self.num_hills_last_sync :]
 
             delta_hist = self.histogram - self.hist_last_sync
 
@@ -279,30 +301,34 @@ class WTM(EnhancedSampling):
                     raise Exception(
                         f" >>> Fatal Error: Failed to sync bias with `{mw_file}.npz`."
                     )
-            
+
             # recalculate `self.metapot` and `self.bias` to ensure convergence of WTM potential
             if self.ncoords == 1:
-                grid_full = np.asarray(self.grid[0]).reshape((-1,1))
+                grid_full = np.asarray(self.grid[0]).reshape((-1, 1))
             elif self.ncoords == 2:
                 xx, yy = np.meshgrid(self.grid[0], self.grid[1])
                 grid_full = np.stack([xx.flatten(), yy.flatten()], axis=1)
-            
+
             shape = self.metapot.shape
             self.metapot = np.zeros_like(self.metapot).flatten()
-            self.bias = np.zeros_like(self.bias).reshape((len(self.metapot), self.ncoords))
-            for i, bin_coords in enumerate(grid_full): 
+            self.bias = np.zeros_like(self.bias).reshape(
+                (len(self.metapot), self.ncoords)
+            )
+            for i, bin_coords in enumerate(grid_full):
                 pot, der = self.calc_hills(bin_coords, requires_grad=True)
                 self.metapot[i] = np.sum(pot)
                 self.bias[i] = der
             self.metapot = self.metapot.reshape(shape)
             self.bias = np.rollaxis(self.bias.reshape(shape + (self.ncoords,)), -1)
-                
-    def _update_wtm(self, 
-                    filename: str, 
-                    delta_hist: np.array, 
-                    new_hill_centers: np.array, 
-                    new_hill_heights: np.array, 
-                    new_hill_stds: np.array):
+
+    def _update_wtm(
+        self,
+        filename: str,
+        delta_hist: np.array,
+        new_hill_centers: np.array,
+        new_hill_heights: np.array,
+        new_hill_stds: np.array,
+    ):
         """updates shared bias buffer"""
         with np.load(f"{filename}.npz") as data:
             new_hist = data["hist"] + delta_hist
@@ -355,7 +381,11 @@ class WTM(EnhancedSampling):
         if not hasattr(self.hills_center[0], "__len__"):
             self.hills_center = [np.array([c]) for c in self.hills_center]
             self.hills_std = [np.array([std]) for std in self.hills_std]
-        if self.verbose and self.md_state.step % self.hill_drop_freq == 0 and not self.shared_bias:
+        if (
+            self.verbose
+            and self.md_state.step % self.hill_drop_freq == 0
+            and not self.shared_bias
+        ):
             print(f" >>> Info: Adaptive sampling restarted from {filename}!")
 
     def mtd_bias(self, cv: np.array) -> np.array:
@@ -427,7 +457,9 @@ class WTM(EnhancedSampling):
             CV: new value of CVS
         """
         self._add_kernel(self.hill_height, cv, self.hill_std)
-        self._update_grid_potential(self.hills_height[-1], self.hills_center[-1], self.hills_std[-1])
+        self._update_grid_potential(
+            self.hills_height[-1], self.hills_center[-1], self.hills_std[-1]
+        )
         self._get_rct()
 
     def _add_kernel(self, h_new: float, s_new: np.array, std_new: np.array):
@@ -448,40 +480,52 @@ class WTM(EnhancedSampling):
         self.hills_height.append(w)
         self.hills_center.append(s_new)
         self.hills_std.append(std_new)
-    
-    def _get_rct(self):
-        """get reweighting factor for metadynamics
-        """
-        minusBetaF = self.beta * self.bias_factor / (self.bias_factor - 1.) if self.well_tempered else self.beta
-        minusBetaFplusV = self.beta / (self.bias_factor - 1.) if self.well_tempered else 0.0
-        max_bias = self.metapot.max() # to avoid overflow
-        Z_0 = np.sum(np.exp(minusBetaF * (self.metapot - max_bias)))
-        Z_V = np.sum(np.exp(minusBetaFplusV * (self.metapot - max_bias))) 
-        self.mtd_rct = (1. / self.beta) * np.log(Z_0/Z_V) + max_bias
 
-    def _update_grid_potential(self, height_new: np.array, center_new: np.array, std_new: np.array):
-        """Add new kernel to `self.metapot` and `self.bias` 
-        
+    def _get_rct(self):
+        """get reweighting factor for metadynamics"""
+        minusBetaF = (
+            self.beta * self.bias_factor / (self.bias_factor - 1.0)
+            if self.well_tempered
+            else self.beta
+        )
+        minusBetaFplusV = (
+            self.beta / (self.bias_factor - 1.0) if self.well_tempered else 0.0
+        )
+        max_bias = self.metapot.max()  # to avoid overflow
+        Z_0 = np.sum(np.exp(minusBetaF * (self.metapot - max_bias)))
+        Z_V = np.sum(np.exp(minusBetaFplusV * (self.metapot - max_bias)))
+        self.mtd_rct = (1.0 / self.beta) * np.log(Z_0 / Z_V) + max_bias
+
+    def _update_grid_potential(
+        self, height_new: np.array, center_new: np.array, std_new: np.array
+    ):
+        """Add new kernel to `self.metapot` and `self.bias`
+
         Args:
             height_new: height of new kernel
             center_new: center of new kernel
             std_new: standard deviation of new kernel
         """
         if self.ncoords == 1:
-            grid_full = np.asarray(self.grid[0]).reshape((-1,1))
+            grid_full = np.asarray(self.grid[0]).reshape((-1, 1))
         elif self.ncoords == 2:
             xx, yy = np.meshgrid(self.grid[0], self.grid[1])
             grid_full = np.stack([xx, yy], axis=-1)
         else:
-            raise NotImplementedError(" >>> ERROR: MtD grid potential not implemented for ncoords > 2")
+            raise NotImplementedError(
+                " >>> ERROR: MtD grid potential not implemented for ncoords > 2"
+            )
 
         s_diff = np.rollaxis(grid_full - np.asarray(center_new), -1)
         for i in range(self.ncoords):
-            s_diff[i,:] = correct_periodicity(s_diff[i,:], self.periodicity[i])
-        pot_new = np.asarray(height_new) * np.exp(
-            -0.5 * np.sum(np.square(np.divide(s_diff.T, np.asarray(std_new))), axis=-1)
-        ).T
+            s_diff[i, :] = correct_periodicity(s_diff[i, :], self.periodicity[i])
+        pot_new = (
+            np.asarray(height_new)
+            * np.exp(
+                -0.5
+                * np.sum(np.square(np.divide(s_diff.T, np.asarray(std_new))), axis=-1)
+            ).T
+        )
         self.metapot += pot_new
         for i in range(self.ncoords):
             self.bias[i] -= pot_new * np.divide(s_diff[i], np.square(std_new[i]))
-

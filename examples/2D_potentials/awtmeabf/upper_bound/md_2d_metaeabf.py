@@ -29,23 +29,23 @@ the_md = MD(
     seed_in=seed,
 )
 the_abm = aWTMeABF(
-    2.0,
-    20.0,
-    2.0,
-    4.0,
-    0.0001,
+    0.0005,
     1000,
     10000,
     the_md,
     ats,
+    ext_sigma=2.0,
+    ext_mass=20.0,
+    hill_height=2.0,
+    hill_std=4.0,
     hill_drop_freq=100,
     do_wtm=True,
-    amd_method="gamd_upper",
+    amd_method="gamd_lower",
     output_freq=1000,
     f_conf=100,
     equil_temp=300.0,
 )
-# the_abm.restart()
+#the_abm.restart('restart_awtmeabf')
 
 the_md.calc_init()
 the_abm.step_bias()

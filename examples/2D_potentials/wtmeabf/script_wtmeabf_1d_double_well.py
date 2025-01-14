@@ -12,6 +12,7 @@ dt = 5.0e0  # stepsize in fs
 target_temp = 300.0  # Kelvin
 mass = 10.0  # a.u.
 potential = "1"
+out_freq = 1000
 
 # eABF
 ats = [["x", [], 70.0, 170.0, 2.0]]
@@ -30,19 +31,23 @@ the_md = MD(
     seed_in=seed,
 )
 the_abm = WTMeABF(
-    2.0,
-    20.0,
-    2.0,
-    4.89,
     the_md,
     ats,
+    ext_sigma=2.5,
+    ext_mass=20.0,
+    adaptive_coupling_stride=5000,
+    adaptive_coupling_scaling=0.5,
+    nfull=500,
+    hill_height=0.1,
+    hill_std=5.0,
     hill_drop_freq=100,
+    bias_factor=15,
     output_freq=1,
-    well_tempered_temp=342.74,
     f_conf=1000.0,
     equil_temp=300.0,
     force_from_grid=True,
     multiple_walker=False,
+    verbose=True,
 )
 # the_abm.restart(filename='restart_wtmeabf1')
 
@@ -50,9 +55,9 @@ the_md.calc_init()
 the_abm.step_bias(
     mw_file="shared_bias1",
     sync_interval=40,
-    output_file="wtmeabf1.out",
-    traj_file="CV_traj1.dat",
-    restart_file="restart_wtmeabf1",
+    output_file="wtmeabf.out",
+    traj_file="CV_traj.dat",
+    restart_file="restart_wtmeabf",
 )
 the_md.calc_etvp()
 
@@ -83,25 +88,26 @@ while step_count < nsteps:
     the_md.calc()
 
     the_md.forces += the_abm.step_bias(
-        mw_file="shared_bias1",
+        mw_file="shared_bias",
         sync_interval=40,
-        output_file="wtmeabf1.out",
-        traj_file="CV_traj1.dat",
-        restart_file="restart_wtmeabf1",
+        output_file="wtmeabf.out",
+        traj_file="CV_traj.dat",
+        restart_file="restart_wtmeabf",
     )
 
     the_md.up_momenta(langevin=True)
     the_md.calc_etvp()
 
-    print(
-        "%11.2f\t%14.6f\t%14.6f\t%14.6f\t%14.6f\t%14.6f\t%14.6f"
-        % (
-            the_md.step * the_md.dt * atomic_to_fs,
-            the_md.coords[0],
-            the_md.coords[1],
-            the_md.epot,
-            the_md.ekin,
-            the_md.epot + the_md.ekin,
-            the_md.temp,
+    if the_md.step % out_freq == 0:
+        print(
+            "%11.2f\t%14.6f\t%14.6f\t%14.6f\t%14.6f\t%14.6f\t%14.6f"
+            % (
+                the_md.step * the_md.dt * atomic_to_fs,
+                the_md.coords[0],
+                the_md.coords[1],
+                the_md.epot,
+                the_md.ekin,
+                the_md.epot + the_md.ekin,
+                the_md.temp,
+            )
         )
-    )

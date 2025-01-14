@@ -17,9 +17,9 @@ class aWTMeABF(WTMeABF, aMD, EnhancedSampling):
     The dynamics of the pysical system is biased with an CV-independend boost potential
 
     Args:
+        
         ext_sigma: thermal width of coupling between collective and extended variable
         ext_mass: mass of extended variable in atomic units
-
         nfull: Number of force samples per bin where full bias is applied,
                if nsamples < nfull the bias force is scaled down by nsamples/nfull
         friction: friction coefficient for Lagevin dynamics of the extended-system
@@ -49,10 +49,9 @@ class aWTMeABF(WTMeABF, aMD, EnhancedSampling):
         output_freq: frequency in steps for writing output
     """
 
-    def __init__(self, *args, qm_boost: bool = False, do_wtm: bool = True, **kwargs):
+    def __init__(self, *args, apply_wtm: bool = True, **kwargs):
         super().__init__(*args, **kwargs)
-        self.do_wtm = do_wtm
-        self.qm_boost = qm_boost
+        self.do_wtm = apply_wtm
 
     def step_bias(
         self,
@@ -80,14 +79,9 @@ class aWTMeABF(WTMeABF, aMD, EnhancedSampling):
             bias_force: Accelerated WTM-eABF biasing force of current step that has to be added to molecular forces
         """
 
-        md_state = self.the_md.get_sampling_data()
-        epot = md_state.epot
-        if self.qm_boost:
-            epot = md_state.epot - md_state.mm_epot
-            self.amd_forces = np.copy(md_state.qm_force)
-        else:
-            epot = md_state.epot
-            self.amd_forces = np.copy(md_state.forces)
+        self.md_state = self.the_md.get_sampling_data()
+        epot = self.md_state.epot
+        self.amd_forces = np.copy(self.md_state.forces)
 
         (xi, delta_xi) = self.get_cv(**kwargs)
 
@@ -97,24 +91,24 @@ class aWTMeABF(WTMeABF, aMD, EnhancedSampling):
         self._propagate()
         bias_force = self._extended_dynamics(xi, delta_xi)
 
-        if md_state.step < self.init_steps:
+        if self.md_state.step < self.init_steps:
             self._update_pot_distribution(epot)
 
         else:
-            if md_state.step == self.init_steps:
+            if self.md_state.step == self.init_steps:
                 self._calc_E_k0()
 
             # apply amd boost potential
             bias_force += self._apply_boost(epot)
 
-            if md_state.step < self.equil_steps:
+            if self.md_state.step < self.equil_steps:
                 self._update_pot_distribution(epot)
                 self._calc_E_k0()
 
             else:
                 # (WTM-)eABF bias on extended-variable only in production
                 if self.do_wtm:
-                    mtd_forces = self.get_wtm_force(self.ext_coords)
+                    mtd_forces = self.mtd_bias(self.ext_coords)
 
                 if self._check_boundaries(self.ext_coords):
 
@@ -161,7 +155,7 @@ class aWTMeABF(WTMeABF, aMD, EnhancedSampling):
                 self.correction_czar[i][bink[1], bink[0]] += self.ext_k[i] * dx
 
             # aMD
-            if md_state.step >= self.equil_steps:
+            if self.md_state.step >= self.equil_steps:
 
                 (
                     self.amd_c1[bink[1], bink[0]],
@@ -178,16 +172,16 @@ class aWTMeABF(WTMeABF, aMD, EnhancedSampling):
 
         self.traj = np.append(self.traj, [xi], axis=0)
         self.ext_traj = np.append(self.ext_traj, [self.ext_coords], axis=0)
-        self.temp.append(md_state.temp)
+        self.temp.append(self.md_state.temp)
         self.amd_pot_traj.append(self.amd_pot)
-        self.epot.append(md_state.epot)
+        self.epot.append(self.md_state.epot)
 
         # correction for kinetics
         if self.kinetics:
             self._kinetics(delta_xi)
 
         # write traj and output
-        if md_state.step % self.out_freq == 0:
+        if self.md_state.step % self.out_freq == 0:
 
             if write_traj:
                 self.write_traj(filename=traj_file)
@@ -248,8 +242,8 @@ class aWTMeABF(WTMeABF, aMD, EnhancedSampling):
                 )
 
     def shared_bias(self):
-        """TODO"""
-        pass
+        """"""
+        raise NotImplementedError(" >>> ERROR: Shared bias not available for GaWTMeABF")
 
     def write_restart(self, filename: str = "restart_gaabf"):
         """write restart file
@@ -259,7 +253,6 @@ class aWTMeABF(WTMeABF, aMD, EnhancedSampling):
         self._write_restart(
             filename=filename,
             hist=self.histogram,
-            force=self.bias,
             var=self.var_force,
             m2=self.m2_force,
             ext_hist=self.ext_hist,
@@ -267,8 +260,9 @@ class aWTMeABF(WTMeABF, aMD, EnhancedSampling):
             ext_coords=self.ext_coords,
             czar_corr=self.correction_czar,
             abf_force=self.abf_forces,
-            center=self.center,
-            metapot=self.metapot,
+            height=self.hills_height,
+            center=self.hills_center,
+            sigma=self.hills_std,
             amd_c1=self.amd_c1,
             amd_m2=self.amd_m2,
             corr=self.amd_corr,
@@ -293,14 +287,17 @@ class aWTMeABF(WTMeABF, aMD, EnhancedSampling):
             raise OSError(f" >>> fatal error: restart file {filename}.npz not found!")
 
         self.histogram = data["hist"]
-        self.bias = data["force"]
         self.var_force = data["var"]
         self.m2_force = data["m2"]
         self.ext_hist = data["ext_hist"]
         self.correction_czar = data["czar_corr"]
         self.abf_forces = data["abf_force"]
-        self.center = data["center"].tolist()
-        self.metapot = data["metapot"]
+        self.hills_height = data["height"].tolist()
+        self.hills_center = data["center"].tolist()
+        self.hills_std = data["sigma"].tolist()
+        if not hasattr(self.hills_center[0], "__len__"):
+            self.hills_center = [np.array([c]) for c in self.hills_center]
+            self.hills_std = [np.array([std]) for std in self.hills_std]
         self.amd_c1 = data["amd_c1"]
         self.amd_m2 = data["amd_m2"]
         self.amd_corr = data["corr"]

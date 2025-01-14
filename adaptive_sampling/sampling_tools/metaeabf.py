@@ -34,7 +34,7 @@ class WTMeABF(eABF, WTM, EnhancedSampling):
         hill_std: standard deviation of Gaussian hills in units of the CVs (can be Angstrom, Degree, or None)
         hill_drop_freq: frequency of hill creation in steps
         well_tempered_temp: effective temperature for WTM, if np.inf, hills are not scaled down (normal metadynamics)
-        bias_factor: bias factor for WTM, if not None, overwrites `well_tempered_temp` 
+        bias_factor: bias factor for WTM, if not None, overwrites `well_tempered_temp`
         force_from_grid: forces are accumulated on grid for performance (recommended),
                          if False, forces are calculated from sum of Gaussians in every step
         equil_temp: equilibrium temperature of MD
@@ -299,15 +299,17 @@ class WTMeABF(eABF, WTM, EnhancedSampling):
                 bin_xi = self.get_index(xi)
                 self.hist_new_samples[bin_xi[1], bin_xi[0]] += 1
                 for j in range(self.ncoords):
-                    self.czar_corr_new_samples[j][bin_xi[1], bin_xi[0]] += force_sample[self.ncoords + j]
+                    self.czar_corr_new_samples[j][bin_xi[1], bin_xi[0]] += force_sample[
+                        self.ncoords + j
+                    ]
 
         # update buffer file
         if self.md_state.step % sync_interval == 0:
 
             # get new hills
-            new_center = np.asarray(self.hills_center)[self.num_hills_last_sync:]
-            new_height = np.asarray(self.hills_height)[self.num_hills_last_sync:]
-            new_std = np.asarray(self.hills_std)[self.num_hills_last_sync:]
+            new_center = np.asarray(self.hills_center)[self.num_hills_last_sync :]
+            new_height = np.asarray(self.hills_height)[self.num_hills_last_sync :]
+            new_std = np.asarray(self.hills_std)[self.num_hills_last_sync :]
 
             # add new samples to local restart
             self._update_wtmeabf(
@@ -342,7 +344,7 @@ class WTMeABF(eABF, WTM, EnhancedSampling):
                     )
                     self.restart(filename=mw_file, restart_ext_sys=False)
                     os.chmod(mw_file + ".npz", 0o444)  # other walkers can access again
-                    
+
                     self.get_pmf()  # get new global pmf
 
                     # reset new sample accumulators
@@ -367,15 +369,17 @@ class WTMeABF(eABF, WTM, EnhancedSampling):
 
             # recalculate `self.metapot` and `self.bias` to ensure convergence of WTM potential
             if self.ncoords == 1:
-                grid_full = np.asarray(self.grid[0]).reshape((-1,1))
+                grid_full = np.asarray(self.grid[0]).reshape((-1, 1))
             elif self.ncoords == 2:
                 xx, yy = np.meshgrid(self.grid[0], self.grid[1])
                 grid_full = np.stack([xx.flatten(), yy.flatten()], axis=1)
 
             shape = self.metapot.shape
             self.metapot = np.zeros_like(self.metapot).flatten()
-            self.bias = np.zeros_like(self.bias).reshape((len(self.metapot), self.ncoords))
-            for i, bin_coords in enumerate(grid_full): 
+            self.bias = np.zeros_like(self.bias).reshape(
+                (len(self.metapot), self.ncoords)
+            )
+            for i, bin_coords in enumerate(grid_full):
                 pot, der = self.calc_hills(bin_coords, requires_grad=True)
                 self.metapot[i] = np.sum(pot)
                 self.bias[i] = der

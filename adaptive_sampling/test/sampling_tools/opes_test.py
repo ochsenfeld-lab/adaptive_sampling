@@ -94,9 +94,7 @@ def test_calc_pot():
 
 
 def test_calculate_forces():
-    assert the_bias.calc_forces(
-        1.0, 0.2
-    ) == pytest.approx(0.00016, abs=1e-5)
+    assert the_bias.calc_forces(1.0, 0.2) == pytest.approx(0.00016, abs=1e-5)
 
 
 def test_calc_norm_factor_exact():

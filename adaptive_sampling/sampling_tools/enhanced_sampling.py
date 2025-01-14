@@ -303,6 +303,7 @@ class EnhancedSampling(ABC):
     def reinit_cv(self):
         """Reinit collective variable, can be useful for adaptive CVs"""
         from ..colvars import CV
+
         self.the_cv = CV(self.the_md, requires_grad=True)
 
     def write_output(self, data: dict, filename="free_energy.dat"):

@@ -24,7 +24,7 @@ class ABF(EnhancedSampling):
         output_freq: frequency in steps for writing outputs
     """
 
-    def __init__(self, *args, nfull: int = 100, **kwargs):
+    def __init__(self, *args, nfull: int = 500, **kwargs):
         super().__init__(*args, **kwargs)
         self.nfull = nfull
         self.var_force = np.zeros_like(self.bias)
