@@ -2,7 +2,7 @@ import os
 import itertools
 import torch
 from adaptive_sampling.units import BOHR_to_ANGSTROM
-from adaptive_sampling.sampling_tools.utils import diff, sum
+from adaptive_sampling.sampling_tools.utils import diff
 
 
 def read_xyz(xyz_name: str) -> torch.tensor:

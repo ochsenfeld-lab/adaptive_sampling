@@ -25,15 +25,15 @@ class MLCOLVAR:
         coordinate_system: str = "cv_space",
         cv_def: dict = None,
         component: int = None,
-        unit_conversion_factor: float = 1.0,
-        device: str = "CPU",
+        unit_conversion_factor: float = None,
+        device: str = None,
         ndim: int = 3,
     ):
         self.model = torch.load(model, weights_only=False)
         self.coordinate_system = coordinate_system
         self.cv_def = cv_def
         self.component = component
-        self.unit_conversion_factor = unit_conversion_factor
+        self.unit_conversion_factor = unit_conversion_factor if not None else 1.0
         self.device = device
         self.ndim = ndim
         self.cv = None
@@ -47,6 +47,9 @@ class MLCOLVAR:
         """
         # calculate feature space
         coords = torch.mul(coords, self.unit_conversion_factor)
+        if self.device is not None:
+            coords = coords.to(self.device, non_blocking=True)
+            
         feature_space = convert_coordinate_system(
             coords,
             self.cv_def,
@@ -60,7 +63,7 @@ class MLCOLVAR:
             self.cv = self.cv[self.component]
 
         if coords.requires_grad:
-            self.gradient = torch.autograd.grad(self.cv, coords, allow_unused=True)[0]
+            self.gradient = torch.autograd.grad(self.cv, coords, allow_unused=True, retain_graph=False)[0]
             self.gradient = self.gradient.detach().numpy()
 
         return self.cv

@@ -634,7 +634,7 @@ class CV:
 
     def mlcolvar(self, mlcolvar_def: dict, **kwargs):
         """Collective Variable from PyTorch ML model"""
-        if not hasattr(self, "the_graphcv"):
+        if not hasattr(self, "the_mlcolvar"):
             from .mlcolvar import MLCOLVAR
 
             self.the_mlcolvar = MLCOLVAR(
@@ -644,6 +644,7 @@ class CV:
                 component=mlcolvar_def.get("component", None),
                 unit_conversion_factor=mlcolvar_def.get("unit_conversion_factor", 1.0),
                 ndim=mlcolvar_def.get("ndim", 3),
+                device=mlcolvar_def.get("device", None),
             )
 
         self.update_coords()

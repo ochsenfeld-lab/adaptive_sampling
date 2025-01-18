@@ -1,7 +1,7 @@
 import os, time
 import numpy as np
 from .enhanced_sampling import EnhancedSampling
-from .utils import welford_var, combine_welford_stats, diff
+from .utils import welford_var, diff
 from .eabf import eABF
 from .opes import OPES
 from ..units import *
