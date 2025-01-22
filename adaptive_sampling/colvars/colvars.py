@@ -641,17 +641,18 @@ class CV:
                 model=mlcolvar_def.get("model", None),
                 coordinate_system=mlcolvar_def.get("coordinate_system", "cv_space"),
                 cv_def=mlcolvar_def.get("cv_def", None),
-                component=mlcolvar_def.get("component", None),
+                cv_idx=mlcolvar_def.get("cv_idx", None),
                 unit_conversion_factor=mlcolvar_def.get("unit_conversion_factor", 1.0),
                 ndim=mlcolvar_def.get("ndim", 3),
                 device=mlcolvar_def.get("device", None),
             )
 
         self.update_coords()
-        self.cv = self.the_mlcolvar.calc(self.coords, **kwargs)
+        self.cv = self.the_mlcolvar.forward(self.coords, **kwargs)
 
         if self.requires_grad:
-            self.gradient = self.the_mlcolvar.gradient
+            self.gradient = torch.autograd.grad(self.cv, self.coords, allow_unused=True)[0]
+            self.gradient = self.gradient.detach().numpy()
 
         return float(self.cv)
 
