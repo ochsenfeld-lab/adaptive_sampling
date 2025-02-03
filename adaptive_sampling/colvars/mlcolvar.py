@@ -36,7 +36,7 @@ class MLCOLVAR():
         try:        
             self._model = torch.jit.optimize_for_inference(self._model)
         except:
-            print(" >>> WARNING: optimization for inference failed. Please use torch version to >= 1.10")
+            print(" >>> WARNING: Please use torch version >= 1.10 to enable `jit.optimize_for_inference`")
             self._model = torch.jit.freeze(self._model)
 
         # other parameters
@@ -48,11 +48,14 @@ class MLCOLVAR():
         self.cv = None
         self.gradient = None
 
-    def forward(self, coords: torch.tensor):
+    def forward(self, coords: torch.tensor) -> torch.tensor:
         """Obtain the mlcolvar from forward pass through model
 
         Args:
             coords: cartesian coordinates
+
+        Returns:
+            cv: collective variable 
         """
         if self.device is not None:
             coords = coords.to(self.device, non_blocking=True)

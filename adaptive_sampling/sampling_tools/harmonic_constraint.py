@@ -11,8 +11,8 @@ class Harmonic_Constraint:
         force_constants: list of force constants for confinements in kJ/mol/(CV unit)^2, can also be float
         equil_positions: list of centers of harmonic confinements in the unit of the CV, can also be float
                          distances given in Angstrom and angles in degree
-        colvars: dict of confined collective variables from `adaptive_sampling.colvars`,
-                 example: {"distance": [idx0, idx1], "angle": [idx0, idx1, idx2], ...}
+        colvars: list of confined collective variables from `adaptive_sampling.colvars`,
+                 example: [["distance", [idx0, idx1]], ["angle", [idx0, idx1, idx2]], ...]
         outputfile: output filename
         outputstride: every `outputstride` step is written to outputfile
     """
@@ -21,16 +21,16 @@ class Harmonic_Constraint:
         self,
         the_md: object,
         force_constants: List[float],
-        equil_position: List[float],
+        equil_positions: List[float],
         colvars: dict,
         outputfile: str = "constraints_traj.dat",
         output_stride: int = 1,
     ):
         self.the_md = the_md
         self.equil_positions = (
-            np.asarray(equil_position)
-            if hasattr(equil_position, "__len__")
-            else np.asarray([equil_position])
+            np.asarray(equil_positions)
+            if hasattr(equil_positions, "__len__")
+            else np.asarray([equil_positions])
         )
         self.force_constants = (
             np.asarray(force_constants)
@@ -48,7 +48,7 @@ class Harmonic_Constraint:
         if len(self.colvars) != len(self.force_constants) or len(self.colvars) != len(
             self.equil_positions
         ):
-            raise (
+            raise ValueError(
                 " >>> Harmonic_Constraint: Number of colvars does not match number of constraints"
             )
 
@@ -95,8 +95,8 @@ class Harmonic_Constraint:
         """
         cvs, grad_cvs, cv_types = [], [], []
 
-        for cv, cv_def in self.colvars.items():
-            cv, grad_cv = self.the_cv.get_cv(cv, cv_def, **kwargs)
+        for cv_def in self.colvars:
+            cv, grad_cv = self.the_cv.get_cv(cv_def[0], cv_def[1], **kwargs)
             cvs.append(cv)
             grad_cvs.append(np.asarray(grad_cv))
             cv_types.append(self.the_cv.type)
