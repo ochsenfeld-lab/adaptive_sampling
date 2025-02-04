@@ -54,7 +54,7 @@ class OPES(EnhancedSampling):
         **kwargs,
     ):
         super().__init__(*args, **kwargs)
-        from ..units import kB_in_atomic, atomic_to_kJmol
+        from ..units import kB_in_atomic, atomic_to_kJmol, kJ_to_kcal
 
         # kernel standard deviation
         self.bandwidth_rescaling = bandwidth_rescaling

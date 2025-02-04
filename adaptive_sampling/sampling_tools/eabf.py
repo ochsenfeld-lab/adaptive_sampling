@@ -55,7 +55,8 @@ class eABF(ABF, EnhancedSampling):
         **kwargs,
     ):
         super().__init__(*args, **kwargs)
-
+        from ..units import kB_in_atomic
+        
         # extended system
         if not hasattr(ext_sigma, "__len__") and not ext_sigma:
             self.estimate_sigma = True
