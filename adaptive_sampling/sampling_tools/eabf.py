@@ -11,7 +11,6 @@ from .utils import (
     cond_avg,
 )
 from ..processing_tools.thermodynamic_integration import integrate
-from ..units import *
 
 
 class eABF(ABF, EnhancedSampling):
@@ -144,7 +143,7 @@ class eABF(ABF, EnhancedSampling):
         Returns:
              bias_force: Adaptive biasing force of current step that has to be added to molecular forces
         """
-
+        from ..units import kB_in_atomic
         self.md_state = self.the_md.get_sampling_data()
         (xi, delta_xi) = self.get_cv(**kwargs)
 
@@ -271,7 +270,7 @@ class eABF(ABF, EnhancedSampling):
         return bias_force
 
     def get_pmf(self, method: str = "trapezoid"):
-
+        from ..units import kB_in_atomic, atomic_to_kJmol
         log_rho = np.log(
             self.histogram,
             out=np.zeros_like(self.histogram),
@@ -447,6 +446,7 @@ class eABF(ABF, EnhancedSampling):
 
     def reinit_ext_system(self, xi: np.ndarray):
         """Initialize extended-system dynamics with random momenta"""
+        from ..units import atomic_to_K
         self.ext_coords = np.copy(xi)
         for i in range(self.ncoords):
             self.ext_momenta[i] = random.gauss(0.0, 1.0) * np.sqrt(
@@ -483,6 +483,7 @@ class eABF(ABF, EnhancedSampling):
         Args:
            langevin: Temperature control with langevin dynamics
         """
+        from ..units import kB_in_atomic
         if langevin:
             prefac = 2.0 / (2.0 + self.friction * self.the_md.dt)
             rand_push = np.sqrt(
@@ -513,6 +514,7 @@ class eABF(ABF, EnhancedSampling):
         Args:
             langevin: Temperature control with langevin dynamics
         """
+        from ..units import kB_in_atomic
         if langevin:
             prefac = (2.0e0 - self.friction * self.the_md.dt) / (
                 2.0e0 + self.friction * self.the_md.dt
@@ -672,6 +674,7 @@ class eABF(ABF, EnhancedSampling):
             print(f" >>> Info: Adaptive sampling restartet from {filename}!")
 
     def _write_ext_traj(self):
+        from ..units import BOHR_to_ANGSTROM, DEGREES_per_RADIAN
         data = {}
         for i in range(self.ncoords):
             if self.cv_type[i] == "angle":

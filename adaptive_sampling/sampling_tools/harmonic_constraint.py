@@ -1,7 +1,5 @@
 import numpy as np
 from typing import List, Tuple
-from ..units import *
-
 
 class Harmonic_Constraint:
     """Harmonic constraint of collective variables
@@ -26,6 +24,7 @@ class Harmonic_Constraint:
         outputfile: str = "constraints_traj.dat",
         output_stride: int = 1,
     ):
+        from ..units import atomic_to_kJmol 
         self.the_md = the_md
         self.equil_positions = (
             np.asarray(equil_positions)
@@ -115,6 +114,7 @@ class Harmonic_Constraint:
             k: force constant in atomic units
             x0: equilibrium position in atomic units
         """
+        from ..units import BOHR_to_ANGSTROM, DEGREES_per_RADIAN
         if type == "distance":
             x0_bohr = x0 / BOHR_to_ANGSTROM
             k_bohr = k * BOHR_to_ANGSTROM * BOHR_to_ANGSTROM
@@ -129,6 +129,7 @@ class Harmonic_Constraint:
 
     def print_conf(self, md_step, cvs, epots, cv_types):
         """print confinments of current step to `self.outputfile`"""
+        from ..units import BOHR_to_ANGSTROM, DEGREES_per_RADIAN
         if md_step == 0:
             with open(self.outputfile, "w") as f:
                 f.write(f"# Step\t")

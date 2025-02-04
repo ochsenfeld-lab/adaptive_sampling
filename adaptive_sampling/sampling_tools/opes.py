@@ -1,9 +1,7 @@
 import numpy as np
-from adaptive_sampling.sampling_tools.enhanced_sampling import EnhancedSampling
-from adaptive_sampling.units import *
+from .enhanced_sampling import EnhancedSampling
 from .utils import correct_periodicity
 from .utils import welford_var
-
 
 class OPES(EnhancedSampling):
     """on-the-fly probability enhanced sampling
@@ -43,7 +41,7 @@ class OPES(EnhancedSampling):
         *args,
         kernel_std: np.array = None,
         update_freq: int = 500,
-        energy_barr: float = 30.0 / kJ_to_kcal,  # 30 kcal/mol
+        energy_barr: float = 30.0 / 0.239006,  # 30 kcal/mol
         bandwidth_rescaling: bool = True,
         adaptive_std: bool = False,
         adaptive_std_freq: int = 10,
@@ -57,6 +55,7 @@ class OPES(EnhancedSampling):
         **kwargs,
     ):
         super().__init__(*args, **kwargs)
+        from ..units import kB_in_atomic, atomic_to_kJmol
 
         # kernel standard deviation
         self.bandwidth_rescaling = bandwidth_rescaling
@@ -180,7 +179,7 @@ class OPES(EnhancedSampling):
         Returns:
             bias_force: Bias force that has to be added to system forces
         """
-
+        from ..units import atomic_to_kJmol
         self.md_state = self.the_md.get_sampling_data()
         (cv, grad_cv) = self.get_cv(**kwargs)
 

@@ -1,6 +1,5 @@
 import numpy as np
 from adaptive_sampling.sampling_tools.enhanced_sampling import EnhancedSampling
-from adaptive_sampling.units import *
 from .utils import correct_periodicity
 
 
@@ -35,6 +34,7 @@ class WTM(EnhancedSampling):
     ):
         super().__init__(*args, **kwargs)
 
+        from ..units import kB_in_atomic, atomic_to_kJmol
         if hill_height <= 0:
             raise ValueError(" >>> Error: Hill height for WTM has to be > 0!")
 
@@ -121,7 +121,7 @@ class WTM(EnhancedSampling):
         Returns:
             bias_force: Bias force that has to be added to system forces
         """
-
+        from ..units import atomic_to_kJmol
         self.md_state = self.the_md.get_sampling_data()
         (cv, grad_cv) = self.get_cv(**kwargs)
 
@@ -470,6 +470,7 @@ class WTM(EnhancedSampling):
             s_new: hills position
             std_new: hills standard deviation
         """
+        from ..units import kB_in_atomic
         if self.well_tempered:
             w = h_new * np.exp(
                 -self.bias_pot / (kB_in_atomic * self.well_tempered_temp)

@@ -4,7 +4,6 @@ from .metaeabf import WTMeABF
 from .amd import aMD
 from .utils import welford_var, diff, cond_avg
 from ..processing_tools.thermodynamic_integration import integrate
-from ..units import *
 
 
 class aWTMeABF(WTMeABF, aMD, EnhancedSampling):
@@ -201,7 +200,7 @@ class aWTMeABF(WTMeABF, aMD, EnhancedSampling):
         return bias_force
 
     def get_pmf(self, method: str = "trapezoid"):
-
+        from ..units import kB_in_atomic, atomic_to_kJmol
         log_rho = np.log(
             self.histogram,
             out=np.zeros_like(self.histogram),

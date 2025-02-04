@@ -6,7 +6,6 @@ from abc import ABC, abstractmethod
 
 from ..interface.sampling_data import MDInterface
 from .utils import diff
-from ..units import *
 
 
 class EnhancedSampling(ABC):
@@ -39,6 +38,7 @@ class EnhancedSampling(ABC):
         **kwargs,
     ):
         from ..colvars import CV
+        from ..units import BOHR_to_ANGSTROM, DEGREES_per_RADIAN
 
         self.the_md = md
         self.the_cv = CV(self.the_md, requires_grad=True)
@@ -226,6 +226,7 @@ class EnhancedSampling(ABC):
         Returns:
             args in atomic units
         """
+        from ..units import BOHR_to_ANGSTROM, DEGREES_per_RADIAN
         for i in range(self.ncoords):
             for arg in args:
                 if self.cv_type[i] == "angle":
@@ -243,7 +244,7 @@ class EnhancedSampling(ABC):
         Returns:
             args in atomic units
         """
-
+        from ..units import BOHR_to_ANGSTROM, DEGREES_per_RADIAN, atomic_to_kJmol
         for i in range(self.ncoords):
             for arg in args:
                 if self.cv_type == "angle":
@@ -313,6 +314,7 @@ class EnhancedSampling(ABC):
             data: results to write
             filename: name of output file
         """
+        from ..units import DEGREES_per_RADIAN, BOHR_to_ANGSTROM
         grid = self.grid.copy()
         for i in range(self.ncoords):
             if self.the_cv.type == "angle":
@@ -351,6 +353,7 @@ class EnhancedSampling(ABC):
             data: data to write
             filename: name of trajectory file
         """
+        from ..units import BOHR_to_ANGSTROM, DEGREES_per_RADIAN
         step = self.the_md.get_sampling_data().step
 
         # write header

@@ -4,7 +4,6 @@ from .enhanced_sampling import EnhancedSampling
 from .utils import welford_var, combine_welford_stats, diff
 from .eabf import eABF
 from .metadynamics import WTM
-from ..units import *
 
 
 class WTMeABF(eABF, WTM, EnhancedSampling):
@@ -78,7 +77,7 @@ class WTMeABF(eABF, WTM, EnhancedSampling):
         Returns:
             bias_force: WTM-eABF biasing force of current step that has to be added to molecular forces
         """
-
+        from ..units import kB_in_atomic
         self.md_state = self.the_md.get_sampling_data()
         (xi, delta_xi) = self.get_cv(**kwargs)
 

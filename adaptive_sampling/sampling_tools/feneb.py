@@ -1,7 +1,6 @@
 import os
 import numpy as np
 from typing import List, Tuple
-from ..units import *
 
 try:
     from ase import io
@@ -55,6 +54,7 @@ class FENEB:
         convert_units: bool = True,
         verbose: bool = False,
     ):
+        from ..units import BOHR_to_ANGSTROM, DEGREES_per_RADIAN
         self.convert_units = convert_units
         if convert_units:
             self.neb_k = neb_k * BOHR_to_ANGSTROM * BOHR_to_ANGSTROM
@@ -114,6 +114,7 @@ class FENEB:
             frozen_extremes: if False, band extremes are fully optimized
             potential_energy: list of potential energies of images for improved tangent estimate
         """
+        from ..units import atomic_to_kJmol
         self.optstep += 1
         confs_fes, scaling_factors = [], []
         for i, _ in enumerate(self.path):
@@ -400,6 +401,7 @@ class FENEB:
     @staticmethod
     def _get_scaling_factor(forces, convert_units: bool = True):
         """Get SD scaling based on heuristic criterion"""
+        from ..units import BOHR_to_ANGSTROM
         atom_fnorm_max = np.max(
             np.linalg.norm(
                 forces.reshape((int(len(forces.flatten()) / 3), 1, 3)), axis=2
@@ -427,6 +429,7 @@ class FENEB:
             endpoints: list of ase molecules that represent endpoints of path
             idpp: if True, get improved path guess from IDPP method
         """
+        from ..units import BOHR_to_ANGSTROM
         if len(self.active) != len(self.initial.get_positions()):
 
             if self.verbose:
@@ -538,6 +541,7 @@ class FENEB:
         Returns:
             data: list of lists with xyz coordinates for trajectories corresponding to path nodes
         """
+        from ..units import BOHR_to_ANGSTROM
         if self.load_from_dcd:
             try:
                 import mdtraj as md
@@ -577,6 +581,7 @@ class FENEB:
 
     def write_nodes_to_xyz(self):
         """Saves one `.xyz` file for each path node"""
+        from ..units import BOHR_to_ANGSTROM
         for i, coords in enumerate(self.path):
             if self.convert_units:
                 self.initial.set_positions(coords * BOHR_to_ANGSTROM)
@@ -603,6 +608,7 @@ def confine_md_to_node(
         conf_energy: confinement energy
         conf_forces: confinement forces
     """
+    from ..units import BOHR_to_ANGSTROM, atomic_to_kJmol
     if convert_units:
         k = k * BOHR_to_ANGSTROM * BOHR_to_ANGSTROM / atomic_to_kJmol
 

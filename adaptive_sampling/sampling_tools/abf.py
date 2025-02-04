@@ -3,7 +3,6 @@ import numpy as np
 from .enhanced_sampling import EnhancedSampling
 from .utils import welford_var, combine_welford_stats
 from ..processing_tools.thermodynamic_integration import integrate
-from ..units import *
 
 
 class ABF(EnhancedSampling):
@@ -31,7 +30,7 @@ class ABF(EnhancedSampling):
         self.m2_force = np.zeros_like(self.bias)
 
     def step_bias(self, write_output: bool = True, write_traj: bool = True, **kwargs):
-
+        from ..units import kB_in_atomic
         md_state = self.the_md.get_sampling_data()
 
         (xi, delta_xi) = self.get_cv(**kwargs)
@@ -109,7 +108,7 @@ class ABF(EnhancedSampling):
         return bias_force
 
     def get_pmf(self, method: str = "trapezoid"):
-
+        from ..units import atomic_to_kJmol
         if self.ncoords == 1:
             self.pmf[0, :], _ = integrate(
                 self.bias[0][0], self.dx, equil_temp=self.equil_temp, method=method

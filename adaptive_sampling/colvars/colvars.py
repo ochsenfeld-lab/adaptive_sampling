@@ -45,8 +45,8 @@ class CV:
         self.reference_internal = None
 
     def update_coords(self):
-        """The coords tensor and ndarray share the same memory.
-        Modifications to the tensor will be reflected in the ndarray and vice versa!"""
+        """The coords tensor and array share the same memory.
+        Modifications to the tensor will be reflected in the array and vice versa!"""
         self.coords = torch.from_numpy(self.the_mol.get_sampling_data().coords.ravel())
         self.coords = self.coords.float().to(self.device)
         self.coords.requires_grad = self.requires_grad
