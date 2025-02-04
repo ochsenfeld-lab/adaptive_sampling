@@ -133,7 +133,7 @@ class aWTMeABF(WTMeABF, aMD, EnhancedSampling):
                             self.abf_forces[i][bink[1], bink[0]],
                             self.m2_force[i][bink[1], bink[0]],
                             self.ext_k[i]
-                            * diff(self.ext_coords[i], xi[i], self.periodicity[i]),
+                            * diff_periodic(self.ext_coords[i], xi[i], self.periodicity[i]),
                         )
                         self.ext_forces -= ramp * self.abf_forces[i][bink[1], bink[0]]
 
