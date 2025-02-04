@@ -1,6 +1,6 @@
 import numpy as np
 from .enhanced_sampling import EnhancedSampling
-from .utils import welford_var, diff
+from .utils import welford_var, diff_periodic
 from .eabf import eABF
 from .opes import OPES
 from ..processing_tools.thermodynamic_integration import *
@@ -157,7 +157,7 @@ class OPESeABF(eABF, OPES, EnhancedSampling):
                     )
 
                     # apply bias force on extended variable
-                    force_sample[i] = self.ext_k[i] * diff(
+                    force_sample[i] = self.ext_k[i] * diff_periodic(
                         self.ext_coords[i], xi[i], self.periodicity[i]
                     )
                     (
@@ -182,7 +182,7 @@ class OPESeABF(eABF, OPES, EnhancedSampling):
             self.histogram[bink[1], bink[0]] += 1
 
             for i in range(self.ncoords):
-                force_sample[self.ncoords + i] = self.ext_k[i] * diff(
+                force_sample[self.ncoords + i] = self.ext_k[i] * diff_periodic(
                     self.ext_coords[i], self.grid[i][bink[i]], self.periodicity[i]
                 )
                 self.correction_czar[i][bink[1], bink[0]] += force_sample[

@@ -1,7 +1,7 @@
 import os, time
 import numpy as np
 from .enhanced_sampling import EnhancedSampling
-from .utils import welford_var, combine_welford_stats, diff
+from .utils import welford_var, combine_welford_stats, diff_periodic
 from .eabf import eABF
 from .metadynamics import WTM
 
@@ -135,7 +135,7 @@ class WTMeABF(eABF, WTM, EnhancedSampling):
                     )
 
                     # apply bias force on extended variable
-                    force_sample[i] = self.ext_k[i] * diff(
+                    force_sample[i] = self.ext_k[i] * diff_periodic(
                         self.ext_coords[i], xi[i], self.periodicity[i]
                     )
                     (
@@ -160,7 +160,7 @@ class WTMeABF(eABF, WTM, EnhancedSampling):
             self.histogram[bink[1], bink[0]] += 1
 
             for i in range(self.ncoords):
-                force_sample[self.ncoords + i] = self.ext_k[i] * diff(
+                force_sample[self.ncoords + i] = self.ext_k[i] * diff_periodic(
                     self.ext_coords[i], self.grid[i][bink[i]], self.periodicity[i]
                 )
                 self.correction_czar[i][bink[1], bink[0]] += force_sample[

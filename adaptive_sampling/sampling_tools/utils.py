@@ -2,7 +2,7 @@ import numpy as np
 from typing import Union, Tuple
 
 
-def diff(
+def diff_periodic(
     a: Union[np.ndarray, float],
     b: Union[np.ndarray, float],
     periodicity: list,
@@ -22,7 +22,7 @@ def diff(
     return diff_ab
 
 
-def sum(
+def sum_periodic(
     a: Union[np.ndarray, float],
     b: Union[np.ndarray, float],
     periodicity: list,

@@ -4,7 +4,7 @@ from typing import Union
 from .enhanced_sampling import EnhancedSampling
 from .abf import ABF
 from .utils import (
-    diff,
+    diff_periodic,
     correct_periodicity,
     welford_var,
     combine_welford_stats,
@@ -200,7 +200,7 @@ class eABF(ABF, EnhancedSampling):
                 )
 
                 # apply bias force on extended system
-                force_sample[i] = self.ext_k[i] * diff(
+                force_sample[i] = self.ext_k[i] * diff_periodic(
                     self.ext_coords[i], xi[i], self.periodicity[i]
                 )
                 (
@@ -222,7 +222,7 @@ class eABF(ABF, EnhancedSampling):
             self.histogram[bink[1], bink[0]] += 1
 
             for i in range(self.ncoords):
-                force_sample[self.ncoords + i] = self.ext_k[i] * diff(
+                force_sample[self.ncoords + i] = self.ext_k[i] * diff_periodic(
                     self.ext_coords[i], self.grid[i][bink[i]], self.periodicity[i]
                 )
                 self.correction_czar[i][bink[1], bink[0]] += force_sample[
@@ -471,7 +471,7 @@ class eABF(ABF, EnhancedSampling):
 
         for i in range(self.ncoords):
             if abs(xi[i] - self.traj[-1][i]) > threshold[i]:
-                delta = diff(self.ext_coords[i], self.traj[-1][i], self.periodicity[i])
+                delta = diff_periodic(self.ext_coords[i], self.traj[-1][i], self.periodicity[i])
                 self.ext_coords[i] = xi[i] + delta
                 if self.verbose:
                     print(
@@ -549,7 +549,7 @@ class eABF(ABF, EnhancedSampling):
 
         for i in range(self.ncoords):
             # harmonic coupling of extended coordinate to reaction coordinate
-            dxi = diff(self.ext_coords[i], xi[i], self.periodicity[i])
+            dxi = diff_periodic(self.ext_coords[i], xi[i], self.periodicity[i])
             self.ext_forces[i] = self.ext_k[i] * dxi
             bias_force -= self.ext_k[i] * dxi * delta_xi[i]
 
@@ -559,7 +559,7 @@ class eABF(ABF, EnhancedSampling):
                     self.ext_coords[i] > (self.maxx[i] - margin[i])
                     and not self.periodicity[i]
                 ):
-                    r = diff(
+                    r = diff_periodic(
                         self.maxx[i] - margin[i],
                         self.ext_coords[i],
                         self.periodicity[i],
@@ -570,7 +570,7 @@ class eABF(ABF, EnhancedSampling):
                     self.ext_coords[i] < (self.minx[i] + margin[i])
                     and not self.periodicity[i]
                 ):
-                    r = diff(
+                    r = diff_periodic(
                         self.minx[i] + margin[i],
                         self.ext_coords[i],
                         self.periodicity[i],

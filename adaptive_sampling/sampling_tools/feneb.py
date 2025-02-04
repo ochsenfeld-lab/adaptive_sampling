@@ -54,7 +54,7 @@ class FENEB:
         convert_units: bool = True,
         verbose: bool = False,
     ):
-        from ..units import BOHR_to_ANGSTROM, DEGREES_per_RADIAN
+        from ..units import BOHR_to_ANGSTROM
         self.convert_units = convert_units
         if convert_units:
             self.neb_k = neb_k * BOHR_to_ANGSTROM * BOHR_to_ANGSTROM

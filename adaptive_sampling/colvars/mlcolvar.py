@@ -1,9 +1,6 @@
 import torch
-import numpy as np
 from ..units import *
-
 from .utils import convert_coordinate_system
-import torch.nn as nn 
 
 class MLCOLVAR():
     """Calculate CV from trained PyTorch model

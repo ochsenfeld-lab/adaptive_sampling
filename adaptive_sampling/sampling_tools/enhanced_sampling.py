@@ -5,7 +5,7 @@ from typing import Tuple
 from abc import ABC, abstractmethod
 
 from ..interface.sampling_data import MDInterface
-from .utils import diff
+from .utils import diff_periodic
 
 
 class EnhancedSampling(ABC):
@@ -190,11 +190,11 @@ class EnhancedSampling(ABC):
 
         for i in range(self.ncoords):
             if xi[i] > (self.maxx[i] - margin[i]):
-                r = diff(self.maxx[i] - margin[i], xi[i], self.periodicity[i])
+                r = diff_periodic(self.maxx[i] - margin[i], xi[i], self.periodicity[i])
                 conf_force -= self.f_conf[i] * r * delta_xi[i]
 
             elif xi[i] < (self.minx[i] + margin[i]):
-                r = diff(self.minx[i] + margin[i], xi[i], self.periodicity[i])
+                r = diff_periodic(self.minx[i] + margin[i], xi[i], self.periodicity[i])
                 conf_force -= self.f_conf[i] * r * delta_xi[i]
 
         return conf_force

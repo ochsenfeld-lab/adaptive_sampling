@@ -1,5 +1,5 @@
 import numpy as np
-from typing import List, Tuple, Union, Dict
+from typing import List
 from adaptive_sampling.units import *
 from adaptive_sampling.processing_tools.mbar import pmf_from_weights
 from adaptive_sampling.sampling_tools.utils import correct_periodicity

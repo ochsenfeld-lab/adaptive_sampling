@@ -2,7 +2,7 @@ import numpy as np
 from .enhanced_sampling import EnhancedSampling
 from .metaeabf import WTMeABF
 from .amd import aMD
-from .utils import welford_var, diff, cond_avg
+from .utils import welford_var, diff_periodic, cond_avg
 from ..processing_tools.thermodynamic_integration import integrate
 
 
@@ -148,7 +148,7 @@ class aWTMeABF(WTMeABF, aMD, EnhancedSampling):
 
             # CZAR
             for i in range(self.ncoords):
-                dx = diff(
+                dx = diff_periodic(
                     self.ext_coords[i], self.grid[i][bink[i]], self.periodicity[i]
                 )
                 self.correction_czar[i][bink[1], bink[0]] += self.ext_k[i] * dx

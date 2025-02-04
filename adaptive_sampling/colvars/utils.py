@@ -1,8 +1,6 @@
 import os
 import itertools
 import torch
-from adaptive_sampling.units import BOHR_to_ANGSTROM
-from adaptive_sampling.sampling_tools.utils import diff
 
 
 def read_xyz(xyz_name: str) -> torch.tensor:
@@ -14,6 +12,7 @@ def read_xyz(xyz_name: str) -> torch.tensor:
     Returns:
         mol: (3*natoms,) cartesian coordinates
     """
+    from ..units import BOHR_to_ANGSTROM
     if os.path.exists(xyz_name):
         xyzf = open(xyz_name, "r")
     else:
@@ -43,6 +42,7 @@ def read_path(
         traj: list of torch arrays containing coordinates of nodes
         nnodes: number of nodes in path
     """
+    from ..units import BOHR_to_ANGSTROM
     if filename[-3:] == "dcd":
         # TODO: Read path from dcd file
         raise NotImplementedError(
@@ -117,13 +117,14 @@ def get_msd(
     ndim: int = 3,
 ):
     """mean-square deviation"""
+    from ..sampling_tools.utils import diff_periodic
     if len(V) % ndim == 0:
         V = V.view(int(torch.numel(V) / ndim), ndim).float()
         W = W.view(int(torch.numel(W) / ndim), ndim).float()
     if indices != None:
         V = V[indices]
         W = W[indices]
-    d = diff(V, W, periodicity=periodicity)
+    d = diff_periodic(V, W, periodicity=periodicity)
     return torch.sum(d * d) / len(V)
 
 
@@ -369,6 +370,7 @@ def get_internal_coordinate(
     Returns:
         cv: internal coordinate
     """
+    from ..units import BOHR_to_ANGSTROM
     z = coords.view(int(torch.numel(coords) / ndim), ndim)
 
     if cv[0].lower() == "distance":

@@ -1,7 +1,7 @@
 import numpy as np
 from ..units import *
 from .utils import *
-from ..sampling_tools.utils import diff
+from ..sampling_tools.utils import diff_periodic
 
 
 def metapot_from_traj(
@@ -37,7 +37,7 @@ def metapot_from_traj(
             else:
                 w = hill_height
 
-            bin_diff = diff(grid, xi, "angle" if periodic else "None")
+            bin_diff = diff_periodic(grid, xi, "angle" if periodic else "None")
             metapot += w * np.exp(-(bin_diff * bin_diff) / (2.0 * hill_var))
 
     return metapot * atomic_to_kJmol

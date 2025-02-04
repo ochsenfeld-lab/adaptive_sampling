@@ -3,7 +3,7 @@ import random
 import numpy as np
 from typing import Tuple
 from .sampling_data import SamplingData
-from ..units import *
+from adaptive_sampling import units
 
 
 class MD:
@@ -24,7 +24,7 @@ class MD:
         self.coords = np.array(coords_in)
         self.natoms = 1
         self.dt_fs = dt_in
-        self.dt = dt_in / atomic_to_fs
+        self.dt = dt_in / units.atomic_to_fs
         self.target_temp = target_temp_in
         self.forces = np.zeros(2 * self.natoms)
         self.momenta = np.zeros(2 * self.natoms)
@@ -74,7 +74,7 @@ class MD:
         self.momenta[1] = random.gauss(0.0, 1.0) * np.sqrt(init_temp * self.mass)
 
         TTT = (np.power(self.momenta, 2) / self.masses).sum() / 2.0
-        self.momenta *= np.sqrt(init_temp / (TTT * atomic_to_K))
+        self.momenta *= np.sqrt(init_temp / (TTT * units.atomic_to_K))
 
     # -----------------------------------------------------------------------------------------------------
     def calc(self) -> Tuple[float, np.ndarray]:
