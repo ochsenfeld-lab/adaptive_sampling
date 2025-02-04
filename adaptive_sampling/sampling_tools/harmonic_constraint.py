@@ -133,8 +133,8 @@ class Harmonic_Constraint:
         if md_step == 0:
             with open(self.outputfile, "w") as f:
                 f.write(f"# Step\t")
-                for i, type in enumerate(list(self.colvars.keys())):
-                    f.write(f"{f'{type}_{i}':12s} {f'E_conf_{i}':12s} ")
+                for i, cv in enumerate(list(self.colvars)):
+                    f.write(f"{f'{cv[0]}_{i}':12s} {f'E_conf_{i}':12s} ")
                 f.write("\n")
 
         with open(self.outputfile, "a") as f:

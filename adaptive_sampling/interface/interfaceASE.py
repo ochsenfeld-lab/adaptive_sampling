@@ -164,7 +164,8 @@ class AseMD:
         restart_freq: int = None,
         dcd_freq: int = None,
         ase_traj: bool = False,
-        remove_rotation: bool = False,
+        remove_rotation: bool = True,
+        remove_translation: bool = True,
         prefix: str = "aseMD_production",
         **kwargs,
     ):
@@ -197,6 +198,8 @@ class AseMD:
 
             if remove_rotation:
                 self.rem_com_rot()
+            if remove_translation:
+                self.rem_com_trans()
 
             self.up_momenta()
             self.calc_etvp()
@@ -221,7 +224,8 @@ class AseMD:
         restart_freq: int = None,
         dcd_freq: int = None,
         ase_traj: bool=False,
-        remove_rotation: bool = False,
+        remove_rotation: bool = True,
+        remove_translation: bool = True,
         prefix: str = "aseMD_heating",
         **kwargs,
     ):
@@ -253,6 +257,7 @@ class AseMD:
                 dcd_freq=dcd_freq,
                 ase_traj=ase_traj,
                 remove_rotation=remove_rotation,
+                remove_translation=remove_translation,
                 prefix=prefix,
                 **kwargs,
             )
@@ -362,6 +367,23 @@ class AseMD:
         self.forces[3 * self.frozen_atoms + 0] = 0.0e0
         self.forces[3 * self.frozen_atoms + 1] = 0.0e0
         self.forces[3 * self.frozen_atoms + 2] = 0.0e0
+
+    def rem_com_trans(self):
+        """Remove center of mass translation
+        """
+        com = np.array([0.e0,0.e0,0.e0])
+
+        for i in range(self.natoms):
+            com[0] += self.momenta[i*3+0]
+            com[1] += self.momenta[i*3+1]
+            com[2] += self.momenta[i*3+2]
+
+        com = com/np.sum(self.mass)
+
+        for i in range(self.natoms):
+            self.momenta[i*3+0] -= com[0] * self.mass[i]
+            self.momenta[i*3+1] -= com[1] * self.mass[i]
+            self.momenta[i*3+2] -= com[2] * self.mass[i]
 
     def rem_com_rot(self):
         """Remove center of mass rotation"""
