@@ -1,7 +1,6 @@
 import numpy as np
 from .enhanced_sampling import EnhancedSampling
-from .utils import correct_periodicity
-from .utils import welford_var
+from .utils import correct_periodicity, welford_var
 
 class OPES(EnhancedSampling):
     """on-the-fly probability enhanced sampling
