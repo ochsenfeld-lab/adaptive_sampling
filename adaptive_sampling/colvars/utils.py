@@ -361,7 +361,8 @@ def get_internal_coordinate(
             Available:
                 ["distance",     [idx0, idx1]]
                 ["angle",        [idx0, idx1, idx2]]
-                ["torsion",     [idx0, idx1, idx2, idx3]]
+                ["torsion",      [idx0, idx1, idx2, idx3]]
+                ["contact",      [idx0, idx1, exp_n, exp_m, atom_types]]
                 ["min_distance", [[idx0, idx1], [idx2, idx3], ...]
                 ["coordination_number", [[idx0, idx1], [...], r_0, exp_nom, exp_denom]]]
         coords: Cartesian coordinates
@@ -370,7 +371,6 @@ def get_internal_coordinate(
     Returns:
         cv: internal coordinate
     """
-    from ..units import BOHR_to_ANGSTROM
     z = coords.view(int(torch.numel(coords) / ndim), ndim)
 
     if cv[0].lower() == "distance":
@@ -406,8 +406,22 @@ def get_internal_coordinate(
             dists.append(torch.linalg.norm(z[x[0]] - z[x[1]]))
         xi = min(dists)
 
+    elif cv[0].lower() == "contact":
+        from adaptive_sampling.colvars.graph_cv import GRAPH_CV
+        cv_def = cv[1]
+        exp_N = int(cv_def[2])
+        exp_M = int(cv_def[3])
+        atom_types = cv_def[4]
+        r_ij = torch.linalg.norm(z[cv_def[0]] - z[cv_def[1]])
+        r_0 = GRAPH_CV.get_sigma_ij(atom_types[0], atom_types[1])
+        diff = r_ij / r_0
+        if diff == 1.0:
+            # avoid zero division
+            diff += 0.00001
+        xi = (1.0 - torch.pow(diff, exp_N)) / (1.0 - torch.pow(diff, exp_M))
+        
     elif cv[0].lower() == "coordination_number":
-
+        from ..units import BOHR_to_ANGSTROM
         cv_def = cv[1]
         exp_denom = int(cv_def[-1])
         exp_nom = int(cv_def[-2])
@@ -527,3 +541,14 @@ def convert_coordinate_system(
         for i, cv in enumerate(active):
             cvs[i] = get_internal_coordinate(cv, coords, ndim=ndim)
         return cvs
+    
+    elif coord_system.lower() == "mlcolvar":
+        z = coords.view(int(torch.numel(coords) / ndim), ndim)
+        if active.get("idx", None) != None:
+            z = z[active["idx"]]
+        cvs = active["model"].foreward(coords)
+        return cvs
+    
+    else:
+        raise ValueError(" >>> ERROR: unknown coordinate system")
+

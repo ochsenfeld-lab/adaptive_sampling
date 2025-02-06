@@ -371,19 +371,10 @@ class AseMD:
     def rem_com_trans(self):
         """Remove center of mass translation
         """
-        com = np.array([0.e0,0.e0,0.e0])
-
-        for i in range(self.natoms):
-            com[0] += self.momenta[i*3+0]
-            com[1] += self.momenta[i*3+1]
-            com[2] += self.momenta[i*3+2]
-
-        com = com/np.sum(self.mass)
-
-        for i in range(self.natoms):
-            self.momenta[i*3+0] -= com[0] * self.mass[i]
-            self.momenta[i*3+1] -= com[1] * self.mass[i]
-            self.momenta[i*3+2] -= com[2] * self.mass[i]
+        self.momenta = self.momenta.reshape((self.natoms, 3))
+        com = np.sum(self.momenta, axis=0) / np.sum(self.mass)     # com translation
+        self.momenta -= com * self.masses.reshape((self.natoms,3)) # remove com translation
+        self.momenta = self.momenta.flatten()
 
     def rem_com_rot(self):
         """Remove center of mass rotation"""
