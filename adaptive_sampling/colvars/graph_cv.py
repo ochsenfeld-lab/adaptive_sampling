@@ -130,7 +130,7 @@ class GRAPH_CV:
             A[j, i] = a
 
     @staticmethod
-    def get_sigma_ij(type_i, type_j):
+    def get_sigma_ij(type_i, type_j, verbose: bool = False):
         """get equilibrium bond length from atom types
 
         Note: Values are taken from Zheng et al. (doi: 10.1021/jp500398k) and not further optimized
@@ -167,6 +167,7 @@ class GRAPH_CV:
             return 2.65 / BOHR_to_ANGSTROM
         elif bond_type.upper() == "OP":
             return 2.65 / BOHR_to_ANGSTROM
-
         else:
-            raise NotImplementedError(f" >>> Unknown bond type {bond_type}")
+            if verbose:
+                print(f" >>> WARNING: unknown bond type {bond_type}.")
+            return 2.65 / BOHR_to_ANGSTROM
