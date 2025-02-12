@@ -503,18 +503,33 @@ class CV:
             self.gradient = self.gradient.detach().numpy()
         return float(self.cv)
 
-    def path_z(self, pathcv: object) -> float:
+    def path_z(self, pathcv: object, method: str = "path") -> float:
         """Get z component of path cv (distance to path)
         only available if `self.path` was called first to calculate PathCV
 
         Args:
             pathcv: PathCV object that contains path_z
         """
-        if not hasattr(pathcv, "path_z"):
+        if not hasattr(self, "pathcv"):
+            from .path_cv import PathCV
+            self.pathcv = PathCV(**pathcv)
+            self.only_z = True
+        elif not hasattr(self, "only_z") and not hasattr(pathcv, "path_z") :
             raise ValueError(" >>> ERROR: `pathcv` has to `requires_z`!")
 
-        self.cv = pathcv.path_z
-        self.gradient = pathcv.grad_z
+        if hasattr(self, "only_z"):
+            # call PathCV calculation to get path_z
+            self.update_coords()
+            if method == "gpath":
+                _ = self.pathcv.calculate_gpath(self.coords)
+            else:
+                _ = self.pathcv.calculate_path(self.coords)
+
+            self.cv = self.pathcv.path_z
+            self.gradient = self.pathcv.grad_z
+        else:
+            self.cv = pathcv.path_z
+            self.gradinet = pathcv.grad_z
         return float(self.cv)
 
     def cec(self, pt_def: dict) -> float:
@@ -718,8 +733,11 @@ class CV:
             xi = self.path(atoms, method="gpath")
             self.type = "2d" if self.pathcv.ndim == 2 else None
         elif cv.lower() == "path_z":
-            xi = self.path_z(atoms)
-            self.type = "2d" if atoms.ndim == 2 else None
+            xi = self.path_z(atoms, method="path")
+            self.type = "2d" if self.pathcv.ndim == 2 else None
+        elif cv.lower() == "gpath_z":
+            xi = self.path_z(atoms, method="gpath")
+            self.type = "2d" if self.pathcv.ndim == 2 else None
         elif cv.lower() == "cec" or cv.lower() == "mcec":
             xi = self.cec(atoms)
             self.type = "distance"
