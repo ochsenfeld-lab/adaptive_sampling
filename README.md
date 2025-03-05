@@ -171,3 +171,4 @@ Other related references:
 *	Dietschreit et al., J. Chem. Phys., (2022); <https://aip.scitation.org/doi/10.1063/5.0102075>
 *   Hulm et al., J. Chem. Theory. Comput., (2023); <https://doi.org/10.1021/acs.jctc.3c00938>
 *   Stan et. al., ACS Cent. Sci., (2024); <https://doi.org/10.1021/acscentsci.3c01403>
+*   Pöverlein et. al., J. Chem. Theory, Comput., (2024); <https://doi.org/10.1021/acs.jctc.4c00199>

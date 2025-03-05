@@ -2,7 +2,7 @@ import numpy as np
 from typing import Union, Tuple
 
 
-def diff(
+def diff_periodic(
     a: Union[np.ndarray, float],
     b: Union[np.ndarray, float],
     periodicity: list,
@@ -22,7 +22,7 @@ def diff(
     return diff_ab
 
 
-def sum(
+def sum_periodic(
     a: Union[np.ndarray, float],
     b: Union[np.ndarray, float],
     periodicity: list,
@@ -102,7 +102,7 @@ def welford_var(
         )
 
     if count == 0:
-        return 0.0, 0.0, 0.0
+        return np.zeros_like(mean), np.zeros_like(mean), np.zeros_like(mean)
 
     delta = newValue - mean
     if tau == None:

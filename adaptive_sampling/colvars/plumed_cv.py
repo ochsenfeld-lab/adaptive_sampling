@@ -7,9 +7,10 @@ class PLUMED_CV:
     """Calculate CV from plumed
 
     Args:
-
+        cv_def: plumed input string
+        natoms: number of atoms of system
+        scratch_dir: scratch directory for plumed files
     """
-
     def __init__(
         self,
         cv_def: str = None,
@@ -61,7 +62,7 @@ class PLUMED_CV:
         )
         os.chdir(self.cwd)
 
-    def calc(self, z: np.array):
+    def calc(self, z: np.array) -> np.array:
         """Calc plumed CV and bias force"""
         z = z.reshape((int(len(z.flatten()) / 3), 3)) / 10
         z = z.astype(np.float64)

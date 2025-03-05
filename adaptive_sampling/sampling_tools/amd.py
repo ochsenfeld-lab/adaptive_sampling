@@ -1,7 +1,6 @@
 import numpy as np
 from .enhanced_sampling import EnhancedSampling
 from .utils import welford_var
-from ..units import *
 
 
 class aMD(EnhancedSampling):
@@ -155,7 +154,7 @@ class aMD(EnhancedSampling):
         return bias_force
 
     def get_pmf(self):
-
+        from ..units import kB_in_atomic, atomic_to_kJmol
         kBT = kB_in_atomic * self.equil_temp
         self.amd_corr = -self.amd_c1 - self.amd_c2 / (2.0 * kBT)
 

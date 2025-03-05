@@ -3,7 +3,7 @@ import random
 import numpy as np
 from typing import Tuple
 from .sampling_data import SamplingData
-from ..units import *
+from adaptive_sampling import units
 
 
 class MD:
@@ -24,7 +24,7 @@ class MD:
         self.coords = np.array(coords_in)
         self.natoms = 1
         self.dt_fs = dt_in
-        self.dt = dt_in / atomic_to_fs
+        self.dt = dt_in / units.atomic_to_fs
         self.target_temp = target_temp_in
         self.forces = np.zeros(2 * self.natoms)
         self.momenta = np.zeros(2 * self.natoms)
@@ -74,7 +74,7 @@ class MD:
         self.momenta[1] = random.gauss(0.0, 1.0) * np.sqrt(init_temp * self.mass)
 
         TTT = (np.power(self.momenta, 2) / self.masses).sum() / 2.0
-        self.momenta *= np.sqrt(init_temp / (TTT * atomic_to_K))
+        self.momenta *= np.sqrt(init_temp / (TTT * units.atomic_to_K))
 
     # -----------------------------------------------------------------------------------------------------
     def calc(self) -> Tuple[float, np.ndarray]:
@@ -106,8 +106,8 @@ class MD:
 
         if potential == "1":
 
-            a = 8.0e-6 / atomic_to_kJmol
-            b = 0.5 / atomic_to_kJmol
+            a = 8.0e-6 / units.atomic_to_kJmol
+            b = 0.5 / units.atomic_to_kJmol
             d = 80.0
             e = 160.0
 
@@ -124,11 +124,11 @@ class MD:
             exp_1 = torch.exp((-a * (x - d) * (x - d)) + (-b * (y - e) * (y - e)))
             exp_2 = torch.exp((-a * (x + d) * (x + d)) + (-b * (y + e) * (y + e)))
 
-            self.epot = -torch.log(exp_1 + exp_2) / atomic_to_kJmol
+            self.epot = -torch.log(exp_1 + exp_2) / units.atomic_to_kJmol
 
         elif potential == "3":
 
-            B = 1.0 / atomic_to_kJmol
+            B = 1.0 / units.atomic_to_kJmol
             A = B * torch.tensor([-40.0, -10.0, -34.0, 3.0])
             alpha = torch.tensor([-1.00, -1.00, -6.50, 0.7])
             beta = torch.tensor([0.00, 0.00, 11.00, 0.6])
@@ -144,6 +144,22 @@ class MD:
                     + gamma * (y - y0) * (y - y0)
                 )
             ).sum()
+
+        elif potential == "4":
+
+            a = 10e-2
+            b = 10.3333e-2
+            c = 2.52e-2
+            d = 2.0e-2
+
+            s1 = a * torch.square(x)
+            s2 = b * torch.pow(x, 3)
+            s3 = c * torch.pow(x, 4)
+            s4 = d * torch.square(y)
+
+            self.epot = (
+                s1 - s2 + s3 + s4 + 0.02596466400007491
+            )  # minimum shifted to zero
 
         else:
             return (0.0, np.zeros(2))
@@ -166,7 +182,7 @@ class MD:
         """
         self.ekin = (np.square(self.momenta) / self.masses).sum()
         self.ekin /= 2.0
-        self.temp = (self.ekin * 2.0) / kB_in_atomic
+        self.temp = (self.ekin * 2.0) / units.kB_in_atomic
 
     # -----------------------------------------------------------------------------------------------------
     def propagate(self, langevin=True, friction=1.0e-3):
@@ -179,7 +195,7 @@ class MD:
         if langevin == True:
             prefac = 2.0 / (2.0 + friction * self.dt_fs)
             rand_push = np.sqrt(
-                self.target_temp * friction * self.dt_fs * kB_in_atomic / 2.0e0
+                self.target_temp * friction * self.dt_fs * units.kB_in_atomic / 2.0e0
             )
             self.rand_gauss = np.zeros(shape=(len(self.momenta),), dtype=np.double)
             self.rand_gauss[0] = random.gauss(0, 1)
@@ -204,7 +220,7 @@ class MD:
         if langevin == True:
             prefac = (2.0e0 - friction * self.dt_fs) / (2.0e0 + friction * self.dt_fs)
             rand_push = np.sqrt(
-                self.target_temp * friction * self.dt_fs * kB_in_atomic / 2.0e0
+                self.target_temp * friction * self.dt_fs * units.kB_in_atomic / 2.0e0
             )
             self.momenta *= prefac
             self.momenta += np.sqrt(self.masses) * rand_push * self.rand_gauss
@@ -226,7 +242,7 @@ class MD:
         self.conf_forces = np.zeros_like(self.forces)
         for cv in ats:
             d = cv[0] - cv[2]
-            k = cv[3] / atomic_to_kJmol
+            k = cv[3] / units.atomic_to_kJmol
             conf_energy = 0.5 * k * d * d
             self.epot += conf_energy
             self.conf_forces += k * d * cv[1]

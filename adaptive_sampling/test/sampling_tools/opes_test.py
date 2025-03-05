@@ -68,20 +68,20 @@ the_bias.delta_kernel_sigma = []
 
 the_bias.kernel_center.append(np.array([1.5]))
 the_bias.kernel_height.append(1.0)
-the_bias.kernel_sigma.append(np.array([0.5]))
+the_bias.kernel_std.append(np.array([0.5]))
 
 the_bias.kernel_center.append(np.array([3.0]))
 the_bias.kernel_height.append(1.0)
-the_bias.kernel_sigma.append(np.array([0.5]))
+the_bias.kernel_std.append(np.array([0.5]))
 
 
 # Unit Tests
 def test_get_val_gaussian_on_first_kernel_center():
-    assert the_bias.get_val_gaussian(1.5)[0] == pytest.approx(1.0)
+    assert the_bias.calc_gaussians(1.5)[0] == pytest.approx(1.0)
 
 
 def test_get_val_gaussian_on_two_kernel():
-    assert np.sum(the_bias.get_val_gaussian(2.5)) == pytest.approx(0.74186594)
+    assert np.sum(the_bias.calc_gaussians(2.5)) == pytest.approx(0.74186594)
 
 
 def test_calc_min_dist():
@@ -90,11 +90,11 @@ def test_calc_min_dist():
 
 
 def test_calc_pot():
-    assert the_bias.calc_pot(1.0) == pytest.approx(-4.039473105783248)
+    assert the_bias.calc_potential(1.0) == pytest.approx(0.00666, abs=1e-4)
 
 
 def test_calculate_forces():
-    assert the_bias.calculate_forces(1.0, 0.2) == pytest.approx(0.07912062349399933)
+    assert the_bias.calc_forces(1.0, 0.2) == pytest.approx(0.00016, abs=1e-5)
 
 
 def test_calc_norm_factor_exact():
@@ -103,22 +103,22 @@ def test_calc_norm_factor_exact():
     )
 
 
-def test_compression_check_for_new_kernel_out_of_merging_threshold():
-    the_bias.compression_check(1.0, np.array([4.5]), np.array([1.0]))
+def test_add_kernel_for_new_kernel_out_of_merging_threshold():
+    the_bias.add_kernel(1.0, np.array([4.5]), np.array([1.0]))
     assert the_bias.kernel_center == [np.array([1.5]), np.array([3.0]), np.array([4.5])]
     assert the_bias.kernel_height == [1.0, 1.0, 1.0]
-    assert the_bias.kernel_sigma == [np.array([0.5]), np.array([0.5]), np.array([1.0])]
+    assert the_bias.kernel_std == [np.array([0.5]), np.array([0.5]), np.array([1.0])]
 
 
-def test_compression_check_for_new_kernel_in_merging_threshold_of_second():
-    the_bias.compression_check(1.0, np.array([2.75]), np.array([1.0]))
+def test_add_kernel_for_new_kernel_in_merging_threshold_of_second():
+    the_bias.add_kernel(1.0, np.array([2.75]), np.array([1.0]))
     assert the_bias.kernel_center == [
         np.array([1.5]),
         np.array([4.5]),
         np.array([2.875]),
     ]
     assert the_bias.kernel_height == [1.0, 1.0, 2.0]
-    assert the_bias.kernel_sigma == [
+    assert the_bias.kernel_std == [
         np.array([0.5]),
         np.array([1.0]),
         np.array([pytest.approx(0.80039053)]),

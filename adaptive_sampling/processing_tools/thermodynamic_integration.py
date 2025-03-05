@@ -71,7 +71,7 @@ def czar(
     Returns:
         mean_force: thermodynamic force (gradient of PMF)
     """
-    from ..sampling_tools.utils import diff
+    from ..sampling_tools.utils import diff_periodic
 
     RT = R_in_SI * equil_temp / 1000.0
 
@@ -88,7 +88,7 @@ def czar(
         la_x = la[np.where(np.logical_and(cv >= x - dx2, cv < x + dx2))]
         hist[i] = len(la_x)
         if hist[i] > 0:
-            diff_la_x = diff(la_x, x, periodicity)
+            diff_la_x = diff_periodic(la_x, x, periodicity)
             f_corr[i] = k * np.average(diff_la_x)
 
     log_hist = np.log(hist, out=np.zeros_like(hist), where=(hist != 0))

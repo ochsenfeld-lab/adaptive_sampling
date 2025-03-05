@@ -16,7 +16,7 @@ class CV:
     Args:
         the_mol: Molecule Object containing masses (natoms) and coords (3*natoms)
         requires_grad: if True, partial derivatives of CVs with respect
-                                to atom coordinats are computed
+                                to atom coordinates are computed
                                 and saved to self.gradient
     """
 
@@ -45,8 +45,8 @@ class CV:
         self.reference_internal = None
 
     def update_coords(self):
-        """The coords tensor and ndarray share the same memory.
-        Modifications to the tensor will be reflected in the ndarray and vice versa!"""
+        """The coords tensor and array share the same memory.
+        Modifications to the tensor will be reflected in the array and vice versa!"""
         self.coords = torch.from_numpy(self.the_mol.get_sampling_data().coords.ravel())
         self.coords = self.coords.float().to(self.device)
         self.coords.requires_grad = self.requires_grad
@@ -104,7 +104,7 @@ class CV:
 
         Args:
             cv_def (list):
-                distance beteen atoms: [ind0, ind1]
+                distance between atoms: [ind0, ind1]
                 distance between mass centers: [[ind00, ind01, ...], [ind10, ind11, ...]]
 
         Returns:
@@ -278,7 +278,7 @@ class CV:
 
         Args:
             cv_def (list):
-                distorted distance beteen atoms: [ind0, ind1]
+                distorted distance between atoms: [ind0, ind1]
                 distorted distance between mass centers: [[ind00, ind01, ...],
                                                           [ind10, ind11, ...]]
             r_0 (float): distance in Angstrom at which the CN function has the value 0.5
@@ -324,7 +324,7 @@ class CV:
         Args:
             cv_def (list):
                 [[idx0, idxA], [idx1, idxA], ..., r_eq, exp_nom, exp_denom]
-                with indices of cordinated atoms ind0, ind1, ...,
+                with indices of coordinated atoms ind0, ind1, ...,
                 distance r_0 in Angstrom (bonds smaller than r_0 are coordinated),
                 and exponent of the nominator and denominator exp_nom and exp_denom
         """
@@ -362,7 +362,7 @@ class CV:
 
         Args:
             cv_def (list):
-                list of distances beteen atoms: [[ind0, ind1], [], ...]
+                list of distances between atoms: [[ind0, ind1], [], ...]
 
         Returns:
             distorted distance (float): computed distance
@@ -394,7 +394,7 @@ class CV:
         self,
         cv_def: list,
     ):
-        """Electrostatic potential on spezific Atom. Environmental CV to treat reorganization of polar solvent or protein sites
+        """Electrostatic potential on specific Atom. Environmental CV to treat reorganization of polar solvent or protein sites
         needs a file called `charges.npy` that contains the charges of all atoms in cv_def
 
         Args:
@@ -503,18 +503,33 @@ class CV:
             self.gradient = self.gradient.detach().numpy()
         return float(self.cv)
 
-    def path_z(self, pathcv: object) -> float:
+    def path_z(self, pathcv: object, method: str = "path") -> float:
         """Get z component of path cv (distance to path)
         only available if `self.path` was called first to calculate PathCV
 
         Args:
             pathcv: PathCV object that contains path_z
         """
-        if not hasattr(pathcv, "path_z"):
+        if not hasattr(self, "pathcv"):
+            from .path_cv import PathCV
+            self.pathcv = PathCV(**pathcv)
+            self.only_z = True
+        elif not hasattr(self, "only_z") and not hasattr(pathcv, "path_z") :
             raise ValueError(" >>> ERROR: `pathcv` has to `requires_z`!")
 
-        self.cv = pathcv.path_z
-        self.gradient = pathcv.grad_z
+        if hasattr(self, "only_z"):
+            # call PathCV calculation to get path_z
+            self.update_coords()
+            if method == "gpath":
+                _ = self.pathcv.calculate_gpath(self.coords)
+            else:
+                _ = self.pathcv.calculate_path(self.coords)
+
+            self.cv = self.pathcv.path_z
+            self.gradient = self.pathcv.grad_z
+        else:
+            self.cv = pathcv.path_z
+            self.gradinet = pathcv.grad_z
         return float(self.cv)
 
     def cec(self, pt_def: dict) -> float:
@@ -632,6 +647,30 @@ class CV:
 
         return float(self.cv)
 
+    def mlcolvar(self, mlcolvar_def: dict, **kwargs):
+        """Collective Variable from PyTorch ML model"""
+        if not hasattr(self, "the_mlcolvar"):
+            from .mlcolvar import MLCOLVAR
+
+            self.the_mlcolvar = MLCOLVAR(
+                model=mlcolvar_def.get("model", None),
+                coordinate_system=mlcolvar_def.get("coordinate_system", "cv_space"),
+                cv_def=mlcolvar_def.get("cv_def", None),
+                cv_idx=mlcolvar_def.get("cv_idx", None),
+                unit_conversion_factor=mlcolvar_def.get("unit_conversion_factor", 1.0),
+                ndim=mlcolvar_def.get("ndim", 3),
+                device=mlcolvar_def.get("device", None),
+            )
+
+        self.update_coords()
+        self.cv = self.the_mlcolvar.forward(self.coords, **kwargs)
+
+        if self.requires_grad:
+            self.gradient = torch.autograd.grad(self.cv, self.coords, allow_unused=True)[0]
+            self.gradient = self.gradient.detach().numpy()
+
+        return float(self.cv)
+
     def get_cv(self, cv: str, atoms: list, **kwargs) -> Tuple[float, np.ndarray]:
         """get state of collective variable from cv definition of sampling_tools
 
@@ -694,8 +733,11 @@ class CV:
             xi = self.path(atoms, method="gpath")
             self.type = "2d" if self.pathcv.ndim == 2 else None
         elif cv.lower() == "path_z":
-            xi = self.path_z(atoms)
-            self.type = "2d" if atoms.ndim == 2 else None
+            xi = self.path_z(atoms, method="path")
+            self.type = "2d" if self.pathcv.ndim == 2 else None
+        elif cv.lower() == "gpath_z":
+            xi = self.path_z(atoms, method="gpath")
+            self.type = "2d" if self.pathcv.ndim == 2 else None
         elif cv.lower() == "cec" or cv.lower() == "mcec":
             xi = self.cec(atoms)
             self.type = "distance"
@@ -711,6 +753,9 @@ class CV:
             self.type = None
         elif cv.lower() == "plumed":
             xi = self.plumed_cv(atoms)
+            self.type = atoms.get("type", None)
+        elif cv.lower() == "mlcolvar":
+            xi = self.mlcolvar(atoms)
             self.type = atoms.get("type", None)
         else:
             print(" >>> Error in CV: Unknown Collective Variable")

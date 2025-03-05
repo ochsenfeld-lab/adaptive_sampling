@@ -1,8 +1,6 @@
 import os
 import time
 import numpy as np
-
-from adaptive_sampling.units import R_in_SI
 from .enhanced_sampling import EnhancedSampling
 
 
@@ -75,6 +73,7 @@ class Reference(EnhancedSampling):
 
     def get_pmf(self) -> np.ndarray:
         """get free energy profile from histogram"""
+        from ..units import R_in_SI
         self.pmf = (
             -R_in_SI
             / 1000.0  # kJ/mol

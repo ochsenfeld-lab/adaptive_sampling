@@ -1,8 +1,6 @@
-from ..units import atomic_to_kJmol, BOHR_to_ANGSTROM, BOHR_to_NANOMETER, kB_in_atomic
 import numpy as np
-
 from .sampling_data import SamplingData
-
+from adaptive_sampling import units
 
 class AdaptiveSamplingOpenMM:
     """Perform enhanced sampling with OpenMM
@@ -112,6 +110,8 @@ class AdaptiveSamplingOpenMM:
             sampling_algorithm: sampling algorithm from `adaptive_sampling.sampling_tools`
         """
         self.the_bias = sampling_algorithm
+        if not hasattr(self.the_bias, "__len__"):
+            self.the_bias = [self.the_bias]
 
     def run(self, nsteps: int = 1, update_bias_freq: int = 1, **kwargs):
         """perform MD steps
@@ -126,9 +126,11 @@ class AdaptiveSamplingOpenMM:
 
             # update bias force
             if hasattr(self, "the_bias"):
-                bias_force = self.the_bias.step_bias(**kwargs).reshape((self.natoms, 3))
+                bias_force = np.zeros_like(self.coords).reshape((self.natoms, 3))
+                for bias in self.the_bias:
+                    bias_force += bias.step_bias(**kwargs).reshape((self.natoms, 3))
                 for i, idx in enumerate(self.cv_atoms):
-                    bias_force[idx] *= atomic_to_kJmol / BOHR_to_NANOMETER
+                    bias_force[idx] *= units.atomic_to_kJmol / units.BOHR_to_NANOMETER
                     self.bias_force.setParticleParameters(
                         i,
                         idx,
@@ -156,23 +158,24 @@ class AdaptiveSamplingOpenMM:
             getEnergy=self.calcEnergy,
         )
         if self.calcEnergy:
-            self.ekin = state.getKineticEnergy()._value / atomic_to_kJmol
-            self.epot = state.getPotentialEnergy()._value / atomic_to_kJmol
+            self.ekin = state.getKineticEnergy()._value / units.atomic_to_kJmol
+            self.epot = state.getPotentialEnergy()._value / units.atomic_to_kJmol
             self.temp = self._get_temperature()
         else:
             self.ekin = 0.0
             self.epot = 0.0
             self.temp = 0.0
         self.coords = (
-            np.asarray(state.getPositions()._value).flatten() / BOHR_to_NANOMETER
+            np.asarray(state.getPositions()._value).flatten() / units.BOHR_to_NANOMETER
         )
         self.forces = (
             np.asarray(state.getForces()._value).flatten()
-            / atomic_to_kJmol
-            * BOHR_to_ANGSTROM
+            / units.atomic_to_kJmol
+            * units.BOHR_to_ANGSTROM
         )
 
     def _get_temperature(self) -> float:
+        from ..units import kB_in_atomic
         return self.ekin * 2.0e0 / (3.0e0 * self.natoms * kB_in_atomic)
 
     def get_sampling_data(self) -> object:
