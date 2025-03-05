@@ -63,9 +63,9 @@ class Hyperreactor(Reactor, aMD):
                 if r == 0.e0:
                     dbase = 0.e0
                 else:
-                    if self.radius < self.r_max: # contraction
-                        rconf = np.max([0,r-self.radius])
-                    else: # expansion
+                    if self.radius < self.r_max: # confine
+                        rconf = np.max([0.e0,r-self.radius])
+                    else:
                         if r < self.r_min:
                             rconf = r - self.r_min
                         elif r > self.r_max:

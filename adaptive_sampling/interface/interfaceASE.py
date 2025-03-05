@@ -182,10 +182,11 @@ class AseMD:
         restart_freq: int = None,
         dcd_freq: int = None,
         remove_rotation: bool = False,
+        remove_translation: bool = False,
         prefix: str = "aseMD_production",
         **kwargs,
     ):
-        """Run MD simulation using an Verlocity Verlete integrator and langevin thermostat
+        """Run MD simulation using an Verlocity Verlet integrator and Langevin thermostat
 
         Args:
             nsteps: number of MD steps
@@ -220,6 +221,9 @@ class AseMD:
             if remove_rotation:
                 self.rem_com_rot()
 
+            if remove_translation:
+                self.rem_com_trans()
+            
             self.up_momenta()
             self.calc_etvp()
     
@@ -229,15 +233,20 @@ class AseMD:
             if dcd_freq != None and self.step % dcd_freq == 0:
                 self.print_dcd(prefix=prefix)
 
+            if bool(self.explorationpots):
+                for explore in self.explorationpots:
+                    print("Res: %14.7f  %14.7f  %14.7f  %14.7f  %14.7f  %14.7f  %10.7f  %8.3f %14.7f %14.7f" % 
+                         (self.step*self.dt,self.epot,self.ekin,self.epot+self.ekin,self.temp,self.pres,explore.radius*units.BOHR_to_ANGSTROM,time.perf_counter()-start_time,explore.pot_max,explore.pot_min))
+                    sys.stdout.flush()
             self.time_per_step.append(time.perf_counter() - start_time)
             if out_freq != None and self.step % out_freq == 0:
                 self.print_energy(prefix=prefix)
                 self.print_geom(prefix=prefix)
                 if bool(self.explorationpots):
                     for explore in self.explorationpots:
-                        print("Res: %14.7f  %14.7f  %14.7f  %14.7f  %14.7f  %14.7f  %10.7f  %8.3f %14.7f %14.7f" % 
-                          (self.step*self.dt,self.epot,self.ekin,self.epot+self.ekin,self.temp,self.pres,explore.radius*units.BOHR_to_ANGSTROM,time.perf_counter()-start_time,explore.pot_max,explore.pot_min))
-                        sys.stdout.flush()
+                #        print("Res: %14.7f  %14.7f  %14.7f  %14.7f  %14.7f  %14.7f  %10.7f  %8.3f %14.7f %14.7f" % 
+                #          (self.step*self.dt,self.epot,self.ekin,self.epot+self.ekin,self.temp,self.pres,explore.radius*units.BOHR_to_ANGSTROM,time.perf_counter()-start_time,explore.pot_max,explore.pot_min))
+                #        sys.stdout.flush()
                         bo = self.molecule.calc.get_property("bond-orders")
                         explore.write_bond_order_output(prefix=prefix, bo=bo)
                         self.print_pop(prefix=prefix)
@@ -253,6 +262,7 @@ class AseMD:
         restart_freq: int = None,
         dcd_freq: int = None,
         remove_rotation: bool = False,
+        remove_translation: bool = False,
         prefix: str = "aseMD_heating",
         **kwargs,
     ):
@@ -393,6 +403,23 @@ class AseMD:
         self.forces[3 * self.frozen_atoms + 0] = 0.0e0
         self.forces[3 * self.frozen_atoms + 1] = 0.0e0
         self.forces[3 * self.frozen_atoms + 2] = 0.0e0
+
+    def rem_com_trans(self):
+        """Remove center of mass translation
+        """
+        com = np.array([0.e0,0.e0,0.e0])
+
+        for i in range(self.natoms):
+            com[0] += self.momenta[i*3+0]
+            com[1] += self.momenta[i*3+1]
+            com[2] += self.momenta[i*3+2]
+
+        com = com/np.sum(self.mass)
+
+        for i in range(self.natoms):
+            self.momenta[i*3+0] -= com[0] * self.mass[i]
+            self.momenta[i*3+1] -= com[1] * self.mass[i]
+            self.momenta[i*3+2] -= com[2] * self.mass[i]
 
     def rem_com_rot(self):
         """Remove center of mass rotation"""
