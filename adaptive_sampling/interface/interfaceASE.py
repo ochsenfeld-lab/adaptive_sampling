@@ -5,7 +5,6 @@ import numpy as np
 import random
 from adaptive_sampling import units
 
-
 class AseMD:
     """Class for biased MD using the Atomic Simulation Environment (ASE)
 
@@ -90,7 +89,9 @@ class AseMD:
         self.pres = 0.0e0
         self.dcd = None
         self.time_per_step = []
-        self.pop_list = []
+        if len(self.explorationpots):
+            self.pop_array = None
+            self.bo_array = None
 
         # self.calc() is run in `scratch_dir` to redirect input and output files of the `calculator`
         self.cwd = os.getcwd()
@@ -175,6 +176,7 @@ class AseMD:
         else:
             self.explorationpots = [exppots]
 
+
     def run(
         self,
         nsteps: int = 0,
@@ -245,9 +247,19 @@ class AseMD:
                 self.print_geom(prefix=prefix)
                 if bool(self.explorationpots):
                     for explore in self.explorationpots:
+                        pop = self.molecule.calc.get_property("charges")
+                        if self.molecule.calc._uhf != 0:
+                            try:
+                                self.pop_array = np.array([self.step*self.dt, pop[0], pop[1]])
+                            except NotImplementedError:
+                                print("Unrestricted not implemented yet in the interface!")
+                                sys.stdout.flush()
+                                raise
+                        explore.write_pop_output(prefix=prefix, pop=self.pop_array)
+
                         bo = self.molecule.calc.get_property("bond-orders")
-                        explore.write_bond_order_output(prefix=prefix, bo=bo)
-                        self.print_pop(prefix=prefix)
+                        self.bo_array = np.array([self.step*self.dt, bo])
+                        explore.write_bond_order_output(prefix=prefix, bo=self.bo_array)
                 
                         
     def heat(
@@ -472,26 +484,6 @@ class AseMD:
             self.momenta[i * 3 + 1] -= v_ext[1] * self.mass[i]
             self.momenta[i * 3 + 2] -= v_ext[2] * self.mass[i]
 
-    def print_pop(self, prefix: str = "aseMD"):
-        """Print Mulliken population analysis to file
-        
-        Args:
-            prefix: prefix for filename of output file
-        """
-        pop = self.molecule.calc.get_property("charges")
-        if self.molecule.calc._uhf != 0:
-            try:
-                self.pop_list.append([self.step*self.dt, pop[0], pop[1]])
-            except NotImplementedError:
-                print("Unrestricted not implemented yet in the interface!")
-                sys.stdout.flush()
-                raise
-
-        else:
-            self.pop_list.append([self.step*self.dt, pop])
-        pop_array = np.array(self.pop_list, dtype="object")
-        np.save(prefix + "_pop.npy", pop_array)
-
     def print_energy(self, prefix: str = "aseMD"):
         """Print/add energy to file
 
@@ -589,7 +581,6 @@ class AseMD:
                     f.write(string)
         f.close()
 
-    def print_dcd(self, prefix: str = "aseMD"):
     def print_dcd(self, prefix: str = "aseMD", ase_traj: bool=False):
         """saves coordinates to binary dcd format
 

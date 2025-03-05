@@ -123,3 +123,21 @@ def spheric_fib_init(mols, nmolecules, dr):
     mol = temp_mol
 
     return mol, drad
+
+def filter_and_index_bo(bond_orders: np.array) -> np.array:
+    filtered_bond_orders = np.copy(
+        bond_orders
+    )  # Erstellt ein Array mit derselben Form
+
+    filtered_bond_orders[bond_orders < 0.5] = 0.0
+    natoms = np.shape(bond_orders)[0]
+
+    indexed_bond_orders = []
+    for i in range(natoms):
+        for j in range(i, natoms):
+            if filtered_bond_orders[i][j] > 0.0:
+                indexed_bond_orders.append(
+                    [filtered_bond_orders[i][j], i, j]
+                )
+    
+    return indexed_bond_orders
