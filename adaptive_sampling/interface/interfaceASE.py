@@ -89,9 +89,6 @@ class AseMD:
         self.pres = 0.0e0
         self.dcd = None
         self.time_per_step = []
-        if len(self.explorationpots):
-            self.pop_array = None
-            self.bo_array = None
 
         # self.calc() is run in `scratch_dir` to redirect input and output files of the `calculator`
         self.cwd = os.getcwd()
@@ -171,6 +168,8 @@ class AseMD:
             self.biaspots = [biaspots]
 
     def set_explorationpots(self, exppots: list = []):
+        self.pop_array = None
+        self.bo_array = None
         if hasattr(exppots, "__len__"):
             self.explorationpots = exppots
         else:
@@ -250,16 +249,18 @@ class AseMD:
                         pop = self.molecule.calc.get_property("charges")
                         if self.molecule.calc._uhf != 0:
                             try:
-                                self.pop_array = np.array([self.step*self.dt, pop[0], pop[1]])
+                                self.pop_array = np.array([self.step*self.dt, pop[0], pop[1]], dtype='object')
                             except NotImplementedError:
                                 print("Unrestricted not implemented yet in the interface!")
                                 sys.stdout.flush()
                                 raise
-                        explore.write_pop_output(prefix=prefix, pop=self.pop_array)
+                        else:
+                            self.pop_array = np.array([self.step*self.dt, pop], dtype='object')
+                        explore.write_pop_output(prefix=prefix, pop_array=self.pop_array)
 
                         bo = self.molecule.calc.get_property("bond-orders")
-                        self.bo_array = np.array([self.step*self.dt, bo])
-                        explore.write_bond_order_output(prefix=prefix, bo=self.bo_array)
+                        self.bo_array = np.array([self.step*self.dt, bo], dtype='object')
+                        explore.write_bond_order_output(prefix=prefix, bo_array=self.bo_array)
                 
                         
     def heat(

@@ -47,12 +47,13 @@ class Reactor(ABC):
             prefix: prefix for filename of output file
         """
         try:
-            pop_old = np.load(prefix + "_pop.npz", allow_pickle=True)
-            pop_combined = np.concatenate((pop_old, pop_array), axis=0)
+            loaded_data = np.load(prefix + "_pop.npz", allow_pickle=True)
+            pop_old = [loaded_data[key] for key in loaded_data]
+            pop_old.append(pop_array)
         except FileNotFoundError:
-            pop_combined = pop_array
+            pop_old = [pop_array]
         
-        np.savez_compressed(prefix + "_pop.npz", pop_combined)
+        np.savez_compressed(prefix + "_pop.npz", *pop_old)
 
     def write_bond_order_output(self, prefix: str = "aseMD", bo_array: np.array = None):
         """saves bond orders in a ij order for each time step (needed for the post-processing)
@@ -61,46 +62,16 @@ class Reactor(ABC):
             filename: name of bond-orders file
             bo: matrix form of Wiberg/Mayer bond orders from the calculator
         """
-        bo_array_filtered = np.array([bo_array[0], filter_and_index_bo(bo_array[1])])
+        bo_array_filtered = np.array([bo_array[0], filter_and_index_bo(bo_array[1])], dtype='object')
         try:
-            bo_old = np.load(prefix + "_pop.npz", allow_pickle=True)
-            bo_combined = np.concatenate((bo_old, bo_array_filtered), axis=0)
+            loaded_data = np.load(prefix + "_bo.npz", allow_pickle=True)
+            bo_old = [loaded_data[key] for key in loaded_data]
+            bo_old.append(bo_array_filtered)
         except FileNotFoundError:
-            bo_combined = bo_array_filtered
+            bo_old = [bo_array_filtered]
         
-        np.savez_compressed(prefix + "_bo.npz", bo_combined)
-'''
+        np.savez_compressed(prefix + "_bo.npz", *bo_old)
 
-    def write_bond_order_output(self, prefix: str = "aseMD", bo_list: list = None):
-        """saves bond orders in a ij order for each time step (needed for the post-processing)
-
-        Args:
-            filename: name of bond-orders file
-            bo: matrix form of Wiberg/Mayer bond orders from the calculator
-        """
-        md_state = self.the_md.get_sampling_data()
-
-        step = md_state.step
-        dt = md_state.dt
-        natoms = md_state.natoms
-
-        if bo.all() == None:
-            print("Bond order matrix was not provided!")
-        else:
-
-
-            with open(prefix + "_bo.dat", "a+") as f:
-                string = str("TIME: %14.7f\n") % (step*dt)
-
-                f.write(string)
-                for i in range(0,natoms):
-                    for j in range(i+1,natoms):
-                        string = str("%20.10e") % (bo[i][j])
-                        f.write(string)
-                        f.write("\n")
-                f.write("\n")
-                f.close()
-'''
 
 
 

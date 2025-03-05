@@ -133,8 +133,8 @@ def filter_and_index_bo(bond_orders: np.array) -> np.array:
     natoms = np.shape(bond_orders)[0]
 
     indexed_bond_orders = []
-    for i in range(natoms):
-        for j in range(i, natoms):
+    for i in range(0, natoms):
+        for j in range(i+1, natoms):
             if filtered_bond_orders[i][j] > 0.0:
                 indexed_bond_orders.append(
                     [filtered_bond_orders[i][j], i, j]
