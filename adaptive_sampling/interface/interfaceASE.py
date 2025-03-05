@@ -244,9 +244,6 @@ class AseMD:
                 self.print_geom(prefix=prefix)
                 if bool(self.explorationpots):
                     for explore in self.explorationpots:
-                #        print("Res: %14.7f  %14.7f  %14.7f  %14.7f  %14.7f  %14.7f  %10.7f  %8.3f %14.7f %14.7f" % 
-                #          (self.step*self.dt,self.epot,self.ekin,self.epot+self.ekin,self.temp,self.pres,explore.radius*units.BOHR_to_ANGSTROM,time.perf_counter()-start_time,explore.pot_max,explore.pot_min))
-                #        sys.stdout.flush()
                         bo = self.molecule.calc.get_property("bond-orders")
                         explore.write_bond_order_output(prefix=prefix, bo=bo)
                         self.print_pop(prefix=prefix)
