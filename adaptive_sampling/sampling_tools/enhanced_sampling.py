@@ -315,7 +315,7 @@ class EnhancedSampling(ABC):
             filename: name of output file
         """
         from ..units import DEGREES_per_RADIAN, BOHR_to_ANGSTROM
-        grid = self.grid.copy()
+        grid = np.copy(self.grid)
         for i in range(self.ncoords):
             if self.the_cv.type == "angle":
                 grid[i] *= DEGREES_per_RADIAN
