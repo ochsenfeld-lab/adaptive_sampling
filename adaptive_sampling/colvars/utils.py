@@ -105,7 +105,7 @@ def get_rmsd(
 ):
     """root-mean-square deviation"""
     return torch.sqrt(
-        get_msd(V, W, periodicity=periodicity, indices=indices, ndom=ndim)
+        get_msd(V, W, periodicity=periodicity, indices=indices, ndim=ndim)
     )
 
 
