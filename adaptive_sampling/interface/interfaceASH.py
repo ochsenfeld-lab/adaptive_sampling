@@ -526,7 +526,26 @@ class AshMD:
         """interface to adaptive sampling algorithms. see: https://github.com/ahulm/adaptive_sampling"""
         try:
             from adaptive_sampling.interface.sampling_data import SamplingData
+            
+            if self.calculator.theorytype == "QM/MM":
 
+                self.qm_forces = np.zeros_like(self.molecule.coords)
+                self.qm_forces[self.calculator.qmatoms] = self.calculator.QMgradient
+                self.qm_forces = self.qm_forces.flatten()
+                self.qm_energy = self.calculator.QMenergy
+                return SamplingData(
+                    self.mass,
+                    self.coords,
+                    self.forces,
+                    self.epot,
+                    self.temp,
+                    self.natoms,
+                    self.step,
+                    self.dt,
+                    self.qm_forces,
+                    self.qm_energy,
+                )
+                
             return SamplingData(
                 self.mass,
                 self.coords,
