@@ -32,6 +32,7 @@ class aMD(EnhancedSampling):
         f_conf: force constant for confinement of system to the range of interest in CV space
         output_freq: frequency in steps for writing outputs
         samd_c0: c0 constant for SaMD
+        boost_qm_only: if only the QM part of a QMMM energy should be boosted. If true, the md has to provide additional data in the get_sampling_data() method.
     """
 
     def __init__(
@@ -43,6 +44,7 @@ class aMD(EnhancedSampling):
         amd_method: str = "gamd_lower",
         confine: bool = True,
         samd_c0: float = 0.0001,
+        boost_qm_only: bool = False,
         **kwargs,
     ):
         super().__init__(*args, **kwargs)
@@ -52,10 +54,20 @@ class aMD(EnhancedSampling):
         self.equil_steps = equil_steps
         self.amd_method = amd_method.lower()
         self.confine = confine
+        self.boost_qm_only = boost_qm_only
 
         if self.verbose and amd_method.lower() == "amd":
             print(
                 f" >>> Warning: Please use GaMD or SaMD to obtain accurate free energy estimates!\n"
+            )
+        
+        if self.boost_qm_only:
+            if self.kinetics:
+                raise NotImplementedError(
+                    "The kinetics data are not adapted based on the QM-only-boosted potential"
+                )
+            print(
+                "Only the QM energy is boosted in this simulation.\n >>> Warning: This mode supports only dummy collective variables.\n"
             )
 
         self.pot_count = 0
@@ -86,9 +98,16 @@ class aMD(EnhancedSampling):
         (xi, delta_xi) = self.get_cv(**kwargs)
 
         # get energy and forces
-        bias_force = np.zeros_like(md_state.forces)
-        self.amd_forces = np.copy(md_state.forces)
-        epot = md_state.epot
+        if self.boost_qm_only:
+            # check that qm_forces and qm_epot are defined by the_md
+            if md_state.qm_epot is None or md_state.qm_forces is None:
+                raise ValueError("To run QM-only-boosted sampling, qm_epot and qm_forces have to be defined in the_md.get_sampling_data().")
+            self.amd_forces = np.copy(md_state.qm_forces)
+            epot = md_state.qm_epot
+        else:
+            self.amd_forces = np.copy(md_state.forces)
+            epot = md_state.epot
+        bias_force = np.zeros_like(self.amd_forces)
 
         if md_state.step < self.init_steps:
             self._update_pot_distribution(epot)

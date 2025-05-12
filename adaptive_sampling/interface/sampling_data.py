@@ -20,6 +20,9 @@ class SamplingData:
     natoms: int  # Number of atoms
     step: int  # MD step number
     dt: float  # MD step size in fs
+    # Below only to be defined for QMMM calculations when the QM energy shall be boosted in isolation
+    qm_forces: np.ndarray=None # QM Forces in Hartree/Bohr, shape (3 * natoms,). Atoms of the MM region should have 0s as entries
+    qm_epot: float=None # QM energy in Hatree. epot already contains this energy.
 
 
 class MDInterface(Protocol):
@@ -46,6 +49,9 @@ class MDInterface(Protocol):
                     natoms = ...
                     step   = ...
                     dt     = ...
+                    # Optional for QMMM with separated boosting of QM energy
+                    qm_forces = ...
+                    qm_epot   = ...
 
                     return SamplingData(mass, coords, forces, epot, temp, natoms, step, dt)
                 except ImportError as e:
