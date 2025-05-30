@@ -19,6 +19,7 @@ class AshMD:
         target_temp: target temperature in Kelvin
         friction: friction constant for langevin thermostat in 1/fs
         barostat: if True apply Monte Carlo barostat
+        target_pressure: target pressure in bar
         barostat_freq: frequency of barostat updates
         barostat_reporter: if not None, write barostat data to file
         pressure_from_finite_difference: if True, apply finite difference to obtain more accurate pressure in barostat
@@ -37,6 +38,7 @@ class AshMD:
         target_temp: float = 298.15e0,
         friction: float = 1.0e-3,
         barostat: bool = False,
+        target_pressure: float = 1.0,
         barostat_freq: int = 100,
         barostat_reporter: str = "barostat.log",
         pressure_from_finite_difference: bool = False,
@@ -570,8 +572,9 @@ class AshMD:
 
 
 class MonteCarloBarostatASH:
-    """Monte Carlo Barostat for OpenMMTheory in AshMD,
-    requires one additional energy evaluation every `self.frequency` steps to update the periodic box size,
+    """Monte Carlo Barostat for OpenMMTheory in AshMD
+
+    Requires one additional energy evaluation every `self.frequency` steps to update the periodic box size,
     and two additional energy evaluations per pressure evaluation if `pressure_from_finite_difference` is True.
 
     Ref: https://doi.org/10.1016/j.cplett.2003.12.039
