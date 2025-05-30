@@ -42,7 +42,6 @@ class AshMD:
         barostat_freq: int = 100,
         barostat_reporter: str = "barostat.log",
         pressure_from_finite_difference: bool = False,
-        target_pressure: float = 1.0,
         seed: int = 42,
         active_atoms: list = [],
         mute: bool = True,
@@ -641,7 +640,11 @@ class MonteCarloBarostatASH:
         """Set new periodic box vectors in nm"""
         import openmm.unit
         self.the_md.calculator.mm_theory.topology.setPeriodicBoxVectors(newBox * openmm.unit.nanometer) 
-        self.simulation.context.reinitialize()
+        self.simulation.context.setPeriodicBoxVectors(
+            newBox[0] * openmm.unit.nanometer,
+            newBox[1] * openmm.unit.nanometer,
+            newBox[2] * openmm.unit.nanometer,
+        )   
         if self.verbose:
             print(
                 " >>> INFO: Set new periodic box vectors: %s" % (str(self.getPeriodicBoxVectors()))
