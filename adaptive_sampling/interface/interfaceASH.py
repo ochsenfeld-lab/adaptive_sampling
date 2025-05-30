@@ -107,6 +107,12 @@ class AshMD:
         self.dcd = None
         self.time_per_step = []
 
+        # self.calc() is run in `scratch_dir` to redirect input and output files of the `calculator`
+        self.cwd = os.getcwd()
+        self.scratch_dir = scratch_dir
+        if not os.path.isdir(self.scratch_dir):
+            os.mkdir(self.scratch_dir)
+
         # barostat
         self.apply_barostat = barostat
         if self.apply_barostat:
@@ -119,11 +125,6 @@ class AshMD:
                 verbose=not mute,
             )
 
-        # self.calc() is run in `scratch_dir` to redirect input and output files of the `calculator`
-        self.cwd = os.getcwd()
-        self.scratch_dir = scratch_dir
-        if not os.path.isdir(self.scratch_dir):
-            os.mkdir(self.scratch_dir)
 
     def calc_init(
         self,
@@ -697,6 +698,7 @@ class MonteCarloBarostatASH:
 
         # calculte energy of new box
         self.setPeriodicBoxVectors(newBox)
+        os.chdir(self.the_md.scratch_dir)
         self.the_md.molecule.replace_coords(
             self.the_md.molecule.elems,
             coordsNew.reshape((self.the_md.natoms, 3)) * 10.0, # nm to Angstrom
@@ -709,6 +711,7 @@ class MonteCarloBarostatASH:
             mult=self.the_md.mult,
             Grad=False,
         )
+        os.chdir(self.the_md.cwd)
         finalEnergy = results.energy * units.atomic_to_kJmol  # kJ/mol
 
         # Monte Carlo acceptance criterion
@@ -788,6 +791,7 @@ class MonteCarloBarostatASH:
             coordsNew = self.scaleCoords(scale1) 
             newBox = box*scale1
             self.setPeriodicBoxVectors(newBox)
+            os.chdir(self.the_md.scratch_dir)
             self.the_md.molecule.replace_coords(
                 self.the_md.molecule.elems,
                 coordsNew.reshape((self.the_md.natoms, 3)) * 10.0,
@@ -819,6 +823,7 @@ class MonteCarloBarostatASH:
                 Grad=False,
             )
             energy2 = results.energy * units.atomic_to_kJmol
+            os.chdir(self.the_md.cwd)
 
             # Restore the context to its original state.
             self.setPeriodicBoxVectors(box)
