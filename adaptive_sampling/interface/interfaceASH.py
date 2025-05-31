@@ -693,7 +693,6 @@ class MonteCarloBarostatASH:
 
         # scale coordinates and Box
         newBox = box*lengthScale   
-        coordsOld = np.copy(self.the_md.coords) * units.BOHR_to_NANOMETER
         coordsNew = self.scaleCoords(lengthScale) # nm
 
         # calculte energy of new box
@@ -727,7 +726,7 @@ class MonteCarloBarostatASH:
             self.setPeriodicBoxVectors(box)
             self.the_md.molecule.replace_coords(
                 self.the_md.molecule.elems,
-                coordsOld.reshape((self.the_md.natoms, 3)) * 10.0, # nm to Angstrom
+                self.the_md.coords.reshape((self.the_md.natoms, 3)) * units.BOHR_to_ANGSTROM, 
             )
             accepted = False
         else:
