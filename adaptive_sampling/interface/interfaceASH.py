@@ -211,6 +211,9 @@ class AshMD:
             start_time = time.perf_counter()
             self.step += 1
 
+            if self.apply_barostat:
+                self.barostat.updateState()
+
             self.propagate()
             self.calc()
 
@@ -227,10 +230,6 @@ class AshMD:
                 self.rem_com_rot()
 
             self.up_momenta()
-
-            if self.apply_barostat:
-                self.barostat.updateState()
-
             self.calc_etvp()
 
             if restart_freq != None and self.step % restart_freq == 0:
@@ -574,10 +573,10 @@ class AshMD:
 class MonteCarloBarostatASH:
     """Monte Carlo Barostat for OpenMMTheory in AshMD
 
+    Ref: https://doi.org/10.1016/j.cplett.2003.12.039
+
     Requires one additional energy evaluation every `self.frequency` steps to update the periodic box size,
     and two additional energy evaluations per pressure evaluation if `pressure_from_finite_difference` is True.
-
-    Ref: https://doi.org/10.1016/j.cplett.2003.12.039
 
     Note, that only the time average of the instanteneous pressure can be expected to equal the pressure applied by the barostat.
     Fluctuations around the average pressure typically are extremely large and very long simulations are required to calculate it accurately!
@@ -640,7 +639,7 @@ class MonteCarloBarostatASH:
         self.barostat_reporter = barostat_reporter
         if self.barostat_reporter:
             with open(self.barostat_reporter, "w") as f:
-                f.write("# TimeStep[fs] \t Volume[nm^3] \t Density[g/cm^3] \t Pressure[Bar] \t w[kJ/mol] \t Accepted?\n")
+                f.write(f"{'# TimeStep[fs]':20s} \t {'Volume[nm^3]':20s} \t {'Density[g/cm^3]':20s} \t {'Pressure[Bar]':20s} \t {'MC crit[kJ/mol]':20s} \t {'Accepted?':20s}\n")
     
     def setPeriodicBoxVectors(self, newBox, useParmed: bool = False):
         """modify periodic box vectors of the OpenMMTheory object in AshMD
@@ -656,18 +655,22 @@ class MonteCarloBarostatASH:
         the_mm = self.the_md.calculator.mm_theory
 
         # update periodic box vectors in OpenMMTheory
-        CHARMMfiles = hasattr(the_mm, 'psffile')
-        Amberfiles = hasattr(the_mm, 'prmtop')
+        gromacs = hasattr(the_mm, 'grofile')
+        if gromacs:
+            raise ValueError(" >>> ERROR: `MonteCarloBarostatASH` does not support Gromacs files for OpenMMTheory")
+
+        charmm = hasattr(the_mm, 'psffile')
+        amber = hasattr(the_mm, 'prmtop')        
         the_mm.set_periodics_before_system_creation(
             PBCvectors=newBox * 10.0,       # in Angstrom 
             pdb_pbc_vectors=None,           # not used, if PBCvectors are set
             periodic_cell_dimensions=None,  # not used, if PBCvectors are set
-            CHARMMfiles=CHARMMfiles,        # it True, OpenMMTHeory used CHARMMfiles for system creation
-            Amberfiles=Amberfiles,          # if True, OpenMMTheory used Amberfiles for system cration
-            use_parmed=useParmed,           # if True, OpenMMTheory used Parmed for system creation
+            CHARMMfiles=charmm,             # it True, OpenMMTheory uses CHARMMfiles for system creation
+            Amberfiles=amber,               # if True, OpenMMTheory uses AMBERfiles for system cration
+            use_parmed=useParmed,           # if True, OpenMMTheory uses Parmed for system creation
         )
 
-        # get parameters of OpenMMTHeory system
+        # get parameters of OpenMM system
         if the_mm.nonbondedMethod_PBC == 'PME':
             nonb_method_PBC=openmm.app.PME
         elif the_mm.nonbondedMethod_PBC == 'Ewald':
@@ -683,7 +686,7 @@ class MonteCarloBarostatASH:
                 PMEParameters = force.getPMEParameters()
 
         # create new system with updated box vectors (identical to system creaction in init of OpenMMTheory)
-        if CHARMMfiles:
+        if charmm:
            the_mm.system = self.forcefield.createSystem(
                 the_mm.params, 
                 nonbondedMethod=nonb_method_PBC,
@@ -695,7 +698,7 @@ class MonteCarloBarostatASH:
                 switchDistance=the_mm.switching_function_distance * openmm.unit.angstroms
             )
                 
-        elif Amberfiles:
+        elif amber:
             the_mm.system = the_mm.forcefield.createSystem(
                 nonbondedMethod=nonb_method_PBC,
                 constraints=the_mm.autoconstraints,
@@ -705,7 +708,7 @@ class MonteCarloBarostatASH:
                 nonbondedCutoff=the_mm.periodic_nonbonded_cutoff * openmm.unit.angstroms
             )
         else:
-            raise ValueError(" >>> ERROR: `MonteCarloBarostatASH` only supports CHARMM or Amber files for OpenMMTheory")
+            raise ValueError(" >>> ERROR: `MonteCarloBarostatASH` only supports CHARMM or AMBER files for OpenMMTheory")
 
         for force in the_mm.system.getForces():
             if isinstance(force, openmm.NonbondedForce):
@@ -721,20 +724,6 @@ class MonteCarloBarostatASH:
         """Calculate the volume of the periodic box"""
         return np.prod(np.linalg.norm(boxVectors, axis=1))
 
-    def updateAvgKinEnergy(self, tau=None) -> float:
-        """Exponentially decaying running average of kinetic energy
-
-        Args:
-            tau: decay time of the running average, if None, use conventional running average
-        """
-        from adaptive_sampling.sampling_tools.utils import welford_var
-        self.count_ekin += 1
-        instant_ekin = np.sum(np.power(self.the_md.momenta, 2) / self.the_md.masses) / 2.0 * units.atomic_to_kJmol
-        self.avg_ekin, self.m2_ekin, self.var_ekin = welford_var(
-            self.count_ekin, self.avg_ekin, self.m2_ekin, instant_ekin, tau
-        )
-        return self.avg_ekin
-    
     def updateState(self):
         """Update the state of the barostat
         This method should be called in every MD step, such that the periodic box size is updated every `self.frequency` steps  
@@ -742,19 +731,17 @@ class MonteCarloBarostatASH:
         self.updateAvgKinEnergy(tau=self.frequency)
         if self.the_md.step%self.frequency != 0:
             return
-
+        
         # current potential energy
         internalEnergy = np.copy(self.the_md.epot) * units.atomic_to_kJmol # kJ/mol
         
         # modify the periodic box size 
-        box = self.getPeriodicBoxVectors() # nm
-        volume = self.getVolume(self.box)  # nm^3
         deltaVolume = self.volumeScale*np.random.uniform(-1.,1.)
-        newVolume = volume+deltaVolume
-        lengthScale = np.cbrt(newVolume/volume)       
+        newVolume = self.volume+deltaVolume
+        lengthScale = np.cbrt(newVolume/self.volume)       
 
         # scale coordinates and Box
-        newBox = box*lengthScale   
+        newBox = self.box*lengthScale   
         coordsNew = self.scaleCoords(lengthScale) # nm
 
         # calculte energy of new box
@@ -779,11 +766,11 @@ class MonteCarloBarostatASH:
         kT = units.kB_in_atomic * units.atomic_to_kJmol * self.the_md.target_temp
         w = finalEnergy-internalEnergy
         w += self.target_pressure*deltaVolume
-        w -= self.nMolecules*kT*np.log(newVolume/volume)
+        w -= self.nMolecules*kT*np.log(newVolume/self.volume)
         
         if w > 0 and np.random.uniform(0,1) > np.exp(-w/kT):
             # reject the step and restore original state of self.the_md
-            self.setPeriodicBoxVectors(box, useParmed=self.useParmed)
+            self.setPeriodicBoxVectors(self.box, useParmed=self.useParmed)
             self.the_md.molecule.replace_coords(
                 self.the_md.molecule.elems,
                 self.the_md.coords.reshape((self.the_md.natoms, 3)) * units.BOHR_to_ANGSTROM, 
@@ -795,8 +782,10 @@ class MonteCarloBarostatASH:
             self.numAccepted += 1
             accepted = True
 
-        # get current pressure and volume
+        # update box, volume, density and pressure
+        self.box = self.getPeriodicBoxVectors()  # nm
         self.volume = self.getVolume(self.getPeriodicBoxVectors())
+        self.wrapMoleculesToPeriodicBox() # wrap coordinates of molecules to periodic box
         self.density = self.the_md.mass.sum() / self.volume * self.DALTON2GRAMM / 1.e-21
         self.pressure = self.computeCurrentPressure(numeric=self.pressure_from_finite_difference)
         if self.barostat_reporter:
@@ -814,21 +803,80 @@ class MonteCarloBarostatASH:
                 self.numAttempted = 0
                 self.numAccepted = 0
             elif (self.numAccepted > 0.75*self.numAttempted):
-                self.volumeScale = np.min([self.volumeScale*1.1, volume*0.3])                
+                self.volumeScale = np.min([self.volumeScale*1.1, self.volume*0.3])                
                 self.numAttempted = 0
                 self.numAccepted = 0
     
+    def wrapMoleculesToPeriodicBox(self):
+        """Wrap coordinates of molecules in `self.the_md` to periodic range"""
+        box_au = np.copy(self.box) / units.BOHR_to_NANOMETER 
+        coordsNew = np.copy(self.the_md.coords).reshape((self.the_md.natoms, 3))
+        for molAtoms in self.molecules:
+            center = (coordsNew[molAtoms]).sum(axis=0) / float(len(molAtoms))
+            diff  = box_au[2]*np.floor(center[2]/box_au[2][2])
+            diff += box_au[1]*np.floor((center[1]-diff[1])/box_au[1][1])
+            diff += box_au[0]*np.floor((center[0]-diff[0])/box_au[0][0])
+            coordsNew[molAtoms] -= diff
+        self.the_md.coords = coordsNew.flatten() 
+
     def scaleCoords(self, lengthScale: float) -> np.array:
-        """move center-of-mass of molecules according to volume change
+        """move center of molecules according to volume change
         """        
         coordsNew = np.copy(self.the_md.coords).reshape((self.the_md.natoms,3)) * units.BOHR_to_NANOMETER
         for molAtoms in self.molecules:
-            massMol = self.the_md.mass[molAtoms]
-            com = (coordsNew[molAtoms]*massMol[:,np.newaxis]).sum(axis=0) / massMol.sum() 
-            comNew = com*lengthScale
-            coordsNew[molAtoms] += comNew - com
+            center = (coordsNew[molAtoms]).sum(axis=0) / float(len(molAtoms))
+            centerNew = center*lengthScale
+            coordsNew[molAtoms] += centerNew - center
         return coordsNew.flatten()
+
+    def updateAvgKinEnergy(self, tau=None) -> float:
+        """Exponentially decaying running average of kinetic energy
+
+        Args:
+            tau: decay time of the running average, if None, use conventional running average
+        """
+        from adaptive_sampling.sampling_tools.utils import welford_var
+        self.count_ekin += 1
+        mol_ekin = self.computeMolecularKineticEnergy(components=1) # kJ/mol
+        self.avg_ekin, self.m2_ekin, self.var_ekin = welford_var(
+            self.count_ekin, self.avg_ekin, self.m2_ekin, mol_ekin, tau
+        )
+        return self.avg_ekin
     
+    def computeMolecularKineticEnergy(self, components: int=1) -> float:
+        """Calculate the molecular kinetic energy of the system
+        
+        Args:
+            components: number of components to return
+                1: total kinetic energy
+                3: kinetic energy per Cartesian component (x, y, z)
+                6: kinetic energy per Cartesian component and cross terms (xx, yy, zz, xy, xz, yz)
+        
+        Returns:
+            ekin: kinetic energy in kJ/mol, ether total (float) or components (np.array)
+        """
+        ekin = np.zeros(6)
+        momenta = np.copy(self.the_md.momenta).reshape((self.the_md.natoms, 3)) 
+        for molAtoms in self.molecules:
+            molMass = self.the_md.mass[molAtoms].sum()
+            molMom = (momenta[molAtoms]).sum(axis=0) / float(len(molAtoms)) # molecular momentum
+            if components == 1:
+                ekin[0] += 0.5 * np.dot(molMom, molMom) / molMass
+            elif components == 3 or components == 6:
+                ekin[:3] += 0.5 * np.square(molMom) / molMass
+                if components == 6:
+                    ekin[3] += 0.5 * molMom[1] * molMom[0] / molMass
+                    ekin[4] += 0.5 * molMom[2] * molMom[0] / molMass
+                    ekin[5] += 0.5 * molMom[2] * molMom[1] / molMass
+            else:
+                raise ValueError(" >>> ERROR: `components` must be 1, 3, or 6 for kinetic energy calculation")
+        if components == 1:
+            return ekin[0] * units.atomic_to_kJmol
+        elif components == 3:  
+            return ekin[:3] * units.atomic_to_kJmol  
+        else: 
+            return ekin * units.kJ_to_kcal
+
     def computeCurrentPressure(self, numeric: bool=False) -> float:
         """ Calculate instantaneous pressure from from virial equation
 
