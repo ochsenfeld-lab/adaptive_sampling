@@ -634,7 +634,7 @@ class MonteCarloBarostatASH:
         self.simulation = the_md.calculator.mm_theory.create_simulation()       
         self.molecules = [list(mol) for mol in self.simulation.context.getMolecules()]
         self.nMolecules = len(self.molecules)
-        self.wrapMoleculesToPeriodicBox()
+        self.wrapMoleculesToPeriodicBox(self.box)
 
         # barostat reporter
         self.barostat_reporter = barostat_reporter
