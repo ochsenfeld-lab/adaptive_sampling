@@ -747,6 +747,7 @@ class MonteCarloBarostatASH:
 
         # calculte energy of new box
         self.setPeriodicBoxVectors(newBox, useParmed=self.useParmed)
+        self.wrapMoleculesToPeriodicBox(newBox) 
         os.chdir(self.the_md.scratch_dir)
         self.the_md.molecule.replace_coords(
             self.the_md.molecule.elems,
@@ -772,6 +773,7 @@ class MonteCarloBarostatASH:
         if w > 0 and np.random.uniform(0,1) > np.exp(-w/kT):
             # reject the step and restore original state of self.the_md
             self.setPeriodicBoxVectors(self.box, useParmed=self.useParmed)
+            self.wrapMoleculesToPeriodicBox(self.box)
             self.the_md.molecule.replace_coords(
                 self.the_md.molecule.elems,
                 self.the_md.coords.reshape((self.the_md.natoms, 3)) * units.BOHR_to_ANGSTROM, 
@@ -786,7 +788,6 @@ class MonteCarloBarostatASH:
         # update box, volume, density and pressure
         self.box = self.getPeriodicBoxVectors()  # nm
         self.volume = self.getVolume(self.getPeriodicBoxVectors())
-        self.wrapMoleculesToPeriodicBox() # wrap coordinates of molecules to periodic box
         self.density = self.the_md.mass.sum() / self.volume * self.DALTON2GRAMM / 1.e-21
         self.pressure = self.computeCurrentPressure(numeric=self.pressure_from_finite_difference)
         if self.barostat_reporter:
@@ -808,9 +809,9 @@ class MonteCarloBarostatASH:
                 self.numAttempted = 0
                 self.numAccepted = 0
     
-    def wrapMoleculesToPeriodicBox(self, molOrigin: int=0):
+    def wrapMoleculesToPeriodicBox(self, box, molOrigin: int=0):
         """Wrap coordinates of molecules in `self.the_md` to periodic range"""
-        box_au = np.copy(self.box) / units.BOHR_to_NANOMETER 
+        box_au = np.copy(box) / units.BOHR_to_NANOMETER 
         coordsNew = np.copy(self.the_md.coords).reshape((self.the_md.natoms, 3))
         
         # center molOrigin in periodic box
