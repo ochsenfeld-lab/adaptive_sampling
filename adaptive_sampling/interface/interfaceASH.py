@@ -579,6 +579,10 @@ class MonteCarloBarostatASH:
 
     Ref: https://doi.org/10.1016/j.cplett.2003.12.039
 
+    Note, that only the time average of the instanteneous pressure can be expected to equal the pressure applied by the barostat.
+    Fluctuations around the average pressure typically are extremely large and very long simulations are required to calculate it accurately!
+    Hence, it is recomended to instead monitore the density of the system, as provided in `self.density` in g/cm^3.
+    
     Args:
         the_md: AshMD object
         target_pressure: target pressure in bar
@@ -604,11 +608,11 @@ class MonteCarloBarostatASH:
         if not hasattr(the_md, "calculator") or not hasattr(the_md.calculator, "mm_theory"):
             raise ValueError(" >>> ERROR: AshMD needs a valid calculator with mm_theory")
         if the_md.calculator.mm_theory_name != "OpenMMTheory":
-            raise ValueError(" >>> ERROR: MonteCarloBarostat only available for OpenMMTheory")
+            raise ValueError(" >>> ERROR: `MonteCarloBarostatASH` only available for OpenMMTheory")
         if not the_md.calculator.mm_theory.Periodic:
             raise ValueError(" >>> ERROR: A barostat cannot be used with a non-periodic system")
         if not the_md.langevin:
-            raise ValueError(" >>> ERROR: A barostat requires a thermostat to be applied, use `the_md.thermostat = True`")
+            raise ValueError(" >>> ERROR: A barostat requires a thermostat to be applied, use `the_md.thermostat=True`")
 
         self.the_md = the_md
         self.target_pressure = target_pressure * (self.AVOGADRO*1e-25) # convert Bar to kJ/mol/nm^2
@@ -616,8 +620,9 @@ class MonteCarloBarostatASH:
         self.pressure_from_finite_difference = pressure_from_finite_difference
         self.useParmed = useParmed
 
-        self.box = self.getPeriodicBoxVectors()
-        self.volume = self.getVolume(self.box)
+        self.box = self.getPeriodicBoxVectors() # nm
+        self.volume = self.getVolume(self.box)  # nm^3
+        self.density = self.the_md.mass.sum() / self.volume * self.DALTON2GRAMM / 1.e-21 # g/cm^3
         self.volumeScale = 0.01*self.volume
         self.numAttempted = 0
         self.numAccepted = 0
@@ -641,7 +646,7 @@ class MonteCarloBarostatASH:
         """modify periodic box vectors of the OpenMMTheory object in AshMD
         See: https://github.com/RagnarB83/ash/blob/81c4f952e7908bfe2e4714836308d0f792a85f4c/ash/interfaces/interface_OpenMM.py#L923
 
-        WARNING: this method only supports `OpenMMTheory` with CHARMM or Amber files
+        WARNING: this method only supports `OpenMMTheory` using CHARMM or Amber files
 
         Args:
             newBox: new periodic box vectors in nm, shape (3, 3)
@@ -699,6 +704,8 @@ class MonteCarloBarostatASH:
                 ewaldErrorTolerance=the_mm.ewalderrortolerance,
                 nonbondedCutoff=the_mm.periodic_nonbonded_cutoff * openmm.unit.angstroms
             )
+        else:
+            raise ValueError(" >>> ERROR: `MonteCarloBarostatASH` only supports CHARMM or Amber files for OpenMMTheory")
 
         for force in the_mm.system.getForces():
             if isinstance(force, openmm.NonbondedForce):
@@ -742,7 +749,7 @@ class MonteCarloBarostatASH:
         # modify the periodic box size 
         box = self.getPeriodicBoxVectors() # nm
         volume = self.getVolume(self.box)  # nm^3
-        deltaVolume = self.volumeScale*2.*np.random.uniform(-1.,1.)
+        deltaVolume = self.volumeScale*np.random.uniform(-1.,1.)
         newVolume = volume+deltaVolume
         lengthScale = np.cbrt(newVolume/volume)       
 
@@ -774,7 +781,7 @@ class MonteCarloBarostatASH:
         w += self.target_pressure*deltaVolume
         w -= self.nMolecules*kT*np.log(newVolume/volume)
         
-        if w > 0 and np.random.uniform() > np.exp(-w/kT):
+        if w > 0 and np.random.uniform(0,1) > np.exp(-w/kT):
             # reject the step and restore original state of self.the_md
             self.setPeriodicBoxVectors(box, useParmed=self.useParmed)
             self.the_md.molecule.replace_coords(
@@ -790,13 +797,13 @@ class MonteCarloBarostatASH:
 
         # get current pressure and volume
         self.volume = self.getVolume(self.getPeriodicBoxVectors())
-        density = self.the_md.mass.sum() / self.volume * self.DALTON2GRAMM / 1.e-21
+        self.density = self.the_md.mass.sum() / self.volume * self.DALTON2GRAMM / 1.e-21
         self.pressure = self.computeCurrentPressure(numeric=self.pressure_from_finite_difference)
         if self.barostat_reporter:
             with open(self.barostat_reporter, "a") as f:
                 f.write(
-                    str("%6.3f \t %20.10e \t %20.10e \t %20.10e \t %20.10e \t %1d\n")
-                    % (self.the_md.step * self.the_md.dt, self.volume, density, self.pressure, w, int(accepted))
+                    str("%20.2f \t %20.10e \t %20.10e \t %20.10e \t %20.10e \t %1d\n")
+                    % (self.the_md.step * self.the_md.dt, self.volume, self.density, self.pressure, w, int(accepted))
                 )
 
         # adjust acceptance rate
@@ -824,6 +831,9 @@ class MonteCarloBarostatASH:
     
     def computeCurrentPressure(self, numeric: bool=False) -> float:
         """ Calculate instantaneous pressure from from virial equation
+
+        Note, that only the time average of the instanteneous pressure can be expected to equal pressure applied bz the barostat.
+        Fluctuations arounf the average are commonly extremely large and vary long simulations are required to calculate tha average accurately!
 
         Args:
             numeric: if True, use finite difference to calculate the derivative of potential energy with respect to volume as done by OpenMM
