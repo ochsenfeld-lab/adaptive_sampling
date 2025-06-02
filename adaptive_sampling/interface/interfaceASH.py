@@ -634,6 +634,7 @@ class MonteCarloBarostatASH:
         self.simulation = the_md.calculator.mm_theory.create_simulation()       
         self.molecules = [list(mol) for mol in self.simulation.context.getMolecules()]
         self.nMolecules = len(self.molecules)
+        self.wrapMoleculesToPeriodicBox()
 
         # barostat reporter
         self.barostat_reporter = barostat_reporter
@@ -807,10 +808,18 @@ class MonteCarloBarostatASH:
                 self.numAttempted = 0
                 self.numAccepted = 0
     
-    def wrapMoleculesToPeriodicBox(self):
+    def wrapMoleculesToPeriodicBox(self, molOrigin: int=0):
         """Wrap coordinates of molecules in `self.the_md` to periodic range"""
         box_au = np.copy(self.box) / units.BOHR_to_NANOMETER 
         coordsNew = np.copy(self.the_md.coords).reshape((self.the_md.natoms, 3))
+        
+        # center molOrigin in periodic box
+        molOrigin = self.molecules[molOrigin]
+        coordsMolOrigin = coordsNew[molOrigin].sum(axis=0) / float(len(molOrigin))
+        diff = coordsMolOrigin - np.array([box_au[0,0], box_au[1,1], box_au[2,2]])/2.0
+        coordsNew -= diff
+
+        # wrap coordinates 
         for molAtoms in self.molecules:
             center = (coordsNew[molAtoms]).sum(axis=0) / float(len(molAtoms))
             diff  = box_au[2]*np.floor(center[2]/box_au[2][2])
