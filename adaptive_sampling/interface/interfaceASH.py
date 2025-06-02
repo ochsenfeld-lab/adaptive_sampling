@@ -122,7 +122,7 @@ class AshMD:
                 target_pressure=target_pressure,
                 pressure_from_finite_difference=pressure_from_finite_difference,
                 barostat_reporter=barostat_reporter,
-                verbose=not mute,
+                useParmed=False, 
             )
 
 
@@ -585,7 +585,7 @@ class MonteCarloBarostatASH:
         frequency: frequency of barostat updates
         pressure_from_finite_difference: if True, more accurate pressure, else calculate pressure from system forces, neglecting periodic boundary conditions 
         barostat_reporter: if not None, write barostat data to file
-        verbose: if True, print additional information to stdout
+        useParmed: if True, use `parmed` to update periodic box vectors in OpenMMTheory, else use `Amberfiles`
     """
     
     AVOGADRO = 6.02214076e23
@@ -599,7 +599,7 @@ class MonteCarloBarostatASH:
         frequency: int=None, 
         pressure_from_finite_difference: bool=False, 
         barostat_reporter: str='barostat.log',
-        verbose: bool=False,
+        useParmed: bool=False,
     ):
         if not hasattr(the_md, "calculator") or not hasattr(the_md.calculator, "mm_theory"):
             raise ValueError(" >>> ERROR: AshMD needs a valid calculator with mm_theory")
@@ -614,7 +614,7 @@ class MonteCarloBarostatASH:
         self.target_pressure = target_pressure * (self.AVOGADRO*1e-25) # convert Bar to kJ/mol/nm^2
         self.frequency = frequency
         self.pressure_from_finite_difference = pressure_from_finite_difference
-        self.verbose = verbose
+        self.useParmed = useParmed
 
         self.box = self.getPeriodicBoxVectors()
         self.volume = self.getVolume(self.box)
@@ -637,19 +637,74 @@ class MonteCarloBarostatASH:
             with open(self.barostat_reporter, "w") as f:
                 f.write("# TimeStep[fs] \t Volume[nm^3] \t Density[g/cm^3] \t Pressure[Bar] \t w[kJ/mol] \t Accepted?\n")
     
-    def setPeriodicBoxVectors(self, newBox):
-        """Set new periodic box vectors in nm"""
-        import openmm.unit
-        self.the_md.calculator.mm_theory.topology.setPeriodicBoxVectors(newBox * openmm.unit.nanometer) 
-        self.simulation.context.setPeriodicBoxVectors(
-            newBox[0] * openmm.unit.nanometer,
-            newBox[1] * openmm.unit.nanometer,
-            newBox[2] * openmm.unit.nanometer,
-        )   
-        if self.verbose:
-            print(
-                " >>> INFO: Set new periodic box vectors: %s" % (str(self.getPeriodicBoxVectors()))
+    def setPeriodicBoxVectors(self, newBox, useParmed: bool = False):
+        """modify periodic box vectors of the OpenMMTheory object in AshMD
+        See: https://github.com/RagnarB83/ash/blob/81c4f952e7908bfe2e4714836308d0f792a85f4c/ash/interfaces/interface_OpenMM.py#L923
+
+        WARNING: this method only supports `OpenMMTheory` with CHARMM or Amber files
+
+        Args:
+            newBox: new periodic box vectors in nm, shape (3, 3)
+            useParmed: if True, use `parmed` for box vector update in OpenMMTheory using amber, else use `Amberfiles`
+        """
+        import openmm
+        the_mm = self.the_md.calculator.mm_theory
+
+        # update periodic box vectors in OpenMMTheory
+        CHARMMfiles = hasattr(the_mm, 'psffile')
+        Amberfiles = hasattr(the_mm, 'prmtop')
+        the_mm.set_periodics_before_system_creation(
+            PBCvectors=newBox * 10.0,       # in Angstrom 
+            pdb_pbc_vectors=None,           # not used, if PBCvectors are set
+            periodic_cell_dimensions=None,  # not used, if PBCvectors are set
+            CHARMMfiles=CHARMMfiles,        # it True, OpenMMTHeory used CHARMMfiles for system creation
+            Amberfiles=Amberfiles,          # if True, OpenMMTheory used Amberfiles for system cration
+            use_parmed=useParmed,           # if True, OpenMMTheory used Parmed for system creation
+        )
+
+        # get parameters of OpenMMTHeory system
+        if the_mm.nonbondedMethod_PBC == 'PME':
+            nonb_method_PBC=openmm.app.PME
+        elif the_mm.nonbondedMethod_PBC == 'Ewald':
+            nonb_method_PBC=openmm.app.Ewald
+        elif the_mm.nonbondedMethod_PBC == 'LJPME':
+            nonb_method_PBC=openmm.app.LJPME
+        elif the_mm.nonbondedMethod_PBC == 'CutoffPeriodic':
+            nonb_method_PBC=openmm.app.CutoffPeriodic
+
+        for force in the_mm.system.getForces():
+            if isinstance(force, openmm.NonbondedForce):
+                dispersion_correction = force.getUseDispersionCorrection()
+                PMEParameters = force.getPMEParameters()
+
+        # create new system with updated box vectors (identical to system creaction in init of OpenMMTheory)
+        if CHARMMfiles:
+           the_mm.system = self.forcefield.createSystem(
+                the_mm.params, 
+                nonbondedMethod=nonb_method_PBC,
+                constraints=the_mm.autoconstraints,
+                hydrogenMass=the_mm.hydrogenmass,
+                rigidWater=the_mm.rigidwater, 
+                ewaldErrorTolerance=the_mm.ewalderrortolerance,
+                nonbondedCutoff=the_mm.periodic_nonbonded_cutoff * openmm.unit.angstroms,
+                switchDistance=the_mm.switching_function_distance * openmm.unit.angstroms
             )
+                
+        elif Amberfiles:
+            the_mm.system = the_mm.forcefield.createSystem(
+                nonbondedMethod=nonb_method_PBC,
+                constraints=the_mm.autoconstraints,
+                hydrogenMass=the_mm.hydrogenmass,
+                rigidWater=the_mm.rigidwater, 
+                ewaldErrorTolerance=the_mm.ewalderrortolerance,
+                nonbondedCutoff=the_mm.periodic_nonbonded_cutoff * openmm.unit.angstroms
+            )
+
+        for force in the_mm.system.getForces():
+            if isinstance(force, openmm.NonbondedForce):
+                force.setUseDispersionCorrection(dispersion_correction)
+                if nonb_method_PBC == openmm.app.PME:
+                    force.setPMEParameters(*PMEParameters)      
 
     def getPeriodicBoxVectors(self) -> np.array:
         """Get the periodic box vectors in nm"""
@@ -657,7 +712,7 @@ class MonteCarloBarostatASH:
     
     def getVolume(self, boxVectors) -> float:
         """Calculate the volume of the periodic box"""
-        return boxVectors[0][0]*boxVectors[1][1]*boxVectors[2][2]
+        return np.prod(np.linalg.norm(boxVectors, axis=1))
 
     def updateAvgKinEnergy(self, tau=None) -> float:
         """Exponentially decaying running average of kinetic energy
@@ -689,14 +744,14 @@ class MonteCarloBarostatASH:
         volume = self.getVolume(self.box)  # nm^3
         deltaVolume = self.volumeScale*2.*np.random.uniform(-1.,1.)
         newVolume = volume+deltaVolume
-        lengthScale = np.power(newVolume/volume, 1.0/3.0)       
+        lengthScale = np.cbrt(newVolume/volume)       
 
         # scale coordinates and Box
         newBox = box*lengthScale   
         coordsNew = self.scaleCoords(lengthScale) # nm
 
         # calculte energy of new box
-        self.setPeriodicBoxVectors(newBox)
+        self.setPeriodicBoxVectors(newBox, useParmed=self.useParmed)
         os.chdir(self.the_md.scratch_dir)
         self.the_md.molecule.replace_coords(
             self.the_md.molecule.elems,
@@ -714,16 +769,14 @@ class MonteCarloBarostatASH:
         finalEnergy = results.energy * units.atomic_to_kJmol  # kJ/mol
 
         # Monte Carlo acceptance criterion
-        kT = units.kB_in_atomic * units.kJ_to_kcal * self.the_md.target_temp
+        kT = units.kB_in_atomic * units.atomic_to_kJmol * self.the_md.target_temp
         w = finalEnergy-internalEnergy
         w += self.target_pressure*deltaVolume
         w -= self.nMolecules*kT*np.log(newVolume/volume)
         
         if w > 0 and np.random.uniform() > np.exp(-w/kT):
             # reject the step and restore original state of self.the_md
-            if self.verbose:
-                print(" >>> INFO: Barostat step rejected (w = {w})")
-            self.setPeriodicBoxVectors(box)
+            self.setPeriodicBoxVectors(box, useParmed=self.useParmed)
             self.the_md.molecule.replace_coords(
                 self.the_md.molecule.elems,
                 self.the_md.coords.reshape((self.the_md.natoms, 3)) * units.BOHR_to_ANGSTROM, 
@@ -731,8 +784,6 @@ class MonteCarloBarostatASH:
             accepted = False
         else:
             # accept the step
-            if self.verbose:
-                print(" >>> INFO: Barostat step accepted (w = {w}, new volume = {newVolume:.3f} nm^3)")
             self.the_md.coords = coordsNew / units.BOHR_to_NANOMETER
             self.numAccepted += 1
             accepted = True
@@ -752,7 +803,7 @@ class MonteCarloBarostatASH:
         self.numAttempted += 1        
         if self.numAttempted >= 10:
             if (self.numAccepted < 0.25*self.numAttempted):
-                lengthScale /= 1.1
+                self.volumeScale /= 1.1
                 self.numAttempted = 0
                 self.numAccepted = 0
             elif (self.numAccepted > 0.75*self.numAttempted):
@@ -789,7 +840,7 @@ class MonteCarloBarostatASH:
             scale1 = 1.0-deltaV
             coordsNew = self.scaleCoords(scale1) 
             newBox = box*scale1
-            self.setPeriodicBoxVectors(newBox)
+            self.setPeriodicBoxVectors(newBox, useParmed=self.useParmed)
             os.chdir(self.the_md.scratch_dir)
             self.the_md.molecule.replace_coords(
                 self.the_md.molecule.elems,
@@ -809,7 +860,7 @@ class MonteCarloBarostatASH:
             scale2 = 1.0+deltaV
             coordsNew = self.scaleCoords(scale2)
             newBox = box*scale2
-            self.setPeriodicBoxVectors(newBox)
+            self.setPeriodicBoxVectors(newBox, useParmed=self.useParmed)
             self.the_md.molecule.replace_coords(
                 self.the_md.molecule.elems,
                 coordsNew.reshape((self.the_md.natoms, 3)) * 10.0,
@@ -825,7 +876,7 @@ class MonteCarloBarostatASH:
             os.chdir(self.the_md.cwd)
 
             # Restore the context to its original state.
-            self.setPeriodicBoxVectors(box)
+            self.setPeriodicBoxVectors(box, useParmed=self.useParmed)
             self.the_md.molecule.replace_coords(
                 self.the_md.molecule.elems,
                 coordsOld.reshape((self.the_md.natoms, 3)) * 10.0,
