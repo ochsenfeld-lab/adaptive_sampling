@@ -39,13 +39,14 @@ class AshMD:
         friction: float = 1.0e-3,
         barostat: bool = False,
         target_pressure: float = 1.0,
-        barostat_freq: int = 100,
+        barostat_freq: int = 25,
         barostat_reporter: str = "barostat.log",
         pressure_from_finite_difference: bool = False,
         seed: int = 42,
         active_atoms: list = [],
         mute: bool = True,
         scratch_dir: str = "scratch/",
+        **kwargs,
     ):
         if fragment == None:
             raise ValueError(" >>> ERROR: AshMD needs fragment object!")
@@ -122,7 +123,7 @@ class AshMD:
                 target_pressure=target_pressure,
                 pressure_from_finite_difference=pressure_from_finite_difference,
                 barostat_reporter=barostat_reporter,
-                useParmed=False, 
+                **kwargs,
             )
 
 
@@ -588,6 +589,7 @@ class MonteCarloBarostatASH:
         frequency: frequency of barostat updates
         pressure_from_finite_difference: if True, more accurate pressure, else calculate pressure from system forces, neglecting periodic boundary conditions 
         barostat_reporter: if not None, write barostat data to file
+        indexCenterMol: index of the molecule to move to the center of the periodic box
         useParmed: if True, use `parmed` to update periodic box vectors in OpenMMTheory, else use `Amberfiles`
     """
     
@@ -601,7 +603,8 @@ class MonteCarloBarostatASH:
         target_pressure: float=1.0, 
         frequency: int=None, 
         pressure_from_finite_difference: bool=False, 
-        barostat_reporter: str='barostat.log',
+        barostat_reporter: str=None,
+        indexCenterMol: int=0,
         useParmed: bool=False,
     ):
         if not hasattr(the_md, "calculator") or not hasattr(the_md.calculator, "mm_theory"):
@@ -617,6 +620,7 @@ class MonteCarloBarostatASH:
         self.target_pressure = target_pressure * (self.AVOGADRO*1e-25) # convert Bar to kJ/mol/nm^2
         self.frequency = frequency
         self.pressure_from_finite_difference = pressure_from_finite_difference
+        self.indexCenterMol = indexCenterMol
         self.useParmed = useParmed
 
         self.box = self.getPeriodicBoxVectors() # nm
@@ -634,7 +638,7 @@ class MonteCarloBarostatASH:
         self.simulation = the_md.calculator.mm_theory.create_simulation()       
         self.molecules = [list(mol) for mol in self.simulation.context.getMolecules()]
         self.nMolecules = len(self.molecules)
-        self.wrapMoleculesToPeriodicBox(self.box)
+        self.wrapMoleculesToPeriodicBox(self.box, molOrigin=self.indexCenterMol)
 
         # barostat reporter
         self.barostat_reporter = barostat_reporter
@@ -747,7 +751,7 @@ class MonteCarloBarostatASH:
 
         # calculte energy of new box
         self.setPeriodicBoxVectors(newBox, useParmed=self.useParmed)
-        self.wrapMoleculesToPeriodicBox(newBox) 
+        self.wrapMoleculesToPeriodicBox(newBox, molOrigin=self.indexCenterMol) 
         os.chdir(self.the_md.scratch_dir)
         self.the_md.molecule.replace_coords(
             self.the_md.molecule.elems,
@@ -773,7 +777,7 @@ class MonteCarloBarostatASH:
         if w > 0 and np.random.uniform(0,1) > np.exp(-w/kT):
             # reject the step and restore original state of self.the_md
             self.setPeriodicBoxVectors(self.box, useParmed=self.useParmed)
-            self.wrapMoleculesToPeriodicBox(self.box)
+            self.wrapMoleculesToPeriodicBox(self.box, molOrigin=self.indexCenterMol)
             self.the_md.molecule.replace_coords(
                 self.the_md.molecule.elems,
                 self.the_md.coords.reshape((self.the_md.natoms, 3)) * units.BOHR_to_ANGSTROM, 
@@ -810,7 +814,12 @@ class MonteCarloBarostatASH:
                 self.numAccepted = 0
     
     def wrapMoleculesToPeriodicBox(self, box, molOrigin: int=0):
-        """Wrap coordinates of molecules in `self.the_md` to periodic range"""
+        """Wrap coordinates of molecules in `self.the_md` to periodic range
+        
+        Args:
+            box: periodic box vectors in nm with origin at (0,0,0), shape (3, 3)
+            molOrigin: index of the molecule to center in the periodic box
+        """
         box_au = np.copy(box) / units.BOHR_to_NANOMETER 
         coordsNew = np.copy(self.the_md.coords).reshape((self.the_md.natoms, 3))
         
@@ -880,12 +889,15 @@ class MonteCarloBarostatASH:
                     ekin[5] += 0.5 * molMom[2] * molMom[1] / molMass
             else:
                 raise ValueError(" >>> ERROR: `components` must be 1, 3, or 6 for kinetic energy calculation")
+        
+        ekin *= units.atomic_to_kJmol
+        
         if components == 1:
-            return ekin[0] * units.atomic_to_kJmol
+            return ekin[0]
         elif components == 3:  
-            return ekin[:3] * units.atomic_to_kJmol  
+            return ekin[:3] 
         else: 
-            return ekin * units.kJ_to_kcal
+            return ekin
 
     def computeCurrentPressure(self, numeric: bool=False) -> float:
         """ Calculate instantaneous pressure from from virial equation
