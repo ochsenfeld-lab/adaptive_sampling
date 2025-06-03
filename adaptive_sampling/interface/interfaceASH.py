@@ -2,8 +2,9 @@
 import os, time
 import numpy as np
 import random
-
+from tqdm import tqdm
 from adaptive_sampling import units
+import wandb
 
 
 class AshMD:
@@ -22,6 +23,7 @@ class AshMD:
         active_atoms: list of active atoms, if None, all atoms are active
         mute: mute Calculator output
         scratch_dir: directory where `calculator` input and output files are stored
+        use_wandb: if True uses wandb for logging. Default is False.
     """
 
     def __init__(
@@ -62,7 +64,8 @@ class AshMD:
         self.masses = np.repeat(self.mass, 3)
         self.natoms = int(len(self.coords) / 3)
         self.ndegrees = 3.0e0 * self.natoms - 6.0e0
-        self.forces = np.zeros_like(self.coords)
+        self.forces = np.zeros_like(self.coords) 
+        self.qm_forces = np.zeros_like(self.coords)
         self.momenta = np.zeros_like(self.coords)
         self.bias_forces = np.zeros_like(self.forces)
         self.biaspots = []
@@ -90,6 +93,7 @@ class AshMD:
 
         # md values
         self.epot = 0.0e0
+        self.qm_energy = 0.0e0
         self.ekin = 0.0e0
         self.temp = 0.0e0
         self.vol = 0.0e0
@@ -101,7 +105,7 @@ class AshMD:
         self.cwd = os.getcwd()
         self.scratch_dir = scratch_dir
         if not os.path.isdir(self.scratch_dir):
-            os.mkdir(self.scratch_dir)
+            os.makedirs(self.scratch_dir)
 
     def calc_init(
         self,
@@ -170,6 +174,7 @@ class AshMD:
         out_freq: int = None,
         restart_freq: int = None,
         dcd_freq: int = None,
+        wandb_freq: int = None,
         remove_rotation: bool = False,
         prefix: str = "ashMD_production",
         **kwargs,
@@ -181,10 +186,11 @@ class AshMD:
             out_freq: frequency of writing outputs
             restart_freq: frequncy of writing restart file
             dcd_freq: frequency of writing coords to DCD trajectory
+            wandb_freq: frequency of logging to wandb
             remove_rotation: if True, remove center of mass translation and rotation
             prefix: prefix for output files
         """
-        for _ in range(nsteps):
+        for _ in tqdm(range(nsteps), mininterval=60):
             start_time = time.perf_counter()
             self.step += 1
 
@@ -211,10 +217,34 @@ class AshMD:
 
             if dcd_freq != None and self.step % dcd_freq == 0:
                 self.print_dcd(prefix=prefix)
-
-            self.time_per_step.append(time.perf_counter() - start_time)
             if out_freq != None and self.step % out_freq == 0:
                 self.print_energy(prefix=prefix)
+            self.time_last_step = time.perf_counter() - start_time
+            self.time_per_step.append(self.time_last_step)
+            if wandb_freq != None and self.step % wandb_freq == 0:
+                self.log_wandb()
+    
+    def log_wandb(
+        self,
+    ):
+        """"""
+        wandb.define_metric("*", step_metric='time_ps')
+        wandb.log(
+            {
+                "time_ps": self.step * self.dt / 1000,
+                "E_pot": self.epot,
+                "E_kin": self.ekin,
+                "E_qm": self.qm_energy,
+                "E_mm": self.epot - self.qm_energy,
+                "E_tot": self.ekin + self.epot,
+                "therm/T": self.temp,
+                "therm/p": self.pres,
+                "therm/V": self.vol,
+                "amd/boost_ratio": np.linalg.norm(self.bias_forces) / np.linalg.norm(self.forces - self.bias_forces),
+                "time_per_step": self.time_last_step,
+            },
+            step = self.step,
+        )
 
     def heat(
         self,
@@ -272,15 +302,26 @@ class AshMD:
             self.molecule.elems,
             self.coords.reshape((self.natoms, 3)) * units.BOHR_to_ANGSTROM,
         )
+        if self.mute:
+            printlevel = 0
         results = Singlepoint(
             theory=self.calculator,
             fragment=self.molecule,
             charge=self.charge,
             mult=self.mult,
             Grad=True,
+            printlevel=printlevel,
         )
         self.forces = results.gradient.flatten()
         self.epot = results.energy
+
+        if self.calculator.theorytype == "QM/MM":
+            if self.calculator.embedding == 'mech':
+                self.qm_forces[self.calculator.qmatoms] = self.calculator.QMgradient_wo_linkatoms
+            elif self.calculator.embedding == 'elstat':
+                self.qm_forces = self.calculator.QM_PC_gradient
+            self.qm_forces = self.qm_forces.flatten()
+            self.qm_energy = self.calculator.QMenergy
         os.chdir(self.cwd)
 
     def calc_etvp(self):
@@ -528,11 +569,6 @@ class AshMD:
             from adaptive_sampling.interface.sampling_data import SamplingData
             
             if self.calculator.theorytype == "QM/MM":
-
-                self.qm_forces = np.zeros_like(self.molecule.coords)
-                self.qm_forces[self.calculator.qmatoms] = self.calculator.QMgradient
-                self.qm_forces = self.qm_forces.flatten()
-                self.qm_energy = self.calculator.QMenergy
                 return SamplingData(
                     self.mass,
                     self.coords,
