@@ -329,7 +329,7 @@ def pmf_from_weights(
         rho[ii] = weights[indices].sum()
 
     rho /= rho.sum() * np.prod(dx)
-    pmf = -RT * np.log(rho, out=np.full_like(rho, np.NaN), where=(rho != 0))
+    pmf = -RT * np.log(rho, out=np.full_like(rho, np.nan), where=(rho != 0))
     pmf = np.ma.masked_array(pmf, mask=np.isnan(pmf))
 
     return pmf, rho
