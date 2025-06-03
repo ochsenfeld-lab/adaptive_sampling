@@ -1,6 +1,7 @@
 import numpy as np
 from .enhanced_sampling import EnhancedSampling
 from .utils import welford_var
+import wandb
 
 
 class aMD(EnhancedSampling):
@@ -122,7 +123,6 @@ class aMD(EnhancedSampling):
             if md_state.step < self.equil_steps:
                 self._update_pot_distribution(epot)
                 self._calc_E_k0()
-
             else:
                 # free energy reweighting in production
                 if self._check_boundaries(xi):
@@ -169,7 +169,30 @@ class aMD(EnhancedSampling):
                 }
                 self.write_output(output, filename="amd.out")
                 self.write_restart()
-
+        if self.wandb_freq is not None and md_state.step % self.wandb_freq == 0:
+            data = {
+                'time_ps': md_state.step * md_state.dt / 1000,
+                'amd/Xi0': xi[0],
+                'amd/boost_pot': self.amd_pot,
+                'amd/pot': epot,
+            }
+            if md_state.step < self.equil_steps:
+                data.update({
+                    'amd_equil/pot_min': self.pot_min,
+                    'amd_equil/pot_max': self.pot_max,
+                    'amd_equil/pot_std': self.pot_std,
+                    'amd_equil/pot_avg': self.pot_avg,
+                    'amd_equil/pot_m2': self.pot_m2,
+                    'amd_equil/E': self.E,
+                    'amd_equil/k0': self.k0,
+                    'amd_equil/k1': self.k1,
+                    'amd_equil/k': self.k,
+                })
+            wandb.define_metric("*", step_metric='time_ps')
+            wandb.log(
+                data,
+                step=md_state.step,
+            )
         return bias_force
 
     def get_pmf(self):

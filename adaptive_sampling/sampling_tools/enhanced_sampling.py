@@ -33,6 +33,7 @@ class EnhancedSampling(ABC):
         kinetics: bool = False,
         f_conf: float = 0.0,
         output_freq: int = 100,
+        wandb_freq: int = None,
         multiple_walker: bool = False,
         periodicity: list = None,
         **kwargs,
@@ -43,6 +44,7 @@ class EnhancedSampling(ABC):
         self.the_md = md
         self.the_cv = CV(self.the_md, requires_grad=True)
         self.out_freq = int(output_freq)
+        self.wandb_freq = wandb_freq
         self.equil_temp = equil_temp
         self.verbose = verbose
         self.shared = multiple_walker
@@ -315,7 +317,7 @@ class EnhancedSampling(ABC):
             filename: name of output file
         """
         from ..units import DEGREES_per_RADIAN, BOHR_to_ANGSTROM
-        grid = self.grid.copy()
+        grid = [np.copy(g) for g in self.grid] 
         for i in range(self.ncoords):
             if self.the_cv.type == "angle":
                 grid[i] *= DEGREES_per_RADIAN
