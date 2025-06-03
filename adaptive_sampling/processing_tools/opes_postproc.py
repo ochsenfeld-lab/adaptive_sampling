@@ -47,8 +47,7 @@ def pmf_from_reweighting(
 
     if history_points == 1:
         pmf_weights, rho_weights = pmf_from_weights(
-            grid, cv, W, equil_temp=equil_temp, dx=dx, verbose=True
-        )
+            grid, cv, W, equil_temp=equil_temp, dx=dx)
         pmf_weights -= pmf_weights.min()
         pmf_hist.append(pmf_weights)
         rho_hist.append(rho_weights)

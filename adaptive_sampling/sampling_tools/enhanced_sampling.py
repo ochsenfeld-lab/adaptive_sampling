@@ -320,8 +320,10 @@ class EnhancedSampling(ABC):
         grid = [np.copy(g) for g in self.grid] 
         for i in range(self.ncoords):
             if self.the_cv.type == "angle":
+                from ..units import DEGREES_per_RADIAN
                 grid[i] *= DEGREES_per_RADIAN
             elif self.the_cv.type == "distance":
+                from ..units import BOHR_to_ANGSTROM
                 grid[i] *= BOHR_to_ANGSTROM
 
         # head of data columns

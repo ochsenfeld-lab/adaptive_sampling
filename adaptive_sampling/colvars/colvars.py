@@ -510,12 +510,14 @@ class CV:
         Args:
             pathcv: PathCV object that contains path_z
         """
-        if not hasattr(self, "pathcv"):
+        if not hasattr(self, "pathcv") and not hasattr(self, "pathcv"):
             from .path_cv import PathCV
             self.pathcv = PathCV(**pathcv)
             self.only_z = True
         elif not hasattr(self, "only_z") and not hasattr(pathcv, "path_z") :
             raise ValueError(" >>> ERROR: `pathcv` has to `requires_z`!")
+        else:
+            self.pathcv = pathcv
 
         if hasattr(self, "only_z"):
             # call PathCV calculation to get path_z
@@ -529,7 +531,7 @@ class CV:
             self.gradient = self.pathcv.grad_z
         else:
             self.cv = pathcv.path_z
-            self.gradinet = pathcv.grad_z
+            self.gradient = pathcv.grad_z
         return float(self.cv)
 
     def cec(self, pt_def: dict) -> float:
