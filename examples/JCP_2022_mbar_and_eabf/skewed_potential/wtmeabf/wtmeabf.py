@@ -38,13 +38,13 @@ the_md = MD(
     seed_in=seed,
 )
 the_abm = WTMeABF(
-    ext_sigma,
-    ext_mass,
-    height,
-    mtd_std,
     the_md,
     ats,
     nfull=N_full,
+    ext_sigma=ext_sigma,
+    ext_mass=ext_mass,
+    hill_height=height,
+    hill_std=mtd_std,
     hill_drop_freq=hill_drop_freq,
     well_tempered_temp=WT_dT,
     force_from_grid=True,

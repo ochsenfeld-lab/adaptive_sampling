@@ -22,7 +22,6 @@ class AshMD:
         target_pressure: target pressure in bar
         barostat_freq: frequency of barostat updates
         barostat_reporter: if not None, write barostat data to file
-        pressure_from_finite_difference: if True, apply finite difference to obtain more accurate pressure in barostat
         seed: random seed for MD
         active_atoms: list of active atoms, if None, all atoms are active
         mute: mute Calculator output
@@ -41,7 +40,6 @@ class AshMD:
         target_pressure: float = 1.0,
         barostat_freq: int = 25,
         barostat_reporter: str = "barostat.log",
-        pressure_from_finite_difference: bool = False,
         seed: int = 42,
         active_atoms: list = [],
         mute: bool = True,
@@ -121,7 +119,6 @@ class AshMD:
                 the_md=self,
                 frequency=barostat_freq,
                 target_pressure=target_pressure,
-                pressure_from_finite_difference=pressure_from_finite_difference,
                 barostat_reporter=barostat_reporter,
                 **kwargs,
             )
@@ -589,7 +586,7 @@ class MonteCarloBarostatASH:
         frequency: frequency of barostat updates
         pressure_from_finite_difference: if True, more accurate pressure, else calculate pressure from system forces, neglecting periodic boundary conditions 
         barostat_reporter: if not None, write barostat data to file
-        indexCenterMol: index of the molecule to move to the center of the periodic box
+        indexCenterMol: index of the molecule that is moved to the center of the periodic box
         useParmed: if True, use `parmed` to update periodic box vectors in OpenMMTheory, else use `Amberfiles`
     """
     
