@@ -28,7 +28,7 @@ class WTM(EnhancedSampling):
         hill_drop_freq: int = 100,
         well_tempered_temp: float = np.inf,
         bias_factor: float = None,
-        force_from_grid: bool = True,
+        force_from_grid: bool = False,
         verbose: bool = False,
         **kwargs,
     ):
@@ -389,7 +389,7 @@ class WTM(EnhancedSampling):
             print(f" >>> Info: Adaptive sampling restarted from {filename}!")
 
     def mtd_bias(self, cv: np.array) -> np.array:
-        """Calculate MtD bias force from KDE of hills
+        """Calculate MtD bias force from superposition of hills
         which is updated according to `self.update_freq`
 
         Args:

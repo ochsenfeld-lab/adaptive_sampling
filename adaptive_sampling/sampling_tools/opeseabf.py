@@ -39,7 +39,7 @@ class OPESeABF(eABF, OPES, EnhancedSampling):
         merge_threshold: threshold distance for kde-merging in units of std, `np.inf` disables merging
         recursive_merge: enables recursive merging until seperation of all kernels is above threshold distance
         bias_factor: bias factor of target distribution, default is `beta * energy_barr`
-        numerical_forces: read forces from grid instead of calculating sum of kernels in every step, only for 1D CVs
+        force_from_grid: read forces from grid instead of calculating sum of kernels in every step, only for 1D CVs
         equil_temp: equilibrium temperature of MD
         verbose: print verbose information
         kinetics: calculate necessary data to obtain kinetics of reaction
