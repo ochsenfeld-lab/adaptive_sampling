@@ -130,42 +130,44 @@ class GRAPH_CV:
             A[j, i] = a
 
     @staticmethod
-    def get_sigma_ij(type_i, type_j):
+    def get_sigma_ij(type_i, type_j, verbose: bool = False):
         """get equilibrium bond length from atom types
 
         Note: Values are taken from Zheng et al. (doi: 10.1021/jp500398k) and not further optimized
         """
+        from ..units import BOHR_to_ANGSTROM
         bond_type = "".join(sorted(type_i + type_j))
         if bond_type.upper() == "CC":
-            return 2.65
+            return 2.65 / BOHR_to_ANGSTROM
         elif bond_type.upper() == "OO":
-            return 2.65
+            return 2.65 / BOHR_to_ANGSTROM
         elif bond_type.upper() == "NN":
-            return 2.65
+            return 2.65 / BOHR_to_ANGSTROM
         elif bond_type.upper() == "CO":
-            return 2.65
+            return 2.65 / BOHR_to_ANGSTROM
         elif bond_type.upper() == "CN":
-            return 2.65
+            return 2.65 / BOHR_to_ANGSTROM
         elif bond_type.upper() == "NO":
-            return 2.65
+            return 2.65 / BOHR_to_ANGSTROM
         elif bond_type.upper() == "CH":
-            return 2.22
+            return 2.22 / BOHR_to_ANGSTROM
         elif bond_type.upper() == "HO":
-            return 2.22
+            return 2.22 / BOHR_to_ANGSTROM
         elif bond_type.upper() == "HN":
-            return 2.22
+            return 2.22 / BOHR_to_ANGSTROM
         elif bond_type.upper() == "HH":
-            return 2.22
+            return 2.22 / BOHR_to_ANGSTROM
         elif bond_type.upper() == "PP":
-            return 2.65
+            return 2.65 / BOHR_to_ANGSTROM
         elif bond_type.upper() == "HP":
-            return 2.22
+            return 2.22 / BOHR_to_ANGSTROM
         elif bond_type.upper() == "CP":
-            return 2.65
+            return 2.65 / BOHR_to_ANGSTROM
         elif bond_type.upper() == "NP":
-            return 2.65
+            return 2.65 / BOHR_to_ANGSTROM
         elif bond_type.upper() == "OP":
-            return 2.65
-
+            return 2.65 / BOHR_to_ANGSTROM
         else:
-            raise NotImplementedError(f" >>> Unknown bond type {bond_type}")
+            if verbose:
+                print(f" >>> WARNING: unknown bond type {bond_type}.")
+            return 2.65 / BOHR_to_ANGSTROM

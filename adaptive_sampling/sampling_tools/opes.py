@@ -1,443 +1,576 @@
-import sys, os
 import numpy as np
-from adaptive_sampling.sampling_tools.enhanced_sampling import EnhancedSampling
-from adaptive_sampling.units import *
-from .utils import correct_periodicity
-from .utils import welford_var
-
+from .enhanced_sampling import EnhancedSampling
+from .utils import correct_periodicity, welford_var
 
 class OPES(EnhancedSampling):
     """on-the-fly probability enhanced sampling
 
+    References:
+        OPES: M. Invernizzi, M. Parrinello; J. Phys. Chem. 2020; <https://doi.org/10.1021/acs.jpclett.0c00497>
+        OPES Explore: M. Invernizzi, M. Parrinello; J. Chem. Theory. Comput. 2022; <https://doi.org/10.1021/acs.jctc.2c00152>
+
     Args:
-        kernel_std: standard deviation of first kernel
-        explore: enables exploration mode
-        energy_barr: free energy barrier that the bias should help to overcome [kJ/mol]
-        update_freq: interval of md steps in which new kernels should be
-        approximate_norm: enables approximation of norm factor
-        exact_norm: enables exact calculation of norm factor, if both are enabled, exact is used every 100 updates
-        merge_threshold: threshold distance for kde-merging in units of std, "np.inf" disables merging
-        recursion_merge: enables recursive merging
-        bias_factor: allows setting a default bias factor instead of calculating it from energy barrier
-        print_pmf: enables calculation of pmf on the fly
-        adaptive_sigma: enables adaptive sigma calculation nontheless with rescaling
-        unbiased_time: time in update frequencies for unbiased estimation of sigma if no input is given
-        fixed_sigma: disables bandwidth rescaling and uses input sigma for all kernels
+        md: Object of the MD Interface
+        cv_def: definition of the Collective Variable (CV) (see adaptive_sampling.colvars)
+                [["cv_type", [atom_indices], minimum, maximum, bin_width], [possible second dimension]]
+        kernel_std: standard deviation of first kernel,
+                if None, kernel_std will be estimated from initial MD with `adaptive_std_freq*update_freq` steps
+        update_freq: interval of md steps in which new kernels should be created
+        energy_barr: free energy barrier that the bias should help to overcome [kJ/mol], default: 125.52 kJ/mol (30.0 kcal/mol)
+        bandwidth_rescaling: if True, `kernel_std` shrinks during simulation to refine KDE
+        adaptive_std: if adaptive kernel standard deviation is enabled, kernel_std will be updated according to std deviation of CV in MD
+        adaptive_std_freq: time for estimation of standard deviation is set to `update_freq * adaptive_std_freq` MD steps
+        explore: enables the OPES explore mode,
+        normalize: normalize OPES probability density over explored space
+        approximate_norm: enables linear scaling approximation of norm factor
+        merge_threshold: threshold distance for kde-merging in units of std, `np.inf` disables merging
+        recursive_merge: enables recursive merging until separation of all kernels is above threshold distance
+        bias_factor: bias factor of target distribution, default is `beta * energy_barr`
+        force_from_grid: read forces from grid instead of calculating sum of kernels in every step
+        equil_temp: equilibrium temperature of MD
+        verbose: print verbose information
+        kinetics: calculate necessary data to obtain kinetics of reaction
+        f_conf: force constant for confinement of CVs to the range of interest with harmonic walls
+        output_freq: frequency in steps for writing outputs
+        periodicity: periodicity of CVs, [[lower_boundary0, upper_boundary0], ...]
     """
 
     def __init__(
         self,
         *args,
-        kernel_std: np.array = np.array([None, None]),
+        kernel_std: np.array = None,
+        update_freq: int = 500,
+        energy_barr: float = 30.0 / 0.239006,  # 30 kcal/mol
+        bandwidth_rescaling: bool = True,
+        adaptive_std: bool = False,
+        adaptive_std_freq: int = 10,
         explore: bool = False,
-        energy_barr: float = 20.0,
-        update_freq: int = 1000,
+        normalize: bool = True,
         approximate_norm: bool = True,
-        exact_norm: bool = False,
         merge_threshold: float = 1.0,
-        recursion_merge: bool = False,
+        recursive_merge: bool = True,
         bias_factor: float = None,
-        print_pmf: bool = False,
-        adaptive_sigma: bool = False,
-        unbiased_time: int = 10,
-        fixed_sigma: bool = False,
+        force_from_grid: bool = True,
         **kwargs,
     ):
         super().__init__(*args, **kwargs)
+        from ..units import kB_in_atomic, atomic_to_kJmol, kJ_to_kcal
 
-        # Simulation Parameters
-        self.explore = explore
-        self.update_freq = update_freq
-        self.approx_norm = approximate_norm
-        self.exact_norm = exact_norm
-        if not self.approx_norm and not self.exact_norm:
-            raise ValueError(
-                " >>> Error: Either approximate or exact norm factor calculation must be enabled!"
-            )
-        self.adaptive_sigma = adaptive_sigma
-        self.fixed_sigma = fixed_sigma
-        if self.fixed_sigma and self.adaptive_sigma:
-            raise ValueError(
-                " >>> Error: Adaptive and fixed sigma cannot be enabled at the same time!"
-            )
-        self.merge = False if merge_threshold == np.inf else True
-        self.merge_threshold = merge_threshold
-        self.recursive = recursion_merge
-        s, _ = self.get_cv(**kwargs)
-        self.print_pmf = print_pmf
-        self.sigma_estimate = True if (kernel_std == None).all() else False
-        if (kernel_std == None).any() and not (kernel_std == None).all():
-            raise ValueError(
-                " >>> Error: Kernel standard deviation must be set either all None or all values!"
-            )
-        if self.adaptive_sigma and not self.sigma_estimate:
-            self.sigma_estimate == True
-            print(
-                "For adaptive sigma there is only sigma estimation available, which has been automatically activated."
-            )
-
-        # Constants
-        self.energy_barr = energy_barr * kJ_to_kcal
-        self.beta = 1 / (self.equil_temp * kB_in_atomic * atomic_to_kJmol * kJ_to_kcal)
-        self.gamma = (
-            self.beta * self.energy_barr if bias_factor == None else bias_factor
-        )  # Enable setting of bias factor
-        self.gamma_prefac = (
-            self.gamma - 1 if explore else 1 - 1 / self.gamma
-        )  # Differentiate between explore and normal opes
-        self.temperature = self.equil_temp
-        self.epsilon = np.exp((-self.beta * self.energy_barr) / self.gamma_prefac)
-
-        # Initial values
-        self.prob_dist = 1.0
-        self.deriv_prob_dist = 0.0
-        self.potential = 0.0
-        self.sum_weights = np.power(self.epsilon, self.gamma_prefac)
-        self.sum_weights_square = self.sum_weights * self.sum_weights
-        self.norm_factor = 1 / self.sum_weights
-        self.uprob_old = self.norm_factor * self.sum_weights
-        self.md_state = self.the_md.get_sampling_data()
-        if (kernel_std != None).all():
-            self.sigma_0 = self.unit_conversion_cv(np.asarray(kernel_std))[
-                0
-            ]  # Standard deviation of first kernel converted to atomic units
-        self.n = 0  # Counter for number of updates
-        # self.pmf = 0.0
-        self.adaptive_sigma_stride = unbiased_time * self.update_freq
+        # kernel standard deviation
+        self.bandwidth_rescaling = bandwidth_rescaling
+        self.adaptive_std = adaptive_std
+        self.adaptive_std_stride = adaptive_std_freq * update_freq
         self.adaptive_counter = 0
         self.welford_m2 = np.zeros(self.ncoords)
         self.welford_mean = np.zeros(self.ncoords)
 
-        # Kernels
-        self.kernel_height = []
-        self.kernel_center = []
-        self.kernel_sigma = []
+        if not hasattr(kernel_std, "__len__") and not kernel_std:
+            self.initial_sigma_estimate = True
+        elif hasattr(kernel_std, "__len__") and any(std is None for std in kernel_std):
+            self.initial_sigma_estimate = True
+        else:
+            self.initial_sigma_estimate = False
 
-        # Output
-        self.output_sum_weigths = []
-        self.output_sum_weigths_square = []
-        self.output_norm_factor = []
-        self.output_bias_pot = []
-        self.merge_count = 0
-        self.uprob_print = self.uprob_old
-        self.n_eff = 1.0
+        if self.initial_sigma_estimate:
+            self.sigma_0 = np.full((self.ncoords,), np.nan)
+        elif not hasattr(kernel_std, "__len__"):
+            self.sigma_0 = self.unit_conversion_cv(np.asarray([kernel_std]))[0]
+        else:
+            self.sigma_0 = self.unit_conversion_cv(np.asarray(kernel_std))[0]
 
-        # Error catching
-        if self.kinetics == True and self.ncoords > 1:
+        # other parameters
+        self.explore = explore
+        self.update_freq = update_freq
+        self.approximate_norm = approximate_norm
+        self.merge_threshold = merge_threshold
+        self.merge = False if self.merge_threshold == np.inf else True
+        if self.verbose and self.merge_threshold <= 0.0:
+            raise ValueError(" >>> OPES: Merge threshold should be > 0")
+        self.recursive_merge = recursive_merge
+        self.bias_factor = bias_factor
+        self.normalize = normalize
+        self.numerical_forces = force_from_grid
+
+        self.beta = 1.0 / (kB_in_atomic * self.equil_temp)
+        self.energy_barr = energy_barr / atomic_to_kJmol
+        if not energy_barr > 0.0:
+            raise ValueError(" >>> OPES: The barrier should be > 0 ")
+        self.gamma = (
+            self.beta * self.energy_barr if bias_factor == None else bias_factor
+        )
+        if self.gamma <= 1.0:
+            raise ValueError(" >>> OPES: The bias factor should be > 1")
+        if self.gamma == np.inf:
+            self.gamma_prefac = 1.0
+            self.gamma = np.inf
+        else:
+            self.gamma_prefac = self.gamma - 1 if self.explore else 1 - 1 / self.gamma
+
+        self.epsilon = np.exp((-self.beta * self.energy_barr) / self.gamma_prefac)
+        if self.epsilon < 0.0:
             raise ValueError(
-                " >>> Error: Kinetics can only be calculated for one-dimensional CV space!"
+                " >>> OPES: epsilon needs to be positive. The `energy_barr` might be too high."
             )
+        if self.normalize:
+            self.norm_factor = np.power(self.epsilon, self.gamma_prefac)
+        else:
+            self.norm_factor = 1.0
+
+        self.n = 0
+        self.sum_weights = (
+            np.power(self.epsilon, self.gamma_prefac) if self.normalize else 1.0
+        )
+        self.sum_weights2 = np.square(self.sum_weights) if self.normalize else 1.0
+        self.n_eff = (
+            np.square(1.0 + self.sum_weights) / (1.0 + self.sum_weights2)
+            if not self.explore
+            else self.n
+        )
+        self.KDE_norm = self.sum_weights if not self.explore else self.n
+        self.old_KDE_norm = np.copy(self.KDE_norm)
+        self.old_nker = 0
+        self.rct = (1.0 / self.beta) * np.log(self.sum_weights)
+
+        self.kernel_center = []
+        self.kernel_height = []
+        self.kernel_std = []
+        self.bias_pot_traj = []
+        self.rct_traj = []
+        self.zed_traj = []
+
+        self.bias_potential = np.copy(self.histogram)
+        self.bias_pot = 0.0
+        self.bias_pot_traj = []
+
+        if self.verbose:
+            print(" >>> INFO: OPES Parameters:")
+            print("\t ---------------------------------------------")
+            print(
+                f"\t Kernel_std:\t{self.sigma_0 if not self.initial_sigma_estimate else f'estimate from {self.adaptive_std_stride} steps'}"
+            )
+            print(f"\t Rescaling:\t{self.bandwidth_rescaling}")
+            print(
+                f"\t Adaptive:\t{self.adaptive_std}\t({self.adaptive_std_stride} steps)"
+            )
+            print(
+                f"\t Normalize:\t{self.normalize}\t(approximated: {self.approximate_norm})"
+            )
+            print(f"\t Explore:\t{self.explore}")
+            print(
+                f"\t Barrier:\t{self.energy_barr*atomic_to_kJmol*kJ_to_kcal} kcal/mol"
+            )
+            print(f"\t Bias factor:\t{self.gamma}")
+            print(f"\t Read force:\t{self.numerical_forces}")
+            print(
+                f"\t Kernel merge:\t{self.merge}\t(threshold: {self.merge_threshold})"
+            )
+            print("\t ---------------------------------------------")
 
     def step_bias(
         self,
-        write_output: bool = True,
-        write_traj: bool = True,
-        output_file: str = "opes.out",
         traj_file: str = "CV_traj.dat",
+        out_file: str = "opes.out",
         restart_file: str = "restart_opes",
         **kwargs,
-    ):
-        """Applies OPES to MD: pulls sampling data and CV, drops a gaussian every Udate_freq MD-steps, calculates the bias force
-
-        Args:
-            write_output: enables output file
-            write_traj: enables traj file
+    ) -> np.array:
+        """Apply OPES bias to MD
 
         Returns:
-            bias_force: bias_force on location in CV space in atomic units
+            bias_force: Bias force that has to be added to system forces
         """
-        # Load md data
+        from ..units import atomic_to_kJmol
         self.md_state = self.the_md.get_sampling_data()
-        (s_new, delta_s_new) = self.get_cv(**kwargs)
+        (cv, grad_cv) = self.get_cv(**kwargs)
 
-        # Corretion for kinetics
         if self.kinetics:
-            self._kinetics(delta_s_new)
+            self._kinetics(grad_cv)
 
-        # Calculate derivative of potential
-        forces = self.opes_bias(s_new)
-
-        # Calculate bias force
-        bias_force = np.zeros_like(self.the_md.coords, dtype=float)
+        # get OPES bias force
+        forces = self.opes_bias(cv)
+        bias_force = self.harmonic_walls(cv, grad_cv)
         for i in range(self.ncoords):
-            bias_force += forces[i] * delta_s_new[i]
-        bias_force = bias_force / kJ_to_kcal / atomic_to_kJmol
+            bias_force += forces[i] * grad_cv[i]
 
-        bias_force += self.harmonic_walls(s_new, delta_s_new)  # , 1.6 * self.hill_std)
+        # store biased histogram along CV for output
+        if out_file and self._check_boundaries(cv):
+            bink = self.get_index(cv)
+            self.histogram[bink[1], bink[0]] += 1
 
-        # Save values for traj
-        self.traj = np.append(self.traj, [s_new], axis=0)
-        self.epot.append(self.md_state.epot)
-        self.temp.append(self.md_state.temp)
-        self.output_bias_pot.append(self.potential)
-        self.output_sum_weigths.append(self.sum_weights)
-        self.output_sum_weigths_square.append(self.sum_weights_square)
-        self.output_norm_factor.append(self.norm_factor)
+        # Save values for traj output
+        if traj_file:
+            self.traj = np.append(self.traj, [cv], axis=0)
+            self.epot.append(self.md_state.epot)
+            self.temp.append(self.md_state.temp)
+            self.bias_pot_traj.append(self.bias_pot)
+            self.zed_traj.append(self.norm_factor)
+            self.rct_traj.append(self.rct)
 
         # Write output
         if self.md_state.step % self.out_freq == 0:
-
-            if write_traj:
+            if traj_file and len(self.traj) >= self.out_freq:
                 self.write_traj(filename=traj_file)
-
-            if write_output:
-                # self.write_output(filename=output_file)
+            if out_file:
+                self.pmf = self.get_pmf()
+                output = {
+                    "hist": self.histogram,
+                    "free energy": self.pmf * atomic_to_kJmol,
+                    "OPES Pot": self.bias_potential * atomic_to_kJmol,
+                }
+                self.write_output(output, filename=out_file)
+            if restart_file:
                 self.write_restart(filename=restart_file)
 
         return bias_force
 
-    def opes_bias(self, s_new: np.array) -> np.array:
-        """calculate the bias force for a given location in CV space by the OPES algorithm e.g. for extended system usecase
-
-        Args:
-            s_new: location in CV space for which the bias force is wanted, for extended system its cv position of fictional particle
+    def get_pmf(self) -> np.array:
+        """Calculate current PMF estimate on `self.grid`
 
         Returns:
-            bias_force: bias force on location in CV space in atomic units
+            pmf: current PMF estimate from OPES kernels
         """
-        if self.verbose and self.md_state.step % self.update_freq == 0:
-            print(
-                "###############################################################################"
-            )
-            print("OPES bias function called at CV point s_new: ", s_new)
+        pmf = (
+            -self.bias_potential / self.gamma_prefac
+            if not self.explore
+            else -self.bias_potential
+        )
+        pmf -= pmf.min()
+        return pmf
 
-        # Unbiased estimation of sigma
-        if self.sigma_estimate and self.md_state.step < self.adaptive_sigma_stride:
-            self.adaptive_counter += 1
-            tau = self.adaptive_sigma_stride
-            if self.adaptive_counter < self.adaptive_sigma_stride:
-                tau = self.adaptive_counter
-            self.welford_mean, self.welford_m2, self.welford_var = welford_var(
-                self.md_state.step, self.welford_mean, self.welford_m2, s_new, tau
-            )
-            self.sigma_0 = np.sqrt(self.welford_var)
-            return np.zeros_like(self.the_md.coords)
+    def write_traj(self, filename="CV_traj.dat"):
+        data = {
+            "Epot [Ha]": self.epot,
+            "T [K]": self.temp,
+            "Biaspot [Ha]": self.bias_pot_traj,
+            "Zed": self.zed_traj,
+            "C(t) [Ha]": self.rct_traj,
+        }
+        self._write_traj(data, filename=filename)
 
-        # Update sigma if adaptive sigma is enabled
-        if self.adaptive_sigma:
-            self.adaptive_counter += 1
-            tau = self.adaptive_sigma_stride
-            if self.adaptive_counter < self.adaptive_sigma_stride:
-                tau = self.adaptive_counter
-            self.welford_mean, self.welford_m2, self.welford_var = welford_var(
-                self.md_state.step, self.welford_mean, self.welford_m2, s_new, tau
-            )
-            factor = self.gamma if not self.explore else 1.0
-            self.sigma_0 = np.sqrt(self.welford_var / factor)
+        # Reset trajectories to save memory
+        self.traj = np.array([self.traj[-1]])
+        self.epot = [self.epot[-1]]
+        self.temp = [self.temp[-1]]
+        self.bias_pot_traj = [self.bias_pot_traj[-1]]
+        self.zed_traj = [self.zed_traj[-1]]
+        self.rct_traj = [self.rct_traj[-1]]
 
-        # Call update function to place kernel
-        if self.md_state.step % self.update_freq == 0:
-            if self.verbose and self.md_state.step % self.update_freq == 0:
-                print(
-                    "--------------------OPES update KDE started--------------------------------------"
-                )
-            self.update_kde(s_new)
-
-        # Calculate new probability and its derivative
-        KDE_norm = self.sum_weights if not self.explore else self.n
-        val_gaussians = self.get_val_gaussian(s_new)
-        prob_dist = np.sum(val_gaussians) / KDE_norm
-
-        s_diff = s_new - np.asarray(self.kernel_center)
-        for i in range(self.ncoords):
-            s_diff[:, i] = correct_periodicity(s_diff[:, i], self.periodicity[i])
-
-        deriv_prob_dist = (
-            np.sum(
-                -val_gaussians * np.divide(s_diff, np.asarray(self.kernel_sigma)).T,
-                axis=1,
-            )
-            / KDE_norm
+    def shared_bias(self):
+        raise ValueError(
+            " >>> ERROR: Multiple-walker shared bias not available for OPES!"
         )
 
-        self.prob_dist = prob_dist
-        self.deriv_prob_dist = deriv_prob_dist
-
-        # Calculate Potential
-        self.potential = self.calc_pot(prob_dist)
-
-        # Calculate forces
-        forces = self.calculate_forces(prob_dist, deriv_prob_dist)
-
-        if self.verbose and self.md_state.step % self.update_freq == 0:
-            print("Final values for OPES bias calculation:")
-            print(
-                "Probabiliy distribution ",
-                prob_dist,
-                "and its derivative ",
-                deriv_prob_dist,
-            )
-            print(
-                "Potential ",
-                self.potential,
-                "and undirected forces derivated from it ",
-                forces,
-            )
-
-        return forces
-
-    def update_kde(self, s_new: np.array):
-        """main function in algorithm; calls compression and calculates weigths
+    def write_restart(self, filename: str = "restart_opes"):
+        """Dumps state of OPES to restart file
 
         Args:
-            s_new: center of new gaussian
+            filename: name of restart file
+        """
+        self._write_restart(
+            filename=filename,
+            sum_weights=self.sum_weights,
+            sum_weights_square=self.sum_weights2,
+            norm_factor=self.norm_factor,
+            height=self.kernel_height,
+            center=self.kernel_center,
+            sigma=self.kernel_std,
+            explore=self.explore,
+            n=self.n,
+        )
 
+    def restart(self, filename: str = "restart_opes"):
+        """Restart OPES from previous simulation
+
+        Args:
+            filename: name of restart
+        """
+        try:
+            data = np.load(filename + ".npz", allow_pickle=True)
+        except:
+            raise OSError(f" >>> ERROR: restart file {filename}.npz not found!")
+
+        # Load dictionary entries from restart file
+        self.sum_weights = float(data["sum_weights"])
+        self.sum_weights2 = float(data["sum_weights_square"])
+        self.norm_factor = float(data["norm_factor"])
+        self.kernel_height = data["height"]
+        self.kernel_center = data["center"]
+        self.kernel_std = data["sigma"]
+        self.explore = data["explore"]
+        self.n = data["n"]
+        if self.verbose and self.md_state.step % self.update_freq == 0:
+            print(f" >>> Info: Adaptive sampling restarted from {filename}!")
+
+    def opes_bias(self, cv: np.array) -> np.array:
+        """Calculate OPES bias force from KDE of probability density
+        which is updated according to `self.update_freq`
+
+        Args:
+            cv: new value of CV
+
+        Returns:
+            bias force: len(ncoords) array of bias forces
+        """
+        # adaptive kernel `sigma_0` estimate from MD
+        if (
+            self.initial_sigma_estimate
+            and self.md_state.step < self.adaptive_std_stride
+        ):
+            self.sigma_0 = self.estimate_kernel_std(cv)
+            return np.zeros_like(self.the_md.coords)
+
+        elif self.initial_sigma_estimate or self.adaptive_std:
+            std = self.estimate_kernel_std(cv)
+            if self.initial_sigma_estimate:
+                self.sigma_0 = std
+                self.initial_sigma_estimate = False
+                if self.verbose:
+                    print(
+                        f" >>> INFO: kernel standard deviation for OPES is set to {self.sigma_0}"
+                    )
+            elif self.md_state.step >= self.adaptive_std_stride:
+                self.sigma_0 = std
+                if not self.explore:
+                    self.sigma_0 /= np.sqrt(self.gamma)
+
+        # get bias potential and forces
+        if self.numerical_forces and self._check_boundaries(cv):
+            idx = self.get_index(cv)
+            self.bias_pot = self.bias_potential[idx[1], idx[0]]
+            opes_force = [self.bias[i][idx[1], idx[0]] for i in range(self.ncoords)]
+        else:
+            gaussians, kde_derivative = self.calc_gaussians(cv, requires_grad=True)
+            self.prob_dist = np.sum(gaussians) / self.KDE_norm
+            self.bias_pot = self.calc_potential(self.prob_dist)
+            opes_force = self.calc_forces(self.prob_dist, kde_derivative)
+
+        # OPES KDE update
+        if self.md_state.step % self.update_freq == 0:
+            self.update_kde(cv)
+
+        return opes_force
+
+    def update_kde(self, cv: np.array):
+        """on-the-fly update of kernel density estimation of probability density along CVs
+
+        Args:
+            CV: new value of CVS
         """
         self.delta_kernel_height = []
         self.delta_kernel_center = []
         self.delta_kernel_sigma = []
 
-        self.n += 1
-        KDE_norm = self.sum_weights if not self.explore else self.n
-
-        # Calculate probability
-        prob_dist = np.sum(self.get_val_gaussian(s_new)) / KDE_norm
-        self.prob_dist = prob_dist
-
-        # Calculate bias potential
-        potential = self.calc_pot(prob_dist)
+        self.n += 1  # counter for total kernels
 
         # Calculate weight coefficients
-        weigth_coeff = np.exp(self.beta * potential)
-        self.sum_weights += weigth_coeff
-        self.sum_weights_square += weigth_coeff * weigth_coeff
+        weight_coeff = np.exp(self.beta * self.bias_pot)
+        self.sum_weights += weight_coeff
+        self.sum_weights2 += weight_coeff * weight_coeff
+        self.KDE_norm = self.sum_weights if not self.explore else self.n
 
         # Bandwidth rescaling
         self.n_eff = (
-            np.square(1 + self.sum_weights) / (1 + self.sum_weights_square)
+            np.square(1.0 + self.sum_weights) / (1.0 + self.sum_weights2)
             if not self.explore
             else self.n
         )
+        self.rct = (1.0 / self.beta) * np.log(self.sum_weights / self.n)
 
-        if not self.fixed_sigma and len(self.kernel_sigma) > 0:
+        if self.bandwidth_rescaling and len(self.kernel_std) > 0:
             sigma_i = self.sigma_0 * np.power(
-                (self.n_eff * (self.ncoords + 2) / 4), -1 / (self.ncoords + 4)
+                (self.n_eff * (self.ncoords + 2.0) / 4.0), -1.0 / (self.ncoords + 4.0)
             )
         else:
-            sigma_i = self.sigma_0
+            sigma_i = np.copy(self.sigma_0)
 
-        height = (
-            weigth_coeff * np.prod(self.sigma_0 / sigma_i) if not self.explore else 1.0
-        )
+        height = np.prod(self.sigma_0 / sigma_i)
+        if not self.explore:
+            height *= weight_coeff
 
         # Kernel Density
-        self.compression_check(height, s_new, sigma_i)
+        self.add_kernel(height, cv, sigma_i)
 
         # Calculate normalization factor
-        if self.exact_norm and self.approx_norm:
-            if self.n % 100 == 0:
-                self.norm_factor = self.calc_norm_factor(approximate=False)
-            self.norm_factor = self.calc_norm_factor(approximate=True)
-        else:
-            self.norm_factor = self.calc_norm_factor(approximate=self.approx_norm)
+        if self.normalize:
+            self.norm_factor = self.calc_norm_factor(approximate=self.approximate_norm)
+        self.grid_potential()
 
-        # Calculate pmf on the fly if enabled
-        if self.print_pmf:
-            self.pmf = self.get_pmf()
-
-        if self.verbose and self.md_state.step % self.update_freq == 0:
-            print("Finished update function with Kernels:")
-            self.show_kernels()
-            print(
-                "-------------------------------------------------------------------------------"
-            )
-
-    def get_val_gaussian(
-        self,
-        s_new: np.array,
-    ) -> np.array:
-
-        """get the values of all gaussians at point s_new
+    def calc_gaussians(self, cv, requires_grad: bool = False) -> np.array:
+        """Get normalized value of gaussian hills
 
         Args:
-            s_new: center of new gaussian
+            cv: value of CV where the kernels should be evaluated
+            requires_grad: if True, accumulated gradient of KDE is returned as second argument
 
         Returns:
-            val_gaussians: array of all values of all kernels at s
+            gaussians: values of gaussians at CV
+            kde_derivative: derivative of KDE, only if requires_grad
         """
+
         if len(self.kernel_center) == 0:
-            return np.zeros(1)
+            if requires_grad:
+                return 0.0, np.zeros(self.ncoords)
+            return 0.0
 
-        s_diff = s_new - np.asarray(self.kernel_center)
-
-        # Correct Periodicity of spatial distances
+        # distance to kernel centers
+        s_diff = cv - np.asarray(self.kernel_center)
         for i in range(self.ncoords):
             s_diff[:, i] = correct_periodicity(s_diff[:, i], self.periodicity[i])
 
-        # Calculate values of Gaussians at center of kernel currently in loop and sum them
-        val_gaussians = np.asarray(self.kernel_height) * np.exp(
+        # evaluate values of kernels at cv
+        gaussians = np.asarray(self.kernel_height) * np.exp(
             -0.5
-            * np.sum(
-                np.square(np.divide(s_diff, np.asarray(self.kernel_sigma))), axis=1
+            * np.sum(np.square(np.divide(s_diff, np.asarray(self.kernel_std))), axis=1)
+        )
+        if requires_grad:
+            kde_derivative = (
+                np.sum(
+                    -gaussians
+                    * np.divide(s_diff, np.square(np.asarray(self.kernel_std))).T,
+                    axis=1,
+                )
+                / self.KDE_norm
             )
-        )
+            return gaussians, kde_derivative
 
-        return val_gaussians
+        return gaussians
 
-    def calc_pot(self, prob_dist: float):
-        """calculate the potential of given location
-
-        Args:
-            prob_dist: local probability distribution on which potential shall be calculated
-
-        Returns:
-            potential: potential for given probability distribution
-        """
-        potential = (self.gamma_prefac / self.beta) * np.log(
-            prob_dist / self.norm_factor + self.epsilon
-        )
-        return potential
-
-    def calculate_forces(self, prob_dist: float, deriv_prob_dist: float) -> float:
-        """calculate the forces as derivative of potential
+    def add_kernel(self, h_new: float, s_new: np.array, std_new: np.array):
+        """Add new Kernel to KDE
 
         Args:
-            prob_dist: probability disitrbution on wanted location and its derivative
+            h_new: kernel height
+            s_new: kernel position
+            std_new: kernel standard deviation
+        """
+        self.kernel_height.append(h_new)
+        self.kernel_center.append(s_new)
+        self.kernel_std.append(std_new)
+
+        kernel_min_ind, min_distance = self.calc_min_dist(s_new)
+
+        # Recursive merging if enabled and distances under threshold
+        while (
+            self.merge
+            and np.all(min_distance < self.merge_threshold)
+            and len(self.kernel_center) > 1
+        ):
+
+            # Merge again
+            h_new, s_new, std_new = self.merge_kernels(
+                kernel_min_ind, h_new, s_new, std_new
+            )
+
+            # Calculate new distances to update while condition
+            kernel_min_ind, min_distance = self.calc_min_dist(s_new)
+
+            if not self.recursive_merge:
+                break
+
+        # Append final kernel delta list
+        self.delta_kernel_height.append(h_new)
+        self.delta_kernel_center.append(s_new)
+        self.delta_kernel_sigma.append(std_new)
+
+    def merge_kernels(
+        self, kernel_min_ind: int, h_new: float, s_new: np.array, std_new: np.array
+    ) -> tuple:
+        """Merge two kernels
+
+        Args:
+            kernel_min_ind: index of kernel that should be merged with new kernel
+            h_new: new kernel height
+            s_new: new kernel position
+            std_new: new kernel standard deviation
 
         Returns:
-            deriv_pot: derivative of potential for location s
+            h_merged: height of merged kernel
+            s_merged: position of merged kernel
+            std_merged: standard deviation of merged kernel
         """
-        deriv_pot = (
-            (self.gamma_prefac / self.beta)
-            * (1 / ((prob_dist / self.norm_factor) + self.epsilon))
-            * (deriv_prob_dist / self.norm_factor)
+        # Calculate properties of merged kernel
+        h_merge = self.kernel_height[kernel_min_ind] + h_new
+        s_merge = (1.0 / h_merge) * (
+            self.kernel_height[kernel_min_ind] * self.kernel_center[kernel_min_ind]
+            + h_new * s_new
         )
-        return deriv_pot
+        var_merge = (1.0 / h_merge) * (
+            self.kernel_height[kernel_min_ind]
+            * (
+                np.square(self.kernel_std[kernel_min_ind])
+                + np.square(self.kernel_center[kernel_min_ind])
+            )
+            + h_new * (np.square(std_new) + np.square(s_new))
+        ) - np.square(s_merge)
+
+        # Overwrite newly added kernel with properties of the merged one
+        self.kernel_height[-1] = h_merge
+        self.kernel_center[-1] = s_merge
+        self.kernel_std[-1] = np.sqrt(var_merge)
+
+        # Write compressed kernel that was merged and is about to be deleted in delta list with negative height
+        self.delta_kernel_height.append(-self.kernel_height[kernel_min_ind])
+        self.delta_kernel_center.append(self.kernel_center[kernel_min_ind])
+        self.delta_kernel_sigma.append(self.kernel_std[kernel_min_ind])
+
+        # Delete compressed kernel that was merged with new one
+        del self.kernel_height[kernel_min_ind]
+        del self.kernel_center[kernel_min_ind]
+        del self.kernel_std[kernel_min_ind]
+
+        # Count merging events
+        # self.merge_count += 1
+
+        return h_merge, s_merge, np.sqrt(var_merge)
+
+    def calc_min_dist(self, cv: np.array):
+        """Get minimal Mahalanobis distance to kernels
+
+        Args:
+            cv: value to calc distance to
+
+        Returns:
+            kernel_min_ind: index of nearest kernel
+            min_distance: distance to nearest kernel
+        """
+        s_diff = cv - np.asarray(self.kernel_center)
+        for i in range(self.ncoords):
+            s_diff[:, i] = correct_periodicity(s_diff[:, i], self.periodicity[i])
+
+        distance = np.sqrt(
+            np.sum(np.square(np.divide(s_diff, np.asarray(self.kernel_std))), axis=1)
+        )
+
+        kernel_min_ind = np.argmin(distance[:-1]) if len(distance) > 1 else None
+        min_distance = distance[kernel_min_ind]
+
+        return kernel_min_ind, min_distance
 
     def calc_norm_factor(self, approximate: bool = True):
-        """approximatec the norm factor with respect to existing gaussians by adding the change for newly added kernel
-
-        Args:
-            approx_for_loop: enable double-for loop for approximation for testin
-            approximate: enable normalization factor approximation with delta_kernel lists
+        """Norm factor of probability density
 
         Returns:
-            delta_uprob: non normalized sum over the gauss values for the newly placed kernel
+            norm_factor: normalization factor for probability density from kernels
         """
-        S = self.sum_weights if not self.explore else self.n
-        N = len(self.kernel_center)
+        n_ker = len(self.kernel_center)
 
-        if approximate:
-            delta_uprob = 0.0
+        if approximate and n_ker > 10:
+            # approximate norm factor to avoid O(N_kernel^2) scaling of exact evaluation
+            delta_sum_uprob = 0.0
             for j, s in enumerate(self.delta_kernel_center):
 
-                # Sign for correct probability correction from deleted, merged or added kernels
+                # Calculate change in probability for changed kernels from delta kernel list
                 sign = -1.0 if self.delta_kernel_height[j] < 0 else 1.0
-
-                # Calculate spatial distances and correct periodicity
                 s_diff = s - np.asarray(self.kernel_center)
                 for i in range(self.ncoords):
                     s_diff[:, i] = correct_periodicity(
                         s_diff[:, i], self.periodicity[i]
                     )
-
-                # Calculate change in probability for changed kernels by delta kernel list
-                delta_sum_uprob = sign * np.sum(
+                delta_sum_uprob += sign * np.sum(
                     np.asarray(self.kernel_height)
                     * np.exp(
                         -0.5
                         * np.sum(
-                            np.square(np.divide(s_diff, np.asarray(self.kernel_sigma))),
+                            np.square(np.divide(s_diff, np.asarray(self.kernel_std))),
                             axis=1,
                         )
                     )
@@ -456,439 +589,80 @@ class OPES(EnhancedSampling):
                         )
                     )
                 )
-                delta_uprob += delta_sum_uprob
-
-            # Get old uprob from denormalized old norm factor and add change in uprob then calculate new norm factor and set
-            new_uprob = self.uprob_old + delta_uprob
-            self.uprob_old = new_uprob
-            self.uprob_print = new_uprob
-            norm_factor = new_uprob / N / S
-
-            return norm_factor
+            sum_uprob = (
+                self.norm_factor * self.old_KDE_norm * self.old_nker + delta_sum_uprob
+            )
 
         else:
-            uprob = 0.0
-            # Loop over all kernels with all kernels to get exact uprob
+            # analytical calculation of norm factor, inefficient for high number of kernels
+            sum_uprob = 0.0
             for s in self.kernel_center:
-                sum_gaussians = np.sum(self.get_val_gaussian(s))
-                uprob += sum_gaussians
+                sum_gaussians = np.sum(self.calc_gaussians(s))
+                sum_uprob += sum_gaussians
 
-            # Get norm factor from exact uprob and set it
-            self.uprob_old = uprob
-            norm_factor = uprob / N / S
-            return norm_factor
+        # store KDEnorm and nker for next update
+        self.old_KDE_norm = np.copy(self.KDE_norm)
+        self.old_nker = n_ker
 
-    def compression_check(self, h_new: float, s_new: np.array, std_new: np.array):
-        """kde compression check: new kernel added in update function is tested for being to near to an existing compressed one;
-         if so, merge kernels and delete added, check recursive, otherwise skip
+        return sum_uprob / n_ker / self.KDE_norm
 
-        Args:
-            heigth: weighted heigth of new kernel
-            s_new: center of new kernel
-            std_new: stndard deviation of new kernel
+    def grid_potential(self):
+        """Calculate bias potential and forces from kernels in bins of `self.grid`
+
+        TODO: update prob_dist and derivative according to `self.delta_kernel_*` lists
+              to avoid unfavourable O(N_gridpoints*N_kernels) scaling
         """
-        # Set up and update kernel lists
-
-        if self.verbose and self.md_state.step % self.update_freq == 0:
-            print(
-                "....................Compression Check started......................................"
-            )
-        self.kernel_height.append(h_new)
-        self.kernel_center.append(s_new)
-        self.kernel_sigma.append(std_new)
-        if self.verbose and self.md_state.step % self.update_freq == 0:
-            print("Kernel lists after adding new kernel at CV location:")
-            self.show_kernels()
-
-        kernel_min_ind, min_distance = self.calc_min_dist(s_new)
-
-        if self.verbose and self.md_state.step % self.update_freq == 0:
-            print(
-                "Kernel added: ",
-                h_new,
-                self.kernel_center[-1],
-                std_new,
-                "with mininmal distance: ",
-                min_distance,
-                " to nearest kernel: ",
-                kernel_min_ind,
-            )
-            if min_distance < self.merge_threshold:
-                print(
-                    "The minimal distance is below the merge threshold therefore merging is needed."
-                )
-            else:
-                print(
-                    "The minimal distance is above the merge threshold therefore no merging is needed."
-                )
-
-        # Recursive merging if enabled and distances under threshold
-        while (
-            self.merge
-            and np.all(min_distance < self.merge_threshold)
-            and len(self.kernel_center) > 1
-        ):
-            if self.verbose and self.md_state.step % self.update_freq == 0:
-                print("Merging started in while loop...")
-                print(
-                    "Kernel to merge last added one into: ",
-                    self.kernel_height[kernel_min_ind],
-                    self.kernel_center[kernel_min_ind],
-                    self.kernel_sigma[kernel_min_ind],
-                )
-            # Merge again
-            h_new, s_new, std_new = self.merge_kernels(
-                kernel_min_ind, h_new, s_new, std_new
-            )
-
-            # Calculate new distances to update while condition
-            kernel_min_ind, min_distance = self.calc_min_dist(s_new)
-
-            if not self.recursive:
-                break
-
-        # Append final merged kernel or if no merging occured just the new kernel to delta list
-        self.delta_kernel_height.append(h_new)
-        self.delta_kernel_center.append(s_new)
-        self.delta_kernel_sigma.append(std_new)
-
-        if self.verbose and self.md_state.step % self.update_freq == 0:
-            print("Exited Compression Check...")
-            print(
-                "..............................................................................."
-            )
-
-    def calc_min_dist(self, s_new: np.array):
-        """calculate distances to all compressed kernels and get the minimal distance as well as the corresponding kernel
-
-        Args:
-        s_new: center of new kernel for which the distances are needed
-
-        Returns:
-        kernel_min_ind: index of kernel in self.kernel lists that is nearest to new one
-        min_distance: distance to metioned kernel
-        """
-        # Calculate spatial distances of sampling point and all kernel centers
-        s_diff = s_new - np.asarray(self.kernel_center)
-
-        # Correct Periodicity of spatial distances
-        for i in range(self.ncoords):
-            s_diff[:, i] = correct_periodicity(s_diff[:, i], self.periodicity[i])
-
-        distance = np.sqrt(
-            np.sum(np.square(np.divide(s_diff, np.asarray(self.kernel_sigma))), axis=1)
-        )
-        kernel_min_ind = np.argmin(distance[:-1]) if len(distance) > 1 else None
-        min_distance = distance[kernel_min_ind]
-
-        return kernel_min_ind, min_distance
-
-    def merge_kernels(
-        self, kernel_min_ind: int, h_new: float, s_new: np.array, std_new: np.array
-    ) -> list:
-        """merge two kernels calculating the characteristics of a new one with respect to the old ones and overwrite old one with merged
-
-        Args:
-            kernel_mind_ind: index of nearest kernel, which is to be merged
-            h_new: height of new kernel
-            s_new: center of new kernel
-            std_new: standard deviation of new kernel
-
-        Returns:
-            height, center and standard deviation of merged kernel
-        """
-        # Calculate properties of merged kernel
-        h_merge = self.kernel_height[kernel_min_ind] + h_new
-        s_merge = (1.0 / h_merge) * (
-            self.kernel_height[kernel_min_ind] * self.kernel_center[kernel_min_ind]
-            + h_new * s_new
-        )
-        var_merge = (1.0 / h_merge) * (
-            self.kernel_height[kernel_min_ind]
-            * (
-                np.square(self.kernel_sigma[kernel_min_ind])
-                + np.square(self.kernel_center[kernel_min_ind])
-            )
-            + h_new * (np.square(std_new) + np.square(s_new))
-        ) - np.square(s_merge)
-
-        # Overwrite newly added kernel with properties of the merged one
-        self.kernel_height[-1] = h_merge
-        self.kernel_center[-1] = s_merge
-        self.kernel_sigma[-1] = np.sqrt(var_merge)
-
-        # Write compressed kernel that was merged and is about to be deleted in delta list with negative height
-        self.delta_kernel_height.append(-self.kernel_height[kernel_min_ind])
-        self.delta_kernel_center.append(self.kernel_center[kernel_min_ind])
-        self.delta_kernel_sigma.append(self.kernel_sigma[kernel_min_ind])
-
-        # Delete compressed kernel that was merged with new one
-        del self.kernel_height[kernel_min_ind]
-        del self.kernel_center[kernel_min_ind]
-        del self.kernel_sigma[kernel_min_ind]
-
-        # Count merging events
-        self.merge_count += 1
-
-        return h_merge, s_merge, np.sqrt(var_merge)
-
-    def write_restart(self, filename: str = "restart_opes"):
-        """write restart file
-
-        Args:
-            filename: name of restart file
-        """
-        self._write_restart(
-            filename=filename,
-            sum_weigths=self.sum_weights,
-            sum_weigths_square=self.sum_weights_square,
-            norm_factor=self.norm_factor,
-            heigth=self.kernel_height,
-            center=self.kernel_center,
-            sigma=self.kernel_sigma,
-            explore=self.explore,
-            n=self.n,
-        )
-
-    def restart(self, filename: str = "restart_opes"):
-        """restart from restart file
-
-        Args:
-            filename: name of restart file
-        """
-        try:
-            data = np.load(filename + ".npz", allow_pickle=True)
-        except:
-            raise OSError(f" >>> fatal error: restart file {filename}.npz not found!")
-
-        # Load dicitionary entries from restart file
-        self.sum_weights = float(data["sum_weigths"])
-        self.sum_weights_square = float(data["sum_weigths_square"])
-        self.norm_factor = float(data["norm_factor"])
-        self.kernel_height = data["heigth"]
-        self.kernel_center = data["center"]
-        self.kernel_sigma = data["sigma"]
-        self.explore = data["explore"]
-        self.n = data["n"]
-
-        if self.verbose and self.md_state.step % self.update_freq == 0:
-            print(f" >>> Info: Adaptive sampling restartet from {filename}!")
-
-    def write_traj(self, filename: str = "CV_traj.dat"):
-        """save trajectory for post-processing"""
-        data = {}
-        data["Epot [H]"] = self.epot
-        data["T [K]"] = self.temp
-        data["Bias pot"] = self.output_bias_pot
-
-        self._write_traj(data, filename=filename)
-
-        # Reset trajectories to save memory
-        self.traj = np.array([self.traj[-1]])
-        self.epot = [self.epot[-1]]
-        self.temp = [self.temp[-1]]
-        self.output_bias_pot = [self.output_bias_pot[-1]]
-
-    def show_kernels(self, manual: bool = False):
-        """for testing print kernels"""
-        if self.verbose or manual:  # and self.md_state.step%(self.update_freq*100)==0:
-            print("    Heights ", self.kernel_height)
-            print("    Centers ", self.kernel_center)
-            print("    Sigmas ", self.kernel_sigma)
-        else:
-            pass
-
-    def get_pmf(self):
-        """calculate pmf on the fly from compressed kernels for one and two dimensional CV spaces
-
-        Returns:
-            pmf: potential of mean force in kcal
-        """
+        prob_dist = np.zeros_like(self.histogram)
+        derivative = np.zeros_like(self.bias)
         if self.ncoords == 1:
-            P = np.zeros_like(self.grid[0])
-            KDE_norm = self.sum_weights if not self.explore else self.n
-            for x in range(len(self.grid[0])):
-                s_diff = self.grid[0][x] - np.asarray(self.kernel_center)
-                for l in range(self.ncoords):
-                    s_diff[:, l] = correct_periodicity(
-                        s_diff[:, l], self.periodicity[l]
-                    )
-                val_gaussians = np.asarray(self.kernel_height) * np.exp(
-                    -0.5
-                    * np.sum(
-                        np.square(np.divide(s_diff, np.asarray(self.kernel_sigma))),
-                        axis=1,
-                    )
-                )
-                P[x] = np.sum(val_gaussians) / KDE_norm
-
-        elif self.ncoords == 2:
-            P = np.zeros_like(self.grid)
-            KDE_norm = self.sum_weights if not self.explore else self.n
-            for x in range(len(self.grid[0, :])):
-                for y in range(len(self.grid[1, :])):
-                    s_diff = np.array([self.grid[0, x], self.grid[1, y]]) - np.asarray(
-                        self.kernel_center
-                    )
-                    for l in range(self.ncoords):
-                        s_diff[:, l] = correct_periodicity(
-                            s_diff[:, l], self.periodicity[l]
-                        )
-                    val_gaussians = np.asarray(self.kernel_height) * np.exp(
-                        -0.5
-                        * np.sum(
-                            np.square(np.divide(s_diff, np.asarray(self.kernel_sigma))),
-                            axis=1,
-                        )
-                    )
-                    P[x, y] = np.sum(val_gaussians) / KDE_norm
+            for i, cv in enumerate(self.grid[0]):
+                if not self.numerical_forces:
+                    val_gaussians = self.calc_gaussians(cv)
+                else:
+                    val_gaussians, kde_der = self.calc_gaussians(cv, requires_grad=True)
+                    derivative[0][0, i] = kde_der
+                prob_dist[0, i] = np.sum(val_gaussians)
         else:
-            pmf = 0.0
-            return pmf
-
-        bias_pot = np.log(P / self.norm_factor + self.epsilon) / self.beta
-        bias_pot = (
-            -self.gamma * bias_pot if self.explore else self.gamma_prefac * bias_pot
-        )
-        pmf = bias_pot / -self.gamma_prefac if not self.explore else bias_pot
-        pmf -= pmf.min()
-
-        return pmf
-
-    def shared_bias(self):
-        pass
-
-    def weighted_pmf_history2d(
-        self,
-        cv_x: np.array,
-        cv_y: np.array,
-        cv_pot: np.array,
-        grid_x: np.array,
-        grid_y: np.array,
-        hist_res: int = 10,
-    ) -> np.array:
-        """calculate pmf history from reweighting parts of the trajectory
-
-        Args:
-            cv_x: trajectory of first CV
-            cv_y: trajectory of second CV
-            cv_pot: potential energy for trajectory points
-            grid_x: grid along first CV
-            grid_y: grid along second CV
-            hist_res: resolution of history
-
-        Returns:
-            pmf_weight_hist: weighted pmf history
-            scattered_time: time points of history
-        """
-
-        if self.ncoords > 2:
-            raise ValueError(
-                " >>> Error: 2D weighted pmf history can only be calculated for two-dimensional CV spaces!"
-            )
-
-        dx = 1.0  # Bin size x dimension
-        dy = 1.0  # Bin size y dimension
-        dx2 = dx / 2.0
-        dy2 = dy / 2.0
-
-        n = int(len(cv_x) / hist_res)
-        scattered_time = []
-        pmf_weight_hist = []
-        divisor = self.sum_weights if not self.explore else self.n
-
-        print("Initialize pmf history calculation.")
-        for j in range(hist_res):
-            if j % 10 == 0:
-                print(f"Progress: History entry {j} of {hist_res}")
-            n_sample = j * n + n
-            scattered_time.append(n_sample)
-            probability_hist = np.zeros((len(grid_x), len(grid_y)))
-            for i, x in enumerate(grid_x):  # Loop over grid so that i are bin centers
-                for j, y in enumerate(grid_y):
-                    indices_hist = np.where(
-                        np.logical_and(
-                            np.logical_and(
-                                (cv_x[0:n_sample] >= x - dx2),
-                                (cv_x[0:n_sample] < x + dx2),
-                            ),
-                            np.logical_and(
-                                (cv_y[0:n_sample] >= y - dy2),
-                                (cv_y[0:n_sample] < y + dy2),
-                            ),
+            for i, x in enumerate(self.grid[0]):
+                for j, y in enumerate(self.grid[1]):
+                    if not self.numerical_forces:
+                        val_gaussians = self.calc_gaussians(np.asarray([x, y]))
+                    else:
+                        val_gaussians, kde_der = self.calc_gaussians(
+                            np.asarray([x, y]), requires_grad=True
                         )
-                    )
-                    probability_hist[i, j] = (
-                        np.sum(np.exp(self.beta * cv_pot[indices_hist[0]])) / divisor
-                    )
-            probability_hist /= np.array(probability_hist).sum()
-            potential_hist = -np.log(probability_hist) / self.beta / kJ_to_kcal
-            potential_hist -= potential_hist.min()
-            potential_hist = np.where(potential_hist == np.inf, 0, potential_hist)
-            pmf_weight_hist.append(potential_hist)
-        print("Done")
+                        derivative[0][j, i] = kde_der[0]
+                        derivative[1][j, i] = kde_der[1]
+                    prob_dist[j, i] = np.sum(val_gaussians)
 
-        return pmf_weight_hist, scattered_time
+        prob_dist /= self.KDE_norm
+        self.bias_potential = self.calc_potential(prob_dist)
+        if self.numerical_forces:
+            for i in range(self.ncoords):
+                self.bias[i] = self.calc_forces(prob_dist, derivative[i])
 
-    def weighted_pmf_history1d(
-        self,
-        cv_x: np.array,
-        cv_pot: np.array,
-        grid: np.array,
-        hist_res: int = 100,
-    ) -> np.array:
-        """calculate weighted pmf history
-
-        Args:
-            cv_x: trajectory of first CV
-            cv_pot: potential energy for trajectory points
-            grid: grid along CV
-            hist_res: resolution of history
-
-        Returns:
-            pmf_weight_hist: weighted pmf history
-            scattered_time: time points of history
-        """
-
-        if self.ncoords != 1:
-            raise ValueError(
-                " >>> Error: 1D weighted pmf history can only be calculated for one-dimensional CV spaces!"
-            )
-
-        dx = 1.0  # Bin size
-        dx2 = dx / 2.0
-
-        n = int(len(cv_x) / hist_res)
-        scattered_time = []
-        pmf_bin_hist = []
-        divisor = self.sum_weights if not self.explore else self.n
-        print(
-            "-------------------------------------------------------------------------------"
+    def estimate_kernel_std(self, cv):
+        """Adaptive estimate of optimal kernel standard deviation from trajectory"""
+        self.adaptive_counter += 1
+        tau = self.adaptive_std_stride
+        if self.adaptive_counter < self.adaptive_std_stride:
+            tau = self.adaptive_counter
+        self.welford_mean, self.welford_m2, self.welford_var = welford_var(
+            self.md_state.step, self.welford_mean, self.welford_m2, cv, tau
         )
-        print("Initialize 1D history reweighting ...")
-        for j in range(hist_res):
-            n_sample = j * n + n
-            if j % 10 == 0:
-                print(f"Progress: History entry {j} of {hist_res}")
-            scattered_time.append(n_sample)
-            probability_hist = np.zeros(len(grid))
-            for i, x in enumerate(grid):  # Loop over grid so that i are bin centers
-                indices_hist = np.where(
-                    np.logical_and(
-                        (cv_x[0:n_sample] >= x - dx2), (cv_x[0:n_sample] < x + dx2)
-                    )
-                )
-                probability_hist[i] = (
-                    np.sum(np.exp(self.beta * cv_pot[indices_hist])) / divisor
-                )
-            probability_hist /= probability_hist.sum()
-            potential_hist = (-np.log(probability_hist) / self.beta) / kJ_to_kcal
-            potential_hist -= potential_hist.min()
-            potential_hist = np.where(potential_hist == np.inf, 0, potential_hist)
-            pmf_bin_hist.append(potential_hist)
-        print("1D history reweighting done!")
-        print(
-            "-------------------------------------------------------------------------------"
+        return np.sqrt(self.welford_var)
+
+    def calc_potential(self, prob_dist: float):
+        """calc the OPES bias potential from the probability density"""
+        return (self.gamma_prefac / self.beta) * np.log(
+            prob_dist / self.norm_factor + self.epsilon
         )
 
-        return pmf_bin_hist, scattered_time
+    def calc_forces(self, prob_dist: float, deriv_prob_dist: float) -> float:
+        """calc the OPES bias forces from the probability density and its derivative"""
+        deriv_log = 1.0 / (prob_dist / self.norm_factor + self.epsilon)
+        return (
+            (self.gamma_prefac / self.beta)
+            * deriv_log
+            * (deriv_prob_dist / self.norm_factor)
+        )

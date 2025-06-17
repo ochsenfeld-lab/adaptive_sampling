@@ -217,6 +217,7 @@ def get_windows(
     sigma: Union[float, np.ndarray],
     equil_temp: float = 300.0,
     dx: np.ndarray = None,
+    progress_bar: bool = False,
 ) -> Tuple[List[np.ndarray], np.ndarray, np.ndarray]:
     """generate mixture distribution of Gaussian shaped windows from eABF trajectory
 
@@ -250,6 +251,12 @@ def get_windows(
     traj_list = []
     index_list = np.array([])
 
+    # build boltzmann factors
+    if progress_bar:
+        from tqdm import tqdm
+
+        centers = tqdm(centers)
+
     for center in centers:
         indices = np.where(
             np.logical_and(
@@ -258,6 +265,9 @@ def get_windows(
         )
         index_list = np.append(index_list, indices[0])
         traj_list += [xi[indices]]
+
+    if progress_bar:
+        centers = centers.iterable
 
     meta_f = np.zeros(shape=(3, *centers.shape))
     meta_f[1] = centers
@@ -275,16 +285,17 @@ def pmf_from_weights(
     equil_temp: float = 300.0,
     dx: np.ndarray = None,
 ) -> Tuple[np.ndarray, np.ndarray]:
-    """Get Potential of Mean Force (PMF) from statistical weigths obtained by MBAR
+    """Get Potential of Mean Force (PMF) from statistical weights obtained by MBAR
        Note: for higher dimensional PMFs, they need to be reshaped,
        this function returns a flattened version
 
     Args:
         grid: centroids of grid along cv,
               shape=(N, d) for N centroids of d-dimension
-        cv: trajectory of cv shape=(#frames, d)
+        cv: trajectory of cv, shape=(#frames, d)
         weights: boltzmann weights of frames in trajectory
         equil_temp: Temperature of simulation
+        dx: bin width for grid, automatically determined from grid for 1D and 2D if not provided
 
     Returns:
         pmf: Potential of mean force (PMF) in kJ/mol
@@ -293,7 +304,15 @@ def pmf_from_weights(
     RT = R_in_SI * equil_temp / 1000.0
 
     if dx is None:
-        dx = grid[1] - grid[0]
+        if len(grid.shape) == 1:
+            dx = grid[1] - grid[0]
+        elif len(grid.shape) == 2:
+            cycle1 = int(
+                (grid[:, 0].max() - grid[:, 0].min()) / (grid[1, 0] - grid[0, 0])
+            )
+            dx = np.asarray(
+                [grid[1, 0] - grid[0, 0], grid[cycle1 + 1, 1] - grid[cycle1, 1]]
+            )
     dx2 = dx / 2.0
 
     if len(grid.shape) == 1:

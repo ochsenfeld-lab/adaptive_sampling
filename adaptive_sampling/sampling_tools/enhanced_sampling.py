@@ -5,21 +5,20 @@ from typing import Tuple
 from abc import ABC, abstractmethod
 
 from ..interface.sampling_data import MDInterface
-from .utils import diff
-from ..units import *
+from .utils import diff_periodic
 
 
 class EnhancedSampling(ABC):
     """Abstract class for molecular dynamics based sampling algorithms
 
     Args:
-        md: Object of the MD Inteface
+        md: Object of the MD Interface
         cv_def: definition of the Collective Variable (CV) (see adaptive_sampling.colvars)
             [["cv_type", [atom_indices], minimum, maximum, bin_width], [possible second dimension]]
-        equil_temp: equillibrium temperature of MD
+        equil_temp: equilibrium temperature of MD
         verbose: print verbose information
-        kinetice: calculate necessary data to obtain kinetics of reaction
-        f_conf: force constant for confinment of CVs to the range of interest with harmonic walls
+        kinetics: calculate necessary data to obtain kinetics of reaction
+        f_conf: force constant for confinement of CVs to the range of interest with harmonic walls
         output_freq: frequency in steps for writing outputs
         multiple_walker: share bias with other simulations via buffer file
         periodicity: periodicity of CVs, [[lower_boundary0, upper_boundary0], ...]
@@ -39,10 +38,11 @@ class EnhancedSampling(ABC):
         **kwargs,
     ):
         from ..colvars import CV
+        from ..units import BOHR_to_ANGSTROM, DEGREES_per_RADIAN
 
         self.the_md = md
         self.the_cv = CV(self.the_md, requires_grad=True)
-        self.out_freq = output_freq
+        self.out_freq = int(output_freq)
         self.equil_temp = equil_temp
         self.verbose = verbose
         self.shared = multiple_walker
@@ -121,7 +121,7 @@ class EnhancedSampling(ABC):
 
         if self.verbose:
             for i in range(self.ncoords):
-                print(f"\n Initialize {self.cv[i]} as collective variable:")
+                print(f"\n >>> INFO: Initialize {self.cv[i]} as collective variable:")
                 if self.cv_type[i] == "angle":
                     output_dat = (
                         self.minx[i] * DEGREES_per_RADIAN,
@@ -190,11 +190,11 @@ class EnhancedSampling(ABC):
 
         for i in range(self.ncoords):
             if xi[i] > (self.maxx[i] - margin[i]):
-                r = diff(self.maxx[i] - margin[i], xi[i], self.periodicity[i])
+                r = diff_periodic(self.maxx[i] - margin[i], xi[i], self.periodicity[i])
                 conf_force -= self.f_conf[i] * r * delta_xi[i]
 
             elif xi[i] < (self.minx[i] + margin[i]):
-                r = diff(self.minx[i] + margin[i], xi[i], self.periodicity[i])
+                r = diff_periodic(self.minx[i] + margin[i], xi[i], self.periodicity[i])
                 conf_force -= self.f_conf[i] * r * delta_xi[i]
 
         return conf_force
@@ -226,6 +226,7 @@ class EnhancedSampling(ABC):
         Returns:
             args in atomic units
         """
+        from ..units import BOHR_to_ANGSTROM, DEGREES_per_RADIAN
         for i in range(self.ncoords):
             for arg in args:
                 if self.cv_type[i] == "angle":
@@ -243,7 +244,7 @@ class EnhancedSampling(ABC):
         Returns:
             args in atomic units
         """
-
+        from ..units import BOHR_to_ANGSTROM, DEGREES_per_RADIAN, atomic_to_kJmol
         for i in range(self.ncoords):
             for arg in args:
                 if self.cv_type == "angle":
@@ -300,6 +301,12 @@ class EnhancedSampling(ABC):
                 delta_xi[0], (1.0 / np.repeat(self.the_md.mass, 3)) * delta_xi[0]
             )
 
+    def reinit_cv(self):
+        """Reinit collective variable, can be useful for adaptive CVs"""
+        from ..colvars import CV
+
+        self.the_cv = CV(self.the_md, requires_grad=True)
+
     def write_output(self, data: dict, filename="free_energy.dat"):
         """write results to output file
 
@@ -307,12 +314,14 @@ class EnhancedSampling(ABC):
             data: results to write
             filename: name of output file
         """
-        grid = np.copy(self.grid)
+        grid = [np.copy(g) for g in self.grid]
         for i in range(self.ncoords):
             if self.the_cv.type == "angle":
-                grid *= DEGREES_per_RADIAN
+                from ..units import DEGREES_per_RADIAN
+                grid[i] *= DEGREES_per_RADIAN
             elif self.the_cv.type == "distance":
-                grid *= BOHR_to_ANGSTROM
+                from ..units import BOHR_to_ANGSTROM
+                grid[i] *= BOHR_to_ANGSTROM
 
         # head of data columns
         with open(filename, "w") as fout:
@@ -345,6 +354,7 @@ class EnhancedSampling(ABC):
             data: data to write
             filename: name of trajectory file
         """
+        from ..units import BOHR_to_ANGSTROM, DEGREES_per_RADIAN
         step = self.the_md.get_sampling_data().step
 
         # write header

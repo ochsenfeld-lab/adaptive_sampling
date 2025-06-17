@@ -27,17 +27,17 @@ the_md = MD(
     seed_in=seed,
 )
 the_abm = WTM(
-    0.1,
-    2.0,
     the_md,
     ats,
-    hill_drop_freq=25,
-    output_freq=10,
+    hill_height=1.0,
+    hill_std=2.5,
+    hill_drop_freq=500,
+    output_freq=100,
     force_from_grid=True,
     well_tempered_temp=3000.0,
     f_conf=1000,
     equil_temp=300.0,
-    multiple_walker=True,
+    multiple_walker=False,
 )
 # the_abm.restart()
 

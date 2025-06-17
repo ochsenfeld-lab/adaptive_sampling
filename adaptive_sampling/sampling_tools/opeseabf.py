@@ -1,78 +1,74 @@
-import os, time
 import numpy as np
 from .enhanced_sampling import EnhancedSampling
-from .utils import welford_var, combine_welford_stats, diff
+from .utils import welford_var, diff_periodic
 from .eabf import eABF
 from .opes import OPES
-from ..units import *
-from adaptive_sampling.processing_tools.thermodynamic_integration import *
+from ..processing_tools.thermodynamic_integration import *
 
 
 class OPESeABF(eABF, OPES, EnhancedSampling):
     """Well-Tempered Metadynamics extended-system Adaptive Biasing Force method
 
-       see: Fu et. al., J. Phys. Chem. Lett. (2018); https://doi.org/10.1021/acs.jpclett.8b01994
-
     The collective variable is coupled to a fictitious particle with an harmonic force.
-    The dynamics of the fictitious particel is biased using a combination of ABF and Metadynamics.
+    The dynamics of the fictitious particel is biased using a combination of ABF and OPES.
 
     Args:
-        ext_sigma: thermal width of coupling between collective and extended variable
-        ext_mass: mass of extended variable in atomic units
-        md: Object of the MD Inteface
+        md: Object of the MD Interface
         cv_def: definition of the Collective Variable (CV) (see adaptive_sampling.colvars)
-                [["cv_type", [atom_indices], minimum, maximum, bin_width], [possible second dimension]]
-        friction: friction coefficient for Lagevin dynamics of the extended-system
+            [["cv_type", [atom_indices], minimum, maximum, bin_width], [possible second dimension]]
+        ext_sigma: thermal width of coupling between collective and extended variable
+            if None, it will be estimated based on the standard deviation of the CV in an initial MD
+        ext_mass: mass of extended variable in atomic units
+        adaptive_coupling_stride: initial MD steps to estimate ext_sigma
+        adaptive_coupling_scaling: scaling factor for standard deviation of initial MD to ext_sigma
+        adaptive_coupling_min: minimum for ext_sigma from adaptive estimate
+        friction: friction coefficient for Langevin dynamics of the extended-system
         seed_in: random seed for Langevin dynamics of extended-system
         nfull: Number of force samples per bin where full bias is applied,
-               if nsamples nfull the bias force is scaled down by nsamples/nfull
-        equil_temp: equillibrium temperature of MD
+            if nsamples < nfull the bias force is scaled down by nsamples/nfull
+        kernel_std: standard deviation of first kernel,
+            if None, kernel_std will be estimated from initial MD with `adaptive_std_freq*update_freq` steps
+        update_freq: interval of md steps in which new kernels should be created
+        energy_barr: free energy barrier that the bias should help to overcome [kJ/mol], default: 125.52 kJ/mol (30.0 kcal/mol)
+        bandwidth_rescaling: if True, `kernel_std` shrinks during simulation to refine KDE
+        adaptive_std: if adaptive kernel standard deviation is enabled, kernel_std will be updated according to std deviation of CV in MD
+        adaptive_std_freq: time for estimation of standard deviation is set to `update_freq * adaptive_std_freq` MD steps
+        explore: enables the OPES explore mode,
+        normalize: normalize OPES probability density over explored space
+        approximate_norm: enables linear scaling approximation of norm factor
+        merge_threshold: threshold distance for kde-merging in units of std, `np.inf` disables merging
+        recursive_merge: enables recursive merging until seperation of all kernels is above threshold distance
+        bias_factor: bias factor of target distribution, default is `beta * energy_barr`
+        force_from_grid: read forces from grid instead of calculating sum of kernels in every step, only for 1D CVs
+        equil_temp: equilibrium temperature of MD
         verbose: print verbose information
-        kinetice: calculate necessary data to obtain kinetics of reaction
-        f_conf: force constant for confinement of system to the range of interest in CV space
+        kinetics: calculate necessary data to obtain kinetics of reaction
+        f_conf: force constant for confinement of CVs to the range of interest with harmonic walls
         output_freq: frequency in steps for writing outputs
-        kernel_std: standard deviation of first kernel
-        explore: enables exploration mode
-        energy_barr: free energy barrier that the bias should help to overcome [kJ/mol]
-        update_freq: interval of md steps in which new kernels should be
-        approximate_norm: enables approximation of norm factor
-        exact_norm: enables exact calculation of norm factor, if both are enabled, exact is used every 100 updates
-        merge_threshold: threshold distance for kde-merging in units of std, "np.inf" disables merging
-        recursion_merge: enables recursive merging
-        bias_factor: allows setting a default bias factor instead of calculating it from energy barrier
-        print_pmf: enables calculation of pmf on the fly
-        adaptive_sigma: enables adaptive sigma calculation nontheless with rescaling
-        unbiased_time: time in update frequencies for unbiased estimation of sigma if no input is given
-        fixed_sigma: disables bandwidth rescaling and uses input sigma for all kernels
-        enable_eabf: enables eABF biasing, if False only OPES is applied
-
+        periodicity: periodicity of CVs, [[lower_boundary0, upper_boundary0], ...]
     """
 
     def __init__(
         self,
         *args,
-        enable_eabf: bool = False,
-        enable_opes: bool = True,
+        enable_abf: bool = True,
         **kwargs,
     ):
         super().__init__(*args, **kwargs)
         self.abf_forces = np.zeros_like(self.bias)
-        self.enable_eabf = enable_eabf
-        self.enable_opes = enable_opes
-        if self.enable_eabf == False and self.enable_opes == False:
-            raise ValueError(
-                " >>> Error: At least one biasing method has to be enabled!"
-            )
+        self.enable_abf = enable_abf
+        if self.verbose and self.enable_abf:
+            print(f" >>> INFO: ABF enabled for OPES-eABF (N_full={self.nfull})")
+        elif self.verbose:
+            print(f" >>> INFO: ABF disabled. Running eOPES!")
 
     def step_bias(
         self,
-        write_output: bool = False,
-        write_traj: bool = True,
         stabilize: bool = False,
         stabilizer_threshold: float = None,
-        output_file: str = "eopesabf.out",
+        output_file: str = "opeseabf.out",
         traj_file: str = "CV_traj.dat",
-        restart_file: str = "restart_eopesabf",
+        restart_file: str = "restart_opeseabf",
         **kwargs,
     ) -> np.ndarray:
         """Apply OPES-eABF to MD simulation
@@ -93,14 +89,54 @@ class OPESeABF(eABF, OPES, EnhancedSampling):
         self.md_state = self.the_md.get_sampling_data()
         (xi, delta_xi) = self.get_cv(**kwargs)
 
+        # obtain coupling strength from initial MD
+        if self.estimate_sigma and self.md_state.step < self.adaptive_coupling_stride:
+            self.ext_sigma = self.estimate_coupling(xi) * self.adaptive_coupling_scaling
+            return np.zeros_like(self.md_state.coords)
+
+        elif (
+            self.estimate_sigma and self.md_state.step == self.adaptive_coupling_stride
+        ):
+            self.ext_sigma = self.estimate_coupling(xi) * self.adaptive_coupling_scaling
+            for i, s in enumerate(self.ext_sigma):
+                if s < self.adaptive_coupling_min[i]:
+                    print(
+                        f" >>> WARNING: estimated coupling of extended-system is suspiciously small ({s}). Resetting to {self.adaptive_coupling_min[i]}."
+                    )
+                    self.ext_sigma[i] = self.adaptive_coupling_min[i]
+            if self.verbose:
+                print(
+                    f" >>> INFO: setting coupling width of extended-system to {self.ext_sigma}!"
+                )
+            self.ext_k = (kB_in_atomic * self.equil_temp) / (
+                self.ext_sigma * self.ext_sigma
+            )
+
+            with open("COUPLING", "w") as out:
+                for s in self.ext_sigma:
+                    out.write(f"{s}\t")
+
+            self.reinit_ext_system(xi)
+
+            # setup OPES adaptive kernel std
+            if self.initial_sigma_estimate or self.adaptive_std:
+                self.adaptive_counter = self.adaptive_coupling_counter
+                self.welford_mean = self.adaptive_coupling_mean
+                self.welford_m2 = self.adaptive_coupling_m2
+                self.welford_var = self.adaptive_coupling_var
+                if (
+                    self.initial_sigma_estimate
+                    and self.adaptive_std_stride < self.adaptive_coupling_stride
+                ):
+                    # otherwise OPES sigma_0 would not be set any more
+                    self.sigma_0 = self.ext_sigma / self.adaptive_coupling_scaling
+
         if stabilize and len(self.traj) > 0:
             self.stabilizer(xi, threshold=stabilizer_threshold)
 
         self._propagate()
 
-        mtd_forces = (
-            self.opes_bias(np.copy(self.ext_coords)) / atomic_to_kJmol / kJ_to_kcal
-        )
+        opes_force = self.opes_bias(np.copy(self.ext_coords))
         bias_force = self._extended_dynamics(xi, delta_xi)  # , self.hill_std)
         force_sample = [0 for _ in range(2 * self.ncoords)]
 
@@ -111,7 +147,7 @@ class OPESeABF(eABF, OPES, EnhancedSampling):
 
             for i in range(self.ncoords):
 
-                if self.enable_eabf:
+                if self.enable_abf:
 
                     # linear ramp function
                     ramp = (
@@ -121,7 +157,7 @@ class OPESeABF(eABF, OPES, EnhancedSampling):
                     )
 
                     # apply bias force on extended variable
-                    force_sample[i] = self.ext_k[i] * diff(
+                    force_sample[i] = self.ext_k[i] * diff_periodic(
                         self.ext_coords[i], xi[i], self.periodicity[i]
                     )
                     (
@@ -134,24 +170,19 @@ class OPESeABF(eABF, OPES, EnhancedSampling):
                         self.m2_force[i][bin_la[1], bin_la[0]],
                         force_sample[i],
                     )
-                    if self.enable_opes:
-                        self.ext_forces -= (
-                            ramp * self.abf_forces[i][bin_la[1], bin_la[0]]
-                            - mtd_forces[i]
-                        )
-                    else:
-                        self.ext_forces -= (
-                            ramp * self.abf_forces[i][bin_la[1], bin_la[0]]
-                        )
+                    self.ext_forces -= (
+                        ramp * self.abf_forces[i][bin_la[1], bin_la[0]] - opes_force[i]
+                    )
                 else:
-                    self.ext_forces += mtd_forces[i]
+                    self.ext_forces += opes_force[i]
+
         # xi-conditioned accumulators for CZAR
         if self._check_boundaries(xi):
             bink = self.get_index(xi)
             self.histogram[bink[1], bink[0]] += 1
 
             for i in range(self.ncoords):
-                force_sample[self.ncoords + i] = self.ext_k[i] * diff(
+                force_sample[self.ncoords + i] = self.ext_k[i] * diff_periodic(
                     self.ext_coords[i], self.grid[i][bink[i]], self.periodicity[i]
                 )
                 self.correction_czar[i][bink[1], bink[0]] += force_sample[
@@ -163,31 +194,28 @@ class OPESeABF(eABF, OPES, EnhancedSampling):
             self._kinetics(delta_xi)
 
         # Save values for traj
-        self.ext_traj = np.append(self.ext_traj, [self.ext_coords], axis=0)
-        self.traj = np.append(self.traj, [xi], axis=0)
-        self.epot.append(self.md_state.epot)
-        self.temp.append(self.md_state.temp)
+        if traj_file:
+            self.ext_traj = np.append(self.ext_traj, [self.ext_coords], axis=0)
+            self.traj = np.append(self.traj, [xi], axis=0)
+            self.epot.append(self.md_state.epot)
+            self.temp.append(self.md_state.temp)
+
         self._up_momenta()
 
         if self.md_state.step % self.out_freq == 0:
             # write output
 
-            if write_traj:
+            if traj_file and len(self.traj) >= self.out_freq:
                 self.write_traj(filename=traj_file)
-
-            if write_output:
+            if output_file:
                 self.get_pmf()
                 output = {"hist": self.histogram, "free energy": self.pmf}
                 for i in range(self.ncoords):
-                    output[f"opesforce {i}"] = mtd_forces[i]
-                    output[f"abf force {i}"] = self.abf_forces[i]
                     output[f"czar force {i}"] = self.czar_force[i]
-                    # TODO: output variance of CZAR for error estimate
-                    # output[f"var force {i}"] = self.var_force[i]
-                output[f"opespot"] = self.potential
-
+                output[f"opespot"] = self.bias_potential
                 self.write_output(output, filename=output_file)
-                # self.write_restart(filename=restart_file)
+            if restart_file:
+                self.write_restart(filename=restart_file)
         return bias_force
 
     def reinit(self):
@@ -217,12 +245,12 @@ class OPESeABF(eABF, OPES, EnhancedSampling):
             abf_force=self.abf_forces,
             ext_momenta=self.ext_momenta,
             ext_coords=self.ext_coords,
-            sum_weigths=self.sum_weights,
-            sum_weigths_square=self.sum_weights_square,
+            sum_weights=self.sum_weights,
+            sum_weights_square=self.sum_weights2,
             norm_factor=self.norm_factor,
-            kernel_heigth=self.kernel_height,
-            kernel_center=self.kernel_center,
-            kernel_sigma=self.kernel_sigma,
+            height=self.kernel_height,
+            center=self.kernel_center,
+            sigma=self.kernel_std,
             explore=self.explore,
             n=self.n,
         )
@@ -239,24 +267,25 @@ class OPESeABF(eABF, OPES, EnhancedSampling):
         except:
             raise OSError(f" >>> fatal error: restart file {filename}.npz not found!")
 
+        # restart eABF
         self.histogram = data["hist"]
         self.m2_force = data["m2"]
         self.ext_hist = data["ext_hist"]
         self.correction_czar = data["czar_corr"]
         self.abf_forces = data["abf_force"]
-        self.sum_weights = float(data["sum_weigths"])
-        self.sum_weights_square = float(data["sum_weigths_square"])
-        self.norm_factor = float(data["norm_factor"])
-        self.kernel_height = data["kernel_height"]
-        self.kernel_center = data["kernel_center"]
-        self.kernel_sigma = data["kernel_sigma"]
-        self.explore = data["explore"]
-        self.n = data["n"]
         if restart_ext_sys:
             self.ext_momenta = data["ext_momenta"]
             self.ext_coords = data["ext_coords"]
-
-        if self.verbose:
+        # restart OPES
+        self.sum_weights = float(data["sum_weights"])
+        self.sum_weights2 = float(data["sum_weights_square"])
+        self.norm_factor = float(data["norm_factor"])
+        self.kernel_height = data["height"]
+        self.kernel_center = data["center"]
+        self.kernel_std = data["sigma"]
+        self.explore = data["explore"]
+        self.n = data["n"]
+        if self.verbose and self.md_state.step % self.update_freq == 0:
             print(f" >>> Info: Adaptive sampling restarted from {filename}!")
 
     def write_traj(self, filename: str = "CV_traj.dat"):
@@ -273,51 +302,3 @@ class OPESeABF(eABF, OPES, EnhancedSampling):
         self.ext_traj = np.array([self.ext_traj[-1]])
         self.epot = [self.epot[-1]]
         self.temp = [self.temp[-1]]
-
-    def czar_pmf_history1d(
-        self,
-        grid: np.array,
-        cv_x: np.array,
-        cv_la: np.array,
-        ext_sigma: float,
-        pmf_hist_res: int = 100,
-    ):
-        """Calculate PMF history for CZAR
-
-        Args:
-            grid: grid for CZAR
-            cv_x: trajectory of CV
-            cv_la: extended system trajectory
-            ext_sigma: thermal width of coupling between CV and extended variable
-            pmf_hist_res: resolution of PMF history
-
-        Returns:
-            pmf_hist: PMF history
-            scattered_time: scattered time points
-            rho_hist: density history
-        """
-
-        dx = grid[1] - grid[0]
-        n = int(len(cv_x) / pmf_hist_res)
-        scattered_time = []
-        pmf_hist = []
-        rho_hist = []
-        print(
-            "-------------------------------------------------------------------------------"
-        )
-        print("Integrating CZAR...")
-        for j in range(pmf_hist_res):
-            if j % 10 == 0:
-                print(f"Progress: Iteration {j} of {pmf_hist_res}")
-            n_sample = j * n + n
-            scattered_time.append(n_sample)
-            czar_grad = czar(grid, cv_x[0:n_sample], cv_la[0:n_sample], ext_sigma)
-            pmf, rho = integrate(czar_grad, dx)
-            pmf_hist.append(pmf)
-            rho_hist.append(rho)
-        print("CZAR done!")
-        print(
-            "-------------------------------------------------------------------------------"
-        )
-
-        return pmf_hist, scattered_time, rho_hist

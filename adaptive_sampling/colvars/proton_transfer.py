@@ -1,7 +1,5 @@
 import torch
-
 from .utils import *
-from ..units import *
 
 
 class PT:
@@ -23,6 +21,7 @@ class PT:
         n_pair: int = 15,
         requires_grad: bool = True,
     ):
+        from ..units import BOHR_to_ANGSTROM
         self.r_sw = r_sw / BOHR_to_ANGSTROM
         self.d_sw = d_sw / BOHR_to_ANGSTROM
         self.n_pair = n_pair

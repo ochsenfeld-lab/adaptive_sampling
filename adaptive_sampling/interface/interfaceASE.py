@@ -163,7 +163,9 @@ class AseMD:
         out_freq: int = None,
         restart_freq: int = None,
         dcd_freq: int = None,
-        remove_rotation: bool = False,
+        ase_traj: bool = False,
+        remove_rotation: bool = True,
+        remove_translation: bool = True,
         prefix: str = "aseMD_production",
         **kwargs,
     ):
@@ -174,6 +176,7 @@ class AseMD:
             out_freq: frequency of writing outputs
             restart_freq: frequncy of writing restart file
             dcd_freq: frequency of writing coords to DCD trajectory
+            ase_traj: write ase .traj file instead of dcd
             remove_rotation: if True, remove center of mass translation and rotation
             prefix: prefix for output files
         """
@@ -195,6 +198,8 @@ class AseMD:
 
             if remove_rotation:
                 self.rem_com_rot()
+            if remove_translation:
+                self.rem_com_trans()
 
             self.up_momenta()
             self.calc_etvp()
@@ -203,7 +208,7 @@ class AseMD:
                 self.write_restart(prefix=prefix)
 
             if dcd_freq != None and self.step % dcd_freq == 0:
-                self.print_dcd(prefix=prefix)
+                self.print_dcd(prefix=prefix, ase_traj=ase_traj)
 
             self.time_per_step.append(time.perf_counter() - start_time)
             if out_freq != None and self.step % out_freq == 0:
@@ -218,8 +223,10 @@ class AseMD:
         out_freq: int = None,
         restart_freq: int = None,
         dcd_freq: int = None,
-        remove_rotation: bool = False,
-        prefix: str = "ashMD_heating",
+        ase_traj: bool=False,
+        remove_rotation: bool = True,
+        remove_translation: bool = True,
+        prefix: str = "aseMD_heating",
         **kwargs,
     ):
         """Heating of MD simulation from current temperature to target temperature
@@ -233,6 +240,7 @@ class AseMD:
             out_freq: frequency of writing outputs
             restart_freq: frequncy of writing restart file
             dcd_freq: frequency of writing coords to DCD trajectory
+            ase_traj: write ase .traj file instead of dcd
             remove_rotation: if True, remove center of mass translation and rotation
             prefix: prefix for output files
         """
@@ -247,7 +255,9 @@ class AseMD:
                 out_freq=out_freq,
                 restart_freq=restart_freq,
                 dcd_freq=dcd_freq,
+                ase_traj=ase_traj,
                 remove_rotation=remove_rotation,
+                remove_translation=remove_translation,
                 prefix=prefix,
                 **kwargs,
             )
@@ -357,6 +367,14 @@ class AseMD:
         self.forces[3 * self.frozen_atoms + 0] = 0.0e0
         self.forces[3 * self.frozen_atoms + 1] = 0.0e0
         self.forces[3 * self.frozen_atoms + 2] = 0.0e0
+
+    def rem_com_trans(self):
+        """Remove center of mass translation
+        """
+        self.momenta = self.momenta.reshape((self.natoms, 3))
+        com = np.sum(self.momenta, axis=0) / np.sum(self.mass)     # com translation
+        self.momenta -= com * self.masses.reshape((self.natoms,3)) # remove com translation
+        self.momenta = self.momenta.flatten()
 
     def rem_com_rot(self):
         """Remove center of mass rotation"""
@@ -493,19 +511,25 @@ class AseMD:
             )
             pdbout.close()
 
-    def print_dcd(self, prefix: str = "aseMD"):
+    def print_dcd(self, prefix: str = "aseMD", ase_traj: bool=False):
         """saves coordinates to binary dcd format
 
         Args:
             filename: name of dcd file
         """
-        import mdtraj
-
-        if self.dcd == None:
-            self.dcd = mdtraj.formats.DCDTrajectoryFile(
-                f"{prefix}_traj.dcd", "w", force_overwrite=True
-            )
-        self.dcd.write(units.BOHR_to_ANGSTROM * self.coords.reshape(self.natoms, 3))
+        if ase_traj:
+            import ase.io as io
+            if self.step == 0:
+                io.Trajectory(f"{prefix}_ase.traj", mode="w").write(atoms=self.molecule)
+            else:
+                io.Trajectory(f"{prefix}_ase.traj", mode="a").write(atoms=self.molecule)
+        else:
+            import mdtraj
+            if self.dcd == None:
+                self.dcd = mdtraj.formats.DCDTrajectoryFile(
+                    f"{prefix}_traj.dcd", "w", force_overwrite=True
+                )
+            self.dcd.write(units.BOHR_to_ANGSTROM * self.coords.reshape(self.natoms, 3))
 
     def get_sampling_data(self):
         """interface to adaptive sampling algorithms. see: https://github.com/ahulm/adaptive_sampling"""
