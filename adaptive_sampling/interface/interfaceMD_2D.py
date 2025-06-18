@@ -27,6 +27,7 @@ class MD:
         self.dt = dt_in / units.atomic_to_fs
         self.target_temp = target_temp_in
         self.forces = np.zeros(2 * self.natoms)
+        self.qm_forces = np.zeros(2 * self.natoms)
         self.momenta = np.zeros(2 * self.natoms)
         self.potential = potential
 
@@ -50,6 +51,7 @@ class MD:
 
         # Ekin and print
         self.epot = 0.0e0
+        self.qm_energy = 0.0e0
         self.ekin = 0.0e0
         self.temp = 0.0e0
         self.vol = 0.0e0
@@ -160,6 +162,26 @@ class MD:
             self.epot = (
                 s1 - s2 + s3 + s4 + 0.02596466400007491
             )  # minimum shifted to zero
+        
+        elif potential == "5":
+            prefac = 0.003
+            self.qm_energy = prefac * ( - torch.cos(x * np.pi) + 0.1 * torch.square(x))
+            mm_energy = - prefac * torch.cos(y * np.pi)
+            self.epot = self.qm_energy + mm_energy
+
+            self.qm_forces = torch.autograd.grad(self.qm_energy, coords, allow_unused=True, retain_graph=True)[0]
+            self.qm_forces = self.qm_forces.detach().numpy()
+            self.qm_energy = float(self.qm_energy)
+        
+        elif potential == "6":
+            prefac = 0.003
+            self.qm_energy = prefac * ( - torch.cos(x * np.pi) + 0.1 * torch.square(x))
+            mm_energy =  prefac * ( - torch.cos(y * np.pi) + 0.1 * torch.square(y))
+            self.epot = self.qm_energy + mm_energy
+
+            self.qm_forces = torch.autograd.grad(self.qm_energy, coords, allow_unused=True, retain_graph=True)[0]
+            self.qm_forces = self.qm_forces.detach().numpy()
+            self.qm_energy = float(self.qm_energy)
 
         else:
             return (0.0, np.zeros(2))
@@ -167,6 +189,7 @@ class MD:
 
         self.forces = torch.autograd.grad(self.epot, coords, allow_unused=True)[0]
         self.forces = self.forces.detach().numpy()
+        
 
         return (float(self.epot), self.forces)
 
@@ -273,6 +296,21 @@ class MD:
     # -----------------------------------------------------------------------------------------------------
     def get_sampling_data(self):
         """interface to adaptive_sampling"""
+
+        if self.potential in ["5", "6"]:
+            return SamplingData(
+                self.masses,
+                self.coords,
+                self.forces,
+                self.epot,
+                self.temp,
+                self.natoms,
+                self.step,
+                self.dt,
+                self.qm_forces,
+                self.qm_energy,
+            )
+        
         return SamplingData(
             self.masses,
             self.coords,
