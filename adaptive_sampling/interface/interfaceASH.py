@@ -2,7 +2,6 @@
 import os, time
 import numpy as np
 import random
-from tqdm import tqdm
 from adaptive_sampling import units
 
 
@@ -199,6 +198,7 @@ class AshMD:
         wandb_freq: int = None,
         remove_rotation: bool = False,
         prefix: str = "ashMD_production",
+        progress_bar: bool = False,
         **kwargs,
     ):
         """Run MD simulation using an Verlocity Verlete integrator and langevin thermostat
@@ -212,7 +212,11 @@ class AshMD:
             remove_rotation: if True, remove center of mass translation and rotation
             prefix: prefix for output files
         """
-        for _ in tqdm(range(nsteps), mininterval=60):
+        cycles = range(nsteps)
+        if progress_bar:
+            from tqdm import tqdm
+            cycles = tqdm(cycles, mininterval=60) 
+        for _ in cycles:
             start_time = time.perf_counter()
             self.step += 1
 
