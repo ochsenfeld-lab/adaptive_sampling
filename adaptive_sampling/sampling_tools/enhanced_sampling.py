@@ -20,6 +20,7 @@ class EnhancedSampling(ABC):
         kinetics: calculate necessary data to obtain kinetics of reaction
         f_conf: force constant for confinement of CVs to the range of interest with harmonic walls
         output_freq: frequency in steps for writing outputs
+        wandb_freq: frequency in steps for writing wandb log outputs
         multiple_walker: share bias with other simulations via buffer file
         periodicity: periodicity of CVs, [[lower_boundary0, upper_boundary0], ...]
     """

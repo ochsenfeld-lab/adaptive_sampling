@@ -1,7 +1,6 @@
 import numpy as np
 from .enhanced_sampling import EnhancedSampling
 from .utils import welford_var
-import wandb
 
 
 class aMD(EnhancedSampling):
@@ -188,6 +187,7 @@ class aMD(EnhancedSampling):
                     'amd_equil/k1': self.k1,
                     'amd_equil/k': self.k,
                 })
+            import wandb
             wandb.define_metric("*", step_metric='time_ps')
             wandb.log(
                 data,

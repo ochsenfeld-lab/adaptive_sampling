@@ -4,7 +4,6 @@ from .utils import welford_var, diff_periodic
 from .eabf import eABF
 from .opes import OPES
 from ..processing_tools.thermodynamic_integration import *
-import wandb
 
 
 class OPESeABF(eABF, OPES, EnhancedSampling):
@@ -53,13 +52,11 @@ class OPESeABF(eABF, OPES, EnhancedSampling):
         self,
         *args,
         enable_abf: bool = True,
-        use_wandb: bool = False,
         **kwargs,
     ):
         super().__init__(*args, **kwargs)
         self.abf_forces = np.zeros_like(self.bias)
         self.enable_abf = enable_abf
-        self.use_wandb = use_wandb
         if self.verbose and self.enable_abf:
             print(f" >>> INFO: ABF enabled for OPES-eABF (N_full={self.nfull})")
         elif self.verbose:
@@ -92,8 +89,8 @@ class OPESeABF(eABF, OPES, EnhancedSampling):
         self.md_state = self.the_md.get_sampling_data()
         (xi, delta_xi) = self.get_cv(**kwargs)
 
-        if self.use_wandb:
-
+        if self.wandb_freq is not None and self.md_state.step % self.wandb_freq == 0:
+            import wandb
             wandb.log(
                 {
                     'amd/Xi0': xi[0],

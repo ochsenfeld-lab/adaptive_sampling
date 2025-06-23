@@ -4,7 +4,6 @@ import numpy as np
 import random
 from tqdm import tqdm
 from adaptive_sampling import units
-import wandb
 
 
 class AshMD:
@@ -28,7 +27,6 @@ class AshMD:
         active_atoms: list of active atoms, if None, all atoms are active
         mute: mute Calculator output
         scratch_dir: directory where `calculator` input and output files are stored
-        use_wandb: if True uses wandb for logging. Default is False.
     """
 
     def __init__(
@@ -255,6 +253,7 @@ class AshMD:
         self,
     ):
         """"""
+        import wandb
         wandb.define_metric("*", step_metric='time_ps')
         wandb.log(
             {
