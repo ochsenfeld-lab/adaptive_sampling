@@ -182,6 +182,16 @@ class MD:
             self.qm_forces = torch.autograd.grad(self.qm_energy, coords, allow_unused=True, retain_graph=True)[0]
             self.qm_forces = self.qm_forces.detach().numpy()
             self.qm_energy = float(self.qm_energy)
+        
+        elif potential == "7":
+            prefac = 0.004
+            self.qm_energy = prefac * ( - torch.cos(x * np.pi) + 0.1 * torch.square(x))
+            mm_energy =  prefac * ( - torch.cos(y * np.pi) + 0.1 * torch.square(y))
+            self.epot = self.qm_energy + mm_energy
+
+            self.qm_forces = torch.autograd.grad(self.qm_energy, coords, allow_unused=True, retain_graph=True)[0]
+            self.qm_forces = self.qm_forces.detach().numpy()
+            self.qm_energy = float(self.qm_energy)
 
         else:
             return (0.0, np.zeros(2))
@@ -297,7 +307,7 @@ class MD:
     def get_sampling_data(self):
         """interface to adaptive_sampling"""
 
-        if self.potential in ["5", "6"]:
+        if self.potential in ["5", "6", "7"]:
             return SamplingData(
                 self.masses,
                 self.coords,
