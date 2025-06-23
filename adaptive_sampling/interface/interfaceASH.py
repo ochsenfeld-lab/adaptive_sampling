@@ -211,6 +211,7 @@ class AshMD:
             wandb_freq: frequency of logging to wandb
             remove_rotation: if True, remove center of mass translation and rotation
             prefix: prefix for output files
+            progress_bar: if True, a tqdm progress bar is printed every 60 s. Requires tqdm.
         """
         cycles = range(nsteps)
         if progress_bar:
