@@ -181,6 +181,7 @@ def test_calculate_path(input, coords1, coords2, coords3, coords4, coords5):
         coordinate_system="Cartesian",
         active=[0, 1],
     )
+    cv.la = 2.0
 
     cv1 = cv.calculate_path(coords1)
     cv2 = cv.calculate_path(coords2)
@@ -199,11 +200,11 @@ def test_calculate_path(input, coords1, coords2, coords3, coords4, coords5):
     [
         (
             "resources/path.xyz",
-            torch.tensor([1.0, 1.0, 0.0, 0.0, 0.0, 0.0]),
-            torch.tensor([2.0, 1.0, 0.0, 0.0, 0.0, 0.0]),
-            torch.tensor([3.0, 1.0, 0.0, 0.0, 0.0, 0.0]),
-            torch.tensor([4.0, 1.0, 0.0, 0.0, 0.0, 0.0]),
-            torch.tensor([5.0, 1.0, 0.0, 0.0, 0.0, 0.0]),
+            torch.tensor([1.0, 0.0, 0.0, 1.0, 0.0, 0.0]),
+            torch.tensor([2.0, 0.0, 0.0, 1.0, 0.0, 0.0]),
+            torch.tensor([3.0, 0.0, 0.0, 1.0, 0.0, 0.0]),
+            torch.tensor([4.0, 0.0, 0.0, 1.0, 0.0, 0.0]),
+            torch.tensor([5.0, 0.0, 0.0, 1.0, 0.0, 0.0]),
         )
     ],
 )
@@ -222,12 +223,13 @@ def test_calculate_path_z(input, coords1, coords2, coords3, coords4, coords5):
 
     cv = PathCV(
         guess_path=input,
-        metric="msd",
+        metric="rmsd",
         smooth_damping=0.0,
         coordinate_system="Cartesian",
         active=[0, 1],
         requires_z=True,
     )
+    cv.la = 2.0
 
     cv.calculate_path(coords1)
     cv1 = cv.path_z
@@ -239,11 +241,11 @@ def test_calculate_path_z(input, coords1, coords2, coords3, coords4, coords5):
     cv4 = cv.path_z
     cv.calculate_path(coords5)
     cv5 = cv.path_z
-    assert isclose(float(cv1), float(1.75), abs_tol=1e-2)
-    assert isclose(float(cv2), float(1.06), abs_tol=1e-2)
-    assert isclose(float(cv3), float(1.72), abs_tol=1e-2)
-    assert isclose(float(cv4), float(1.06), abs_tol=1e-2)
-    assert isclose(float(cv5), float(1.75), abs_tol=1e-2)
+    assert isclose(float(cv1), float(1.78), abs_tol=1e-2)
+    assert isclose(float(cv2), float(1.78), abs_tol=1e-2)
+    assert isclose(float(cv3), float(1.78), abs_tol=1e-2)
+    assert isclose(float(cv4), float(1.78), abs_tol=1e-2)
+    assert isclose(float(cv5), float(1.78), abs_tol=1e-2)
 
 
 @pytest.mark.parametrize(

@@ -33,7 +33,7 @@ class AseMD:
         seed: int = 42,
         active_atoms: list = [],
         mute: bool = True,
-        scratch_dir: str = "scratch/",
+        scratch_dir: str = "./",
     ):
         if atoms == None:
             raise ValueError(" >>> ERROR: AseMD needs `Atoms` object!")
@@ -304,10 +304,10 @@ class AseMD:
         """Propagate momenta/coords with Velocity Verlet
 
         Args:
-           langevin: switch on temperature control using a langevin themostate
+           langevin: switch on temperature control using a langevin thermostat
            friction: friction constant for the langevin thermostat
         """
-
+        # Thermostat
         if self.langevin:
             prefac = 2.0 / (2.0 + self.friction * self.dt)
             rand_push = np.sqrt(
@@ -320,18 +320,27 @@ class AseMD:
                 self.rand_gauss[3 * atom + 2] = random.gauss(0, 1)
 
             self.momenta += np.sqrt(self.masses) * rand_push * self.rand_gauss
-            self.momenta -= 0.5e0 * self.dt_atomic * self.forces
-            self.coords += prefac * self.dt_atomic * self.momenta / self.masses
-
         else:
-            self.momenta -= 0.5e0 * self.dt_atomic * self.forces
-            self.coords += self.dt_atomic * self.momenta / self.masses
+            prefac = 1.0e0
+
+        # Velocity verlet    
+        self.momenta -= 0.5e0 * self.dt_atomic * self.forces
+        self.coords  += prefac * self.dt_atomic * self.momenta / self.masses
+
+        # ASE constraints
+        #if self.molecule.constraints:
+        #    from ase.units import Bohr
+        #    self.coords *= Bohr
+        #    for constraint in self.molecule.constraints:
+        #        # self.coords array is adjusted in-place
+        #        constraint.adjust_positions(self.molecule, self.coords.reshape((self.natoms,3)))
+        #    self.coords /= Bohr
 
     def up_momenta(
         self,
     ):
         """Update momenta with Velocity Verlet"""
-
+        # Thermostat
         if self.langevin:
             prefac = (2.0e0 - self.friction * self.dt) / (
                 2.0e0 + self.friction * self.dt
@@ -340,11 +349,10 @@ class AseMD:
                 self.target_temp * self.friction * self.dt * units.kB_in_atomic / 2.0e0
             )
             self.momenta *= prefac
-            self.momenta += np.sqrt(self.masses) * rand_push * self.rand_gauss
-            self.momenta -= 0.5e0 * self.dt_atomic * self.forces
+            self.momenta += np.sqrt(self.masses) * rand_push * self.rand_gauss     
 
-        else:
-            self.momenta -= 0.5e0 * self.dt_atomic * self.forces
+        # Velocity Verlet   
+        self.momenta -= 0.5e0 * self.dt_atomic * self.forces
 
     def rescale_mom(self, temperature: float = None):
         """Rescales momenta to a certain temperature
