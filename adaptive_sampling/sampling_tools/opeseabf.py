@@ -52,11 +52,13 @@ class OPESeABF(eABF, OPES, EnhancedSampling):
         self,
         *args,
         enable_abf: bool = True,
+        equil_steps: int = None, # no biaspotential is applied until this number of steps is reached in the MD. 
         **kwargs,
     ):
         super().__init__(*args, **kwargs)
         self.abf_forces = np.zeros_like(self.bias)
         self.enable_abf = enable_abf
+        self.equil_steps = equil_steps
         if self.verbose and self.enable_abf:
             print(f" >>> INFO: ABF enabled for OPES-eABF (N_full={self.nfull})")
         elif self.verbose:
@@ -225,6 +227,9 @@ class OPESeABF(eABF, OPES, EnhancedSampling):
                 self.write_output(output, filename=output_file)
             if restart_file:
                 self.write_restart(filename=restart_file)
+
+        if self.equil_steps != None and self.md_state.step <= self.equil_steps:
+            return np.zeros_like(bias_force)
         return bias_force
 
     def reinit(self):
