@@ -1032,4 +1032,83 @@ class MonteCarloBarostatASH:
             # neglecting periodic boundary conditions!
             pressure -= np.sum(self.the_md.coords * self.the_md.forces * units.atomic_to_kJmol)/(3.*volume)
         return pressure / (self.AVOGADRO*1e-25) # convert kJ/mol/nm^2 to Bar
+
+
+class StochasticCellRescalingBarostatASH(MonteCarloBarostatASH):
+    """Stochastic Cell Rescaling Barostat for OpenMMTheory in AshMD
+
+    Ref: https://doi.org/10.1063/5.0020514
+
+    Requires one additional energy evaluation every `self.frequency` steps to update the periodic box size,
+    and two additional energy evaluations per pressure evaluation if `pressure_from_finite_difference` is True.
+
+    Note, that only the time average of the instanteneous pressure can be expected to equal the pressure applied by the barostat.
+    Fluctuations around the average pressure typically are extremely large and very long simulations are required to calculate it accurately!
+    Hence, it is recomended to instead monitore the density of the system, as provided in `self.density` in g/cm^3.
+    
+    Args:
+        the_md: AshMD object
+        target_pressure: target pressure in bar
+        frequency: frequency of barostat updates
+        pressure_from_finite_difference: if True, more accurate pressure, else calculate pressure from system forces, neglecting periodic boundary conditions 
+        barostat_reporter: if not None, write barostat data to file
+        indexCenterMol: index of the molecule to move to the center of the periodic box
+        useParmed: if True, use `parmed` to update periodic box vectors in OpenMMTheory, else use `Amberfiles`
+    """
+    def init(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.epsilon = np.log(self.volume)
+        self.beta_T = 1.0
+        self.tau_p = 1.0
+    
+
+    def updateState(self):
+        """Update the state of the barostat
+        This method should be called in every MD step, such that the periodic box size is updated every `self.frequency` steps  
+        """
+        #self.updateAvgKinEnergy(tau=self.frequency)
+        if self.the_md.step%self.frequency != 0:
+            return
          
+        # calculate the current kinetic energy
+        momenta = self.the_md.momenta.reshape((self.the_md.natoms, 3))
+        masses = self.the_md.mass  # shape (natoms,)
+        ke_per_atom = np.sum(momenta**2, axis=1) / (2 * masses)
+        current_kinetic_energy = np.sum(ke_per_atom) * units.atomic_to_kJmol
+
+        # calculate the current pressure
+        current_pressure = 2 * current_kinetic_energy / (3 * self.volume)
+        current_pressure -= np.sum(self.the_md.coords * self.the_md.forces * units.atomic_to_kJmol)/(3.*self.volume)
+
+        # Instead of changes acting directly on V, epsilon = log(V/V_0) is propagated, where V_0 is an arbitrary reference volume, chosen to be 1
+        dEpsilon_det = - self.beta_T / self.tau_p * (self.target_pressure - current_pressure) * self.the_md.dt # TODO CHECK UNITS
+        variance = 2 * units.kB_in_atomic * units.atomic_to_kJmol * self.the_md.target_temp * self.beta_T / (self.volume * self.tau_p) * self.the_md.dt
+        dEpsilon_stoch = np.sqrt(variance) * np.random.randn()
+        self.epsilon += dEpsilon_det + dEpsilon_stoch
+
+        
+        # modify the periodic box size 
+        newVolume = np.exp(self.epsilon)
+        lengthScale = np.cbrt(newVolume/self.volume)       
+
+        # scale coordinates, momenta and box size
+        self.the_md.coords *= lengthScale
+        self.the_md.momenta /= lengthScale
+        newBox = self.box*lengthScale   
+
+        self.setPeriodicBoxVectors(newBox, useParmed=self.useParmed)
+        self.wrapMoleculesToPeriodicBox(newBox, molOrigin=self.indexCenterMol) 
+
+        # accept the step
+
+        # update box, volume, density and pressure
+        self.box = self.getPeriodicBoxVectors()  # nm
+        self.volume = self.getVolume(self.getPeriodicBoxVectors())
+        self.density = self.the_md.mass.sum() / self.volume * self.DALTON2GRAMM / 1.e-21
+        self.pressure = self.computeCurrentPressure(numeric=self.pressure_from_finite_difference)
+        if self.barostat_reporter:
+            with open(self.barostat_reporter, "a") as f:
+                f.write(
+                    str("%20.2f \t %20.10e \t %20.10e \t %20.10e\n")
+                    % (self.the_md.step * self.the_md.dt, self.volume, self.density, self.pressure)
+                )
