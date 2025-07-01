@@ -10,16 +10,22 @@ import sys
 
 sys.path.insert(0, os.path.abspath(".."))
 
-
 project = 'adaptive-sampling'
-copyright = '2025, Andreas Hulm, Alexandra Stan-Bernhardt'
-author = 'Andreas Hulm, Alexandra Stan-Bernhardt'
+copyright = '2025, MIT License'
+author = 'Andreas V. Hulm, Alexandra Stan-Bernhardt'
 release = '3.0.1'
 
 # -- General configuration ---------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#general-configuration
 
-extensions = ["sphinx.ext.todo", "sphinx.ext.viewcode", "sphinx.ext.autodoc"]
+extensions = [
+    "sphinx.ext.todo", 
+    "sphinx.ext.viewcode", 
+    "sphinx.ext.autodoc",
+    "sphinx_copybutton",
+    "sphinx-prompt",
+    "nbsphinx",
+]
 
 templates_path = ['_templates']
 exclude_patterns = []
