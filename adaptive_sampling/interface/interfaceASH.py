@@ -608,8 +608,8 @@ class MonteCarloBarostatASH:
             raise ValueError(" >>> ERROR: AshMD needs a valid calculator with mm_theory")
         if the_md.calculator.mm_theory_name != "OpenMMTheory":
             raise ValueError(" >>> ERROR: `MonteCarloBarostatASH` only available for OpenMMTheory")
-        if not the_md.calculator.mm_theory.Periodic:
-            raise ValueError(" >>> ERROR: A barostat cannot be used with a non-periodic system")
+        #if not the_md.calculator.mm_theory.Periodic:
+        #    raise ValueError(" >>> ERROR: A barostat cannot be used with a non-periodic system")
         if not the_md.langevin:
             raise ValueError(" >>> ERROR: A barostat requires a thermostat to be applied, use `the_md.thermostat=True`")
 

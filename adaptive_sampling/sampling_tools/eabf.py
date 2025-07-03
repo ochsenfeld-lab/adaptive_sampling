@@ -47,7 +47,7 @@ class eABF(ABF, EnhancedSampling):
         *args,
         ext_sigma: Union[float, list] = None,
         ext_mass: Union[float, list] = 20.0,
-        adaptive_coupling_stride: int = 5000,
+        adaptive_coupling_stride: int = 1000,
         adaptive_coupling_scaling: float = 0.5,
         adaptive_coupling_min: float = 0.01,
         friction: float = 1.0e-3,
