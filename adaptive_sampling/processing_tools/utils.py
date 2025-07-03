@@ -59,10 +59,10 @@ def autocorr(x: np.ndarray) -> np.ndarray:
 def ipce(corr_x: np.ndarray):
     """The initial positive correlation time estimator for the autocorrelation time, as proposed by Geyer et al.
 
-    args
+    Args
         corr_x: autocorrelation function of time series of which to calculate the autocorrelation time.
 
-    returns:
+    Returns:
         tau: Estimate of the autocorrelation time.
     """
     lag_max = int(len(corr_x) / 2)

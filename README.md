@@ -32,7 +32,7 @@ This package implements various sampling algorithms for the calculation of free 
 ## Install:
 To install adaptive_sampling type:
 ```shell
-$ pip install adaptive-sampling
+$ pip install git+https://github.com/ochsenfeld-lab/adaptive_sampling.git
 ```
 
 

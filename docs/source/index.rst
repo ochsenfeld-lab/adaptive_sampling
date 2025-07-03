@@ -13,9 +13,8 @@ Welcome to the adaptive-sampling package documentation!
    :caption: Contents:
 
    intro
-
-   :caption: Tutorials:
+   install
+   basics
    tutorials
-
-   :caption: Code Documentation:
    code
+   publications
