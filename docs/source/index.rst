@@ -15,6 +15,8 @@ Welcome to the adaptive-sampling package documentation!
    intro
    install
    basics
+   sampling_tools
+   exploration_tools
    tutorials
    code
    publications

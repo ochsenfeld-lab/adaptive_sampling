@@ -131,7 +131,8 @@ In the below example we will perform a QM/MM MD simulation using the xTB method 
 The OpenMM interface
 ^^^^^^^^^^^^^^^^^^^^
 
-This section provides a minimal example for using the OpenMM interface together with AMBER style parameter files.
+This section provides a minimal example for using the OpenMM interface together with AMBER style `prmtop` and `crd` files.
+Note that also other file formats are supported by OpenMM. 
 You can initialize the `AdaptiveSamplingOpenMM` class as follows:
 
 .. code-block:: python
@@ -146,8 +147,8 @@ You can initialize the `AdaptiveSamplingOpenMM` class as follows:
     from adaptive_sampling.interface import AdaptiveSamplingOpenMM
 
     # Setup OpenMM
-    prmtop = AmberPrmtopFile(f"../data/alanine-dipeptide.prmtop")
-    crd = AmberInpcrdFile(f"../data/alanine-dipeptide.crd")
+    prmtop = AmberPrmtopFile(f"structure.prmtop")
+    crd = AmberInpcrdFile(f"structure.crd")
     system = prmtop.createSystem(
         nonbondedMethod=NoCutoff,
         constraints=HBonds,
@@ -165,7 +166,7 @@ You can initialize the `AdaptiveSamplingOpenMM` class as follows:
 
     # The OpenMM `simulation` and `integrator` objects are set up internally, but can still be modified by calling `the_md.simulation` or `the_md.integrator`
     the_md.integrator.setConstraintTolerance(0.00001)
-    the_md.simulation.reporters.append(DCDReporter('alanine-dipeptide.dcd', 100)) 
+    the_md.simulation.reporters.append(DCDReporter('trajectory.dcd', 100)) 
 
 Before running the MD any importance sampling algorithm from `sampling_tools` has to be attached to the OpenMM interface:
 
