@@ -46,8 +46,6 @@ class AshMD:
         mute: bool = True,
         scratch_dir: str = "scratch/",
         neglect_PC_grad: bool = False,
-        openmmkwargs: dict = None,
-        barostat_box_option: str = "newQMMM",
         **kwargs,
     ):
         if fragment == None:
@@ -122,10 +120,6 @@ class AshMD:
         # barostat
         self.apply_barostat = barostat
         if self.apply_barostat:
-            if openmmkwargs is None:
-                raise ValueError("Please specify openmmkwargs for system recreation after box rescaling for barostat.")
-            self.openmmkwargs = openmmkwargs
-            self.barostat_box_option = barostat_box_option
             self.barostat = MonteCarloBarostatASH(
                 the_md=self,
                 frequency=barostat_freq,
@@ -726,198 +720,15 @@ class MonteCarloBarostatASH:
     
     def setPeriodicBoxVectors(self, newBox, useParmed: bool = False):
         """modify periodic box vectors of the OpenMMTheory object in AshMD
-        See: https://github.com/RagnarB83/ash/blob/81c4f952e7908bfe2e4714836308d0f792a85f4c/ash/interfaces/interface_OpenMM.py#L923
-
-        WARNING: this method only supports `OpenMMTheory` using CHARMM or Amber files
+        Was tested for xmlfiles and ambertopfile creation of MM object.
 
         Args:
             newBox: new periodic box vectors in nm, shape (3, 3)
-            useParmed: if True, use `parmed` for box vector update in OpenMMTheory using amber, else use `Amberfiles`
+            useParmed: does nothing, is kept for backwardscompatibility
         """
-        import openmm
         the_mm: OpenMMTheory = self.the_md.calculator.mm_theory
-
-        if self.the_md.barostat_box_option.lower() == "newqmmm":
-            # this works only for Parm7 files
-
-    ####################################################################################################
-    #####                   TEST COMPLETE REINIT OF MM AND QMMMM                                   #####
-    ####################################################################################################
-    #        the_mm = ash.OpenMMTheory(
-    #    #xmlfiles=["./openff_LIG.xml", "/home/abeckmann/miniforge3/envs/ash/lib/python3.11/site-packages/openmm/app/data/amber14/tip3p.xml"],
-    #    Amberfiles=True, amberprmtopfile='phenanthrolin_solv.parm7',
-    #            pdbfile=pdbfile, periodic=True, rigidwater=False, autoconstraints=None, printlevel=0)
-
-
-            # Recreate with same pdbfile but new box
-            self.the_md.openmmkwargs['PBCvectors'] = newBox * 10.0 # in Angstrom
-            the_new_mm = OpenMMTheory(
-                **self.the_md.openmmkwargs
-            )
-
-            the_qmmm: QMMMTheory = self.the_md.calculator
-
-            # Create new QMMMTheory object based on the old one, only changing the mmtheory
-            qmmm_new = QMMMTheory(
-                qm_theory = the_qmmm.qm_theory,
-                qmatoms = the_qmmm.qmatoms,
-                fragment = the_qmmm.fragment,
-                mm_theory = the_new_mm,
-                charges = the_qmmm.charges,
-                embedding = the_qmmm.embedding,
-                printlevel = the_qmmm.printlevel,
-                numcores = the_qmmm.numcores,
-                actatoms = getattr(the_qmmm, "actatoms", None),
-                frozenatoms = getattr(the_qmmm, "frozenatoms", None),
-                excludeboundaryatomlist = getattr(the_qmmm, "excludeboundaryatomlist", None),
-                unusualboundary = the_qmmm.linkatoms,
-                openmm_externalforce = the_qmmm.openmm_externalforce,
-                TruncatedPC = the_qmmm.TruncatedPC,
-                TruncPCRadius = the_qmmm.TruncPCRadius,
-                TruncatedPC_recalc_iter = the_qmmm.TruncatedPC_recalc_iter,
-                qm_charge = the_qmmm.qm_charge,
-                qm_mult = the_qmmm.qm_mult,
-                chargeboundary_method = the_qmmm.chargeboundary_method,
-                dipole_correction = the_qmmm.dipole_correction,
-                linkatom_method = the_qmmm.linkatom_method,
-                linkatom_simple_distance = the_qmmm.linkatom_simple_distance,
-                linkatom_forceproj_method = the_qmmm.linkatom_forceproj_method,
-                linkatom_ratio = the_qmmm.linkatom_ratio,
-                linkatom_type = the_qmmm.linkatom_type
-            )
-
-            self.the_md.calculator = qmmm_new
-            return
-
-
-
-    ####################################################################################################
-    #####                   END OF THE TEST                                                        #####
-    ####################################################################################################
-        elif self.the_md.barostat_box_option.lower() == "fix1":
-            # update periodic box vectors in OpenMMTheory
-            gromacs = hasattr(the_mm, 'grofile')
-            if gromacs:
-                raise ValueError(" >>> ERROR: `MonteCarloBarostatASH` does not support Gromacs files for OpenMMTheory")
-
-            charmm = hasattr(the_mm, 'psffile')
-            amber = hasattr(the_mm, 'prmtop')        
-            the_mm.set_periodics_before_system_creation(
-                PBCvectors=newBox * 10.0,       # in Angstrom 
-                pdb_pbc_vectors=None,           # not used, if PBCvectors are set
-                periodic_cell_dimensions=None,  # not used, if PBCvectors are set
-                CHARMMfiles=charmm,             # it True, OpenMMTheory uses CHARMMfiles for system creation
-                Amberfiles=amber,               # if True, OpenMMTheory uses AMBERfiles for system cration
-                use_parmed=useParmed,           # if True, OpenMMTheory uses Parmed for system creation
-            )
-
-            # get parameters of OpenMM system
-            if the_mm.nonbondedMethod_PBC == 'PME':
-                nonb_method_PBC=openmm.app.PME
-            elif the_mm.nonbondedMethod_PBC == 'Ewald':
-                nonb_method_PBC=openmm.app.Ewald
-            elif the_mm.nonbondedMethod_PBC == 'LJPME':
-                nonb_method_PBC=openmm.app.LJPME
-            elif the_mm.nonbondedMethod_PBC == 'CutoffPeriodic':
-                nonb_method_PBC=openmm.app.CutoffPeriodic
-
-            for force in the_mm.system.getForces():
-                if isinstance(force, openmm.NonbondedForce):
-                    dispersion_correction = force.getUseDispersionCorrection()
-                    PMEParameters = force.getPMEParameters()
-
-            # create new system with updated box vectors (identical to system creaction in init of OpenMMTheory)
-            if charmm:
-                the_mm.system = self.forcefield.createSystem(
-                        the_mm.params, 
-                        nonbondedMethod=nonb_method_PBC,
-                        constraints=the_mm.autoconstraints,
-                        hydrogenMass=the_mm.hydrogenmass,
-                        rigidWater=the_mm.rigidwater, 
-                        ewaldErrorTolerance=the_mm.ewalderrortolerance,
-                        nonbondedCutoff=the_mm.periodic_nonbonded_cutoff * openmm.unit.angstroms,
-                        switchDistance=the_mm.switching_function_distance * openmm.unit.angstroms
-                    )
-                        
-            elif amber:
-                the_mm.system = the_mm.forcefield.createSystem(
-                    nonbondedMethod=nonb_method_PBC,
-                    constraints=the_mm.autoconstraints,
-                    hydrogenMass=the_mm.hydrogenmass,
-                    rigidWater=the_mm.rigidwater, 
-                    ewaldErrorTolerance=the_mm.ewalderrortolerance,
-                    nonbondedCutoff=the_mm.periodic_nonbonded_cutoff * openmm.unit.angstroms
-                )
-            elif True:
-                # This implementation does not reflect the residueTemplate option if defined during the OpenMMTheory creation
-                the_mm.system = the_mm.forcefield.createSystem(
-                    the_mm.topology, 
-                    nonbondedMethod=nonb_method_PBC,
-                    constraints=the_mm.autoconstraints,
-                    hydrogenMass=the_mm.hydrogenmass,
-                    rigidWater=the_mm.rigidwater, 
-                    ewaldErrorTolerance=the_mm.ewalderrortolerance,
-                    nonbondedCutoff=the_mm.periodic_nonbonded_cutoff * openmm.unit.angstroms, 
-                    )
-                
-            else:
-                raise ValueError(" >>> ERROR: `MonteCarloBarostatASH` only supports CHARMM or AMBER files for OpenMMTheory")
-
-
-            # Excerpts of QMMM init to switch forcefield of for qm atoms (those forces come out of the QM calculation)
-
-            the_qmmm = self.the_md.calculator
-            if the_qmmm.mm_theory_name == "OpenMMTheory":
-                the_qmatoms = the_qmmm.qmatoms
-                the_mm.remove_constraints_for_atoms(the_qmatoms)
-
-                # Remove bonded interactions in MM part. Only in OpenMM. Assuming they were never defined in NonbondedTHeory
-                print("Removing bonded terms for QM-region in MMtheory")
-                the_mm.modify_bonded_forces(the_qmatoms)
-
-                # NOTE: Temporary. Adding exceptions for nonbonded QM atoms. Will ignore QM-QM Coulomb and LJ interactions.
-                # NOTE: For QM-MM interactions Coulomb charges are zeroed below (update_charges and delete_exceptions)
-                print("Removing nonbonded terms for QM-region in MMtheory (QM-QM interactions)")
-                the_mm.addexceptions(the_qmatoms)
-
-            ########################
-            # CHANGE CHARGES
-            ########################
-            # Keeping the_qmmm.charges as originally defined.
-            # Setting QM charges to 0 since electrostatic embedding
-            # and Charge-shift QM-MM boundary
-
-            # Zero QM charges for electrostatic embedding
-            # TODO: DO here or inside run instead?? Needed for MM code.
-            if the_qmmm.embedding.lower() == "elstat":
-                print("Charges of QM atoms set to 0 (since Electrostatic Embedding):")
-                the_qmmm.ZeroQMCharges() #Modifies the_qmmm.charges_qmregionzeroed
-                # print("length of the_qmmm.charges_qmregionzeroed :", len(the_qmmm.charges_qmregionzeroed))
-                # TODO: make sure this works for OpenMM and for NonBondedTheory
-                # Updating charges in MM object.
-                the_mm.update_charges(the_qmatoms,[0.0 for i in the_qmatoms])
-
-            if the_qmmm.mm_theory_name == "OpenMMTheory":
-                # Deleting Coulomb exception interactions involving QM and MM atoms
-                the_mm.delete_exceptions(the_qmatoms)
-                # Option to create OpenMM externalforce that handles full system
-                if the_qmmm.openmm_externalforce == True:
-                    print("openmm_externalforce is True")
-                    # print("Creating new OpenMM custom external force")
-                    # MOVED FROM HERE TO OPENMM_MD
-            
-            for force in the_mm.system.getForces():
-                if isinstance(force, openmm.NonbondedForce):
-                    force.setUseDispersionCorrection(dispersion_correction)
-                    if nonb_method_PBC == openmm.app.PME:
-                        force.setPMEParameters(*PMEParameters)  
-        elif self.the_md.barostat_box_option.lower() == "fix4":
-            print("NEW BOX:")
-            print(type(newBox))
-            print(newBox)
-            print()
-            the_mm.topology.setPeriodicBoxVectors(newBox)
-            the_mm.system.setDefaultPeriodicBoxVectors(*newBox)
+        the_mm.topology.setPeriodicBoxVectors(newBox)
+        the_mm.system.setDefaultPeriodicBoxVectors(*newBox)
 
     def getPeriodicBoxVectors(self) -> np.array:
         """Get the periodic box vectors in nm"""
