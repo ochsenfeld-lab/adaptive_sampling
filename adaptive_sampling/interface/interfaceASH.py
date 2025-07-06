@@ -661,7 +661,6 @@ class MonteCarloBarostatASH:
         pressure_from_finite_difference: if True, more accurate pressure, else calculate pressure from system forces, neglecting periodic boundary conditions 
         barostat_reporter: if not None, write barostat data to file
         indexCenterMol: index of the molecule that is moved to the center of the periodic box
-        useParmed: if True, use `parmed` to update periodic box vectors in OpenMMTheory, else use `Amberfiles`
     """
     
     AVOGADRO = 6.02214076e23
@@ -676,7 +675,6 @@ class MonteCarloBarostatASH:
         pressure_from_finite_difference: bool=False, 
         barostat_reporter: str=None,
         indexCenterMol: int=0,
-        useParmed: bool=False,
     ):
         if not hasattr(the_md, "calculator") or not hasattr(the_md.calculator, "mm_theory"):
             raise ValueError(" >>> ERROR: AshMD needs a valid calculator with mm_theory")
@@ -692,7 +690,6 @@ class MonteCarloBarostatASH:
         self.frequency = frequency
         self.pressure_from_finite_difference = pressure_from_finite_difference
         self.indexCenterMol = indexCenterMol
-        self.useParmed = useParmed
 
         self.box = self.getPeriodicBoxVectors() # nm
         self.volume = self.getVolume(self.box)  # nm^3
@@ -718,13 +715,12 @@ class MonteCarloBarostatASH:
             with open(self.barostat_reporter, "w") as f:
                 f.write(f"{'# TimeStep[fs]':20s} \t {'Volume[nm^3]':20s} \t {'Density[g/cm^3]':20s} \t {'Pressure[Bar]':20s} \t {'MC crit[kJ/mol]':20s} \t {'Accepted?':20s}\n")
     
-    def setPeriodicBoxVectors(self, newBox, useParmed: bool = False):
+    def setPeriodicBoxVectors(self, newBox):
         """modify periodic box vectors of the OpenMMTheory object in AshMD
         Was tested for xmlfiles and ambertopfile creation of MM object.
 
         Args:
             newBox: new periodic box vectors in nm, shape (3, 3)
-            useParmed: does nothing, is kept for backwardscompatibility
         """
         the_mm: OpenMMTheory = self.the_md.calculator.mm_theory
         the_mm.topology.setPeriodicBoxVectors(newBox)
@@ -759,7 +755,7 @@ class MonteCarloBarostatASH:
         coordsNew = self.scaleCoords(lengthScale) # nm
 
         # calculte energy of new box
-        self.setPeriodicBoxVectors(newBox, useParmed=self.useParmed)
+        self.setPeriodicBoxVectors(newBox)
         self.wrapMoleculesToPeriodicBox(newBox, molOrigin=self.indexCenterMol) 
         os.chdir(self.the_md.scratch_dir)
         self.the_md.molecule.replace_coords(
@@ -786,7 +782,7 @@ class MonteCarloBarostatASH:
         
         if w > 0 and np.random.uniform(0,1) > np.exp(-w/kT):
             # reject the step and restore original state of self.the_md
-            self.setPeriodicBoxVectors(self.box, useParmed=self.useParmed)
+            self.setPeriodicBoxVectors(self.box)
             self.wrapMoleculesToPeriodicBox(self.box, molOrigin=self.indexCenterMol)
             self.the_md.molecule.replace_coords(
                 self.the_md.molecule.elems,
@@ -930,7 +926,7 @@ class MonteCarloBarostatASH:
             scale1 = 1.0-deltaV
             coordsNew = self.scaleCoords(scale1) 
             newBox = box*scale1
-            self.setPeriodicBoxVectors(newBox, useParmed=self.useParmed)
+            self.setPeriodicBoxVectors(newBox)
             os.chdir(self.the_md.scratch_dir)
             self.the_md.molecule.replace_coords(
                 self.the_md.molecule.elems,
@@ -950,7 +946,7 @@ class MonteCarloBarostatASH:
             scale2 = 1.0+deltaV
             coordsNew = self.scaleCoords(scale2)
             newBox = box*scale2
-            self.setPeriodicBoxVectors(newBox, useParmed=self.useParmed)
+            self.setPeriodicBoxVectors(newBox)
             self.the_md.molecule.replace_coords(
                 self.the_md.molecule.elems,
                 coordsNew.reshape((self.the_md.natoms, 3)) * 10.0,
@@ -966,7 +962,7 @@ class MonteCarloBarostatASH:
             os.chdir(self.the_md.cwd)
 
             # Restore the context to its original state.
-            self.setPeriodicBoxVectors(box, useParmed=self.useParmed)
+            self.setPeriodicBoxVectors(box)
             self.the_md.molecule.replace_coords(
                 self.the_md.molecule.elems,
                 coordsOld.reshape((self.the_md.natoms, 3)) * 10.0,
@@ -1004,7 +1000,6 @@ class StochasticCellRescalingBarostatASH(MonteCarloBarostatASH):
         pressure_from_finite_difference: if True, more accurate pressure, else calculate pressure from system forces, neglecting periodic boundary conditions 
         barostat_reporter: if not None, write barostat data to file
         indexCenterMol: index of the molecule to move to the center of the periodic box
-        useParmed: if True, use `parmed` to update periodic box vectors in OpenMMTheory, else use `Amberfiles`
     """
     def init(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -1047,7 +1042,7 @@ class StochasticCellRescalingBarostatASH(MonteCarloBarostatASH):
         self.the_md.momenta /= lengthScale
         newBox = self.box*lengthScale   
 
-        self.setPeriodicBoxVectors(newBox, useParmed=self.useParmed)
+        self.setPeriodicBoxVectors(newBox)
         self.wrapMoleculesToPeriodicBox(newBox, molOrigin=self.indexCenterMol) 
 
         # accept the step
