@@ -18,7 +18,7 @@ It implements basic functionalities for running adaptive sampling simulations. P
         the_cv,                     # The definition of collective variables (CV) from `adaptive_sampling.colvars`
         equil_temp=300.0,           # Equilibrium temperature of the MD
         kinetics=True,              # Calculate and output necessary metrics to obtain accurate kinetics
-        f_conf=100.0,               # Force constant for confinement of CVs to the range of interest with harmonic walls
+        f_conf=100.0,               # Force constant for confinement of CVs to the range of interest with harmonic walls in kJ/mol/(CV units)^2
         output_freq=100,            # Frequency of writing outputs in MD steps
         multiple_walker=False,      # Use shared bias multiple walker implementation to synchronize time dependent biasing potentials with other simulations via buffer file
         periodicity=None,           # Periodic boundary conditions for periodic CVs, list of boundaries of `shape(len(CVs),2)`, [[lower_boundary0, upper_boundary0], ...]
@@ -66,6 +66,10 @@ The WTM algorithm can be used as follows:
         force_from_grid=True,       # Always recommended. If True, bias potentials and forces are accumulated on a grid, if False, the sum of Gaussian hills is calculated in every step, which can be expensive for long runs.
         #...,                       # Additional inherited keyword arguments from the `EnhancedSampling` class.
     )
+
+For more information on MtD and WTM, refer to the original publications:
+    * MtD: https://doi.org/10.1103/PhysRevLett.96.090601
+    * WTM: https://doi.org/10.1103/PhysRevLett.100.020603
 
 On-the-fly probability enhanced sampling (OPES)
 -----------------------------------------------
@@ -137,6 +141,10 @@ While the OPES implementation features many options, most of them are not critic
         #...,                       # Additional inherited keyword arguments from the `EnhancedSampling` class.
     )
 
+For more information on OPES and OPES explore, refer to the original publications:
+    * OPES: https://doi.org/10.1021/acs.jpclett.0c00497
+    * OPES_Explore: https://doi.org/10.1021/acs.jctc.2c00152
+
 Extended-system dynamics
 ------------------------
 
@@ -150,9 +158,9 @@ where :math:`\lambda` denotes additional degrees of freedom (extended system), :
 
 Multiple methods based on extended system dynamics are implemented, with differ in how the bias potential :math:`U^{bias}(\lambda,t)` is constructed:
 
- * `eABF`: extended adaptive biasing force
- * `WTMeABF`: applies both the WTM and ABF bias potentials to the extended system
- * `OPESeABF`: applies both the OPES and ABF bias potentials to the extended system
+ * `eABF`: extended adaptive biasing force (Ref: https://doi.org/10.1021/acs.jpcb.6b10055)
+ * `WTMeABF`: applies both the WTM and ABF bias potentials to the extended system (Ref: https://doi.org/10.1021/acs.accounts.9b00473)
+ * `OPESeABF`: applies both the OPES and ABF bias potentials to the extended system (Ref: https://doi.org/10.1021/acs.jctc.5c00395)
 
 The different types of extended-system dynamics can be used as follows:
 
@@ -243,7 +251,7 @@ The different types of aMD can be used as follows:
         #...,                      # Additional inherited keyword arguments from the `EnhancedSampling` class.
     )
 
-The global conformational sampling as provided by `aMD` can be combined with local sampling acceleration of the selected CVs in the `WTMeABF` method:
+The global conformational sampling as provided by `aMD` can be combined with local sampling acceleration of the selected CVs in the `WTMeABF` method (Ref: https://doi.org/10.1021/acs.jctc.1c00103):
 
 .. code-block:: python
     :linenos:

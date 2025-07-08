@@ -16,6 +16,7 @@ Welcome to the adaptive-sampling package documentation!
    install
    basics
    sampling_tools
+   colvars
    exploration_tools
    tutorials
    code
