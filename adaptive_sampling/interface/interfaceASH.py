@@ -259,20 +259,7 @@ class AshMD:
         self,
     ):
         """"""
-        import wandb
-        wandb.define_metric("*", step_metric='time_ps')
-        if self.apply_barostat:
-            wandb.log(
-                {
-                    "time_ps": self.step * self.dt / 1000,
-                    "barostat/V": self.barostat.volume,         # nm^3
-                    "barostat/p": self.barostat.pressure,       # bar
-                    "barostat/rho": self.barostat.density,      # g/cm^3
-                },
-                step = self.step,
-            )
-        wandb.log(
-            {
+        data = {
                 "time_ps": self.step * self.dt / 1000,
                 "E_pot": self.epot,
                 "E_kin": self.ekin,
@@ -282,9 +269,19 @@ class AshMD:
                 "therm/T": self.temp,
                 "therm/p": self.pres,
                 "therm/V": self.vol,
-                "amd/boost_ratio": np.linalg.norm(self.bias_forces) / np.linalg.norm(self.forces - self.bias_forces),
+                "amd/boost_ratio": np.linalg.norm(self.bias_forces) / np.linalg.norm(self.forces - self.bias_forces),    # ratio of |boost_forces|/|unboosted forces|
                 "time_per_step": self.time_last_step,
-            },
+            }
+        if self.apply_barostat: 
+            data.update({
+                "barostat/V": self.barostat.volume,         # nm^3
+                "barostat/p": self.barostat.pressure,       # bar
+                "barostat/rho": self.barostat.density,      # g/cm^3
+            })
+        import wandb
+        wandb.define_metric("*", step_metric='time_ps')
+        wandb.log(
+            data = data,
             step = self.step,
         )
 
