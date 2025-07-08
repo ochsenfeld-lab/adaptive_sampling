@@ -277,6 +277,7 @@ class AshMD:
                 "barostat/V": self.barostat.volume,         # nm^3
                 "barostat/p": self.barostat.pressure,       # bar
                 "barostat/rho": self.barostat.density,      # g/cm^3
+                "barostat/p_inst": self.barostat.instantaneous_pressure, # bar
             })
         import wandb
         wandb.define_metric("*", step_metric='time_ps')
@@ -699,6 +700,7 @@ class MonteCarloBarostatASH:
         self.m2_ekin = 0.0
         self.var_ekin = 0.0
         self.pressure = 0.0
+        self.instantaneous_pressure = 0.0
 
         # get the individual molecule's
         self.simulation = the_md.calculator.mm_theory.create_simulation()       
@@ -797,6 +799,7 @@ class MonteCarloBarostatASH:
         self.volume = self.getVolume(self.getPeriodicBoxVectors())
         self.density = self.the_md.mass.sum() / self.volume * self.DALTON2GRAMM / 1.e-21
         self.pressure = self.computeCurrentPressure(numeric=self.pressure_from_finite_difference)
+        self.instantaneous_pressure = self.computeInstantaneousPressure()
         if self.barostat_reporter:
             with open(self.barostat_reporter, "a") as f:
                 f.write(
@@ -977,6 +980,17 @@ class MonteCarloBarostatASH:
             pressure -= np.sum(self.the_md.coords * self.the_md.forces * units.atomic_to_kJmol)/(3.*volume)
         return pressure / (self.AVOGADRO*1e-25) # convert kJ/mol/nm^2 to Bar
 
+    def computeInstantaneousPressure(self):
+        momenta = self.the_md.momenta.reshape((self.the_md.natoms, 3))
+        masses = self.the_md.mass  # shape (natoms,)
+        ke_per_atom = np.sum(momenta**2, axis=1) / (2 * masses)
+        current_kinetic_energy = np.sum(ke_per_atom) * units.atomic_to_kJmol
+
+        # calculate the current pressure
+        current_pressure = 2 * current_kinetic_energy / (3 * self.volume)
+        current_pressure -= np.sum(self.the_md.coords * self.the_md.forces * units.atomic_to_kJmol)/(3.*self.volume)
+
+        return current_pressure / (self.AVOGADRO * 1e-25) # convert kJ/mol/nm^3 to bar 
 
 class StochasticCellRescalingBarostatASH(MonteCarloBarostatASH):
     """Stochastic Cell Rescaling Barostat for OpenMMTheory in AshMD
