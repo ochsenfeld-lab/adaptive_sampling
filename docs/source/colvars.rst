@@ -19,16 +19,16 @@ The basic syntax for defining CVs is given below, where the distance between two
         # An additional second CV can be added to the list
     ]
 
-Internally, in the `EnhancedSampling` class the `get_cv` function of the `CV` class in the `adaptive_sampling.colvars` module is called in every MD step.
-Therefore, all CVs that are defined in the `CV.get_cv` function are available for sampling. 
+Internally, in the `EnhancedSampling` class the `get_cv` function of the `adaptive_sampling.colvars.CV` class is called in every MD step.
+Therefore, all CVs that are defined in the `CV.get_cv()` function are available for sampling. 
 
-Each CV is gets associated with a `cv_type` in the `get_cv` function, that defines how units of CVs are handled. 
-The `cv_type` can be one of the following:
-    * "`distance`": For distance based CVs, input and output units are in Angstrom.
-    * "`angle`": For angle based CVs, input and output units are in degrees. 
+Each CV is gets associated with a `type` in the `get_cv` function, that defines how units of CVs are handled. 
+The CV `type` can be one of the following:
+    * "`distance`": For distance based CVs, input and output units are in Angstrom. Internally, atomic units (Bohr) are used. 
+    * "`angle`": For angle based CVs, input and output units are in degrees. Internally, radians are used. 
     * "`None`": For CVs in arbitrary units, input and output units are not converted.
 
-In the following examples of how popular CVs can be defined are given:
+In the following section, we provide examples of setting up different CVs.
 
 Common, simple CVs
 ------------------
@@ -133,6 +133,52 @@ Path CVs (PCVs)
 
 Machine Learning CVs (MLCVs):
 -----------------------------
+
+MLCVs are defined using the `mlcolvars` package, which is based on PyTorch and provides a framework for training a number of popular MLCVs.
+For more information on types of implemented MLCVs, as well on how to train them, please refer to the `mlcolvars documentation <https://mlcolvar.readthedocs.io/en/stable/>`_.
+
+To use MLCVs together with the `adaptive_sampling` package, pretrained models need to be saved in torchscript format:
+
+.. code-block:: python
+    :linenos:
+
+    model.to_torchscript('model.ptc', method="trace")
+
+The `adaptive_sampling.colvars.MLCOLVAR` class can then be used to run simulations with the pretrained CV model:
+
+.. code-block:: python
+    :linenos:
+
+    # definition of the CV space the MLCV uses 
+    cv_space = [
+        ['distance', [1,2]],  # distance between atoms 1 and 2
+        ['distance', [3,4]],  # distance between atoms 3 and 4
+        #...
+    ]
+
+    # Parameters of the `adaptive_sampling.colvars.MLCOLVAR` class as a dictionary
+    cv_def = {
+        "model": "model.ptc",                              # path to the pretrained model in torchscript format.
+        "coordinate_system": "cv_space",                   # coordinate system used by the MLCV, e.g. "cv_space" or "cartesian".
+        "cv_def": cv_space,                                # definition of the CV space the MLCV uses.
+        "cv_idx": 0,                                       # For MLCVs with multiple output nodes, the index of the node to use as CV, e.g., 0 for the first node.
+        "unit_conversion_factor": units.BOHR_to_ANGSTROM,  # conversion factor for the CV space, e.g. BOHR_to_ANGSTROM if the MLCV was trained in Angstrom.
+        "device": "cpu",                                   # device to run the model on, e.g. "cpu" or "cuda:0".
+        "type": None,                                      # type of CV, None means no unit conversion.
+    }
+
+    # Definition of the MLCV as required for methods derived from the `EnhancedSampling` base class.
+    #                               MIN  MAX  BIN_WIDTH
+    the_cv = [["mlcolvar", cv_def, -1.0, 1.0, 0.05]] 
+
+In the CV space of mlcolvars, currently the following CVs are supported:
+ * **Distance**: Distance between two atoms or groups of atoms.
+ * **Angle**: Angle between three atoms or groups of atoms.
+ * **Torsion**: Torsion angle between four atoms or groups of atoms.
+ * **Conntact**: A switching function between two groups of atoms. (see `Switching function` in the "Common, simple CVs" section)
+ * **Min_distance**: Minimum distance out of a list of distances.
+ * **Coordination_number**: Coordination numbers of atoms.
+ * **CEC**: (Modified) Center-of-Excess Charge (mCEC) coordinate.
 
 The Modified Center-of-Excess Charge (mCEC):
 --------------------------------------------

@@ -5,9 +5,9 @@ This page lists publications that have used the `adaptive_sampling` package. If 
 
  * *Combining Fast Exploration with Accurate Reweighting in the OPES-eABF Hybrid Sampling Method* 
     - Authors: Andreas Hulm, Robert P. Schiller, Christian Ochsenfeld
-    - Journal: J. Chem. Theory Comput. **2025**, X, XXX-XXX
+    - Journal: J. Chem. Theory Comput. **2025**, 21, 13, 6434-6445
     - DOI: `10.1021/acs.jctc.5c00395 <https://doi.org/10.1021/acs.jctc.5c00395>`_
-    - **Abstract**: We present a new hybrid sampling method that combines the fast exploration capabilities of the OPES method with the accurate reweighting of the eABF method. The method is implemented in the `adaptive_sampling` package and is demonstrated on several test systems.
+    - **Abstract**: We present a new hybrid sampling method that combines the fast exploration capabilities of the OPES method with the accurate reweighting of the eABF method. The method is implemented in the `adaptive_sampling` package and demonstrated on several test systems.
 
  * *QM/MM free energy calculations of long-range biological protonation dynamics by adaptive and focused sampling*
     - Authors: Maximilian C Pöverlein, Andreas Hulm, Johannes C. B. Dietschreit, Jörg Kussmann, Christian Ochsenfeld, Ville R. I. Kaila
@@ -43,4 +43,4 @@ This page lists publications that have used the `adaptive_sampling` package. If 
     - Authors: Andreas Hulm, Johannes C. B. Dietschreit, Christian Ochsenfeld
     - Journal: J. Chem. Phys. **2022**, 157, 024110
     - DOI: `10.1063/5.0095554 <https://doi.org/10.1063/5.0095554>`_
-    - **Abstract**: We present a new method for the statistically optimal analysis of the eABF method based on the MBAR estimator, which allows for accurate estimation of free energy profiles and reaction rates as well as other ensemble properties. The method is implemented in the `adaptive_sampling` package and is demonstrated on several test systems.
+    - **Abstract**: We present a new method for the statistically optimal analysis of the eABF method based on the MBAR estimator, which allows for accurate estimation of free energy profiles and reaction rates as well as other ensemble properties. The method is implemented in the `adaptive_sampling` package and demonstrated on several test systems.
