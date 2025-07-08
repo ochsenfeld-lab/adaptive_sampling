@@ -3,6 +3,29 @@ Sampling tools
 
 The `sampling_tools` subpackage provides a set of tools for importance sampling of molecular transitions.
 
+The `EnhancedSampling` Base Class
+---------------------------------
+
+The `EnhancedSampling` class is the base class for all adaptive enhanced sampling methods in the `sampling_tools` subpackage.
+
+It implements basic functionalities for running adaptive sampling simulations. Parameters of the `EnhancedSampling`, which are relevant for all derived subclasses are:
+
+.. code-block:: python
+    :linenos:
+
+    EnhancedSampling(
+        the_md,                     # The MD interface from `adaptive_sampling.interface`
+        the_cv,                     # The definition of collective variables (CV) from `adaptive_sampling.colvars`
+        equil_temp=300.0,           # Equilibrium temperature of the MD
+        kinetics=True,              # Calculate and output necessary metrics to obtain accurate kinetics
+        f_conf=100.0,               # Force constant for confinement of CVs to the range of interest with harmonic walls
+        output_freq=100,            # Frequency of writing outputs in MD steps
+        multiple_walker=False,      # Use shared bias multiple walker implementation to synchronize time dependent biasing potentials with other simulations via buffer file
+        periodicity=None,           # Periodic boundary conditions for periodic CVs, list of boundaries of `shape(len(CVs),2)`, [[lower_boundary0, upper_boundary0], ...]
+        verbose=True,               # Print verbose information
+    )   
+
+
 (Well-tempered) metadynamics (WTM)
 ----------------------------------
 In WTM the bias potential is constructed from a superposition of Gaussian hills of the form 
@@ -41,7 +64,7 @@ The WTM algorithm can be used as follows:
         bias_factor=20,             # The bias factor gamma, which controls the shrinking of Gaussian hills over time, Default: None
         well_tempered_temp=None,    # The bias temperature DeltaT is an alternative to setting gamma. Note, that setting DeltaT always overwrites gamma! gamma=DeltaT/(T+1) with temperature of the MD simulation T. Default: np.inf (standard metadynamics)
         force_from_grid=True,       # Always recommended. If True, bias potentials and forces are accumulated on a grid, if False, the sum of Gaussian hills is calculated in every step, which can be expensive for long runs.
-        **kwargs,                   # Additional inherited keyword arguments from the `EnhancedSampling` class.
+        #...,                       # Additional inherited keyword arguments from the `EnhancedSampling` class.
     )
 
 On-the-fly probability enhanced sampling (OPES)
@@ -91,7 +114,7 @@ A full example of setting up OPES simulations is given below:
         merge_threshold=1.0,        # Threshold for merging Gaussian kernels, if the Mahalanobis distance between two kernels is smaller than this threshold, they are merged.
         recursive_merge=True,       # Always recommended. If True, recursively merge Gaussian kernels until no more kernels can be merged.
         force_from_grid=True,       # Always recommended. If True, bias potentials and forces are accumulated on a grid, if False, the sum of Gaussian hills is calculated in every step, which can be expensive for long runs.
-        **kwargs,                   # Additional inherited keyword arguments from the `EnhancedSampling` class.
+        #...,                       # Additional inherited keyword arguments from the `EnhancedSampling` class.
     )
 
 While the OPES implementation features many options, most of them are not critical and should almost always be left at the default option. A more minimalistic example of using OPES is given below:
@@ -111,9 +134,138 @@ While the OPES implementation features many options, most of them are not critic
         update_freq=100,            # Frequency of adding new Gaussian kernels in MD steps (e.g. every 100 steps)
         energy_barr=20.0,           # Expected energy barrier in kJ/mol
         adaptive_std_freq=10,       # Initial kernel standard deviation obtained from `adaptive_std_freq*update_freq` MD steps (1000 steps).
-        **kwargs,                   # Additional inherited keyword arguments from the `EnhancedSampling` class.
+        #...,                       # Additional inherited keyword arguments from the `EnhancedSampling` class.
     )
 
 Extended-system dynamics
--------------------------
+------------------------
 
+In extended system dynamics, additional degrees of freedom, which are suspect of the same dynamics as the physical system, are harmonically coupled to the CVs and act as proxies for the application of time-dependent bias potentials.
+
+.. math::
+
+    U^\mathrm{ext}(\mathbf{x}, \lambda) = U(\mathbf{x})+\sum_{i=1}^d \frac{1}{2 \beta\sigma_i^2}\left(\xi_i(\mathbf{x})-\lambda_i\right)^2 + U^\mathrm{bias}(\lambda,t)\,,
+
+where :math:`\lambda` denotes additional degrees of freedom (extended system), :math:`\xi_i(\mathbf{x})` are the CVs, and :math:`\sigma_i` is the coupling width of the extended system to CVs and :math:`U^{bias}(\lambda,t)` can be any time-dependent bias potantial acting on :math:`\lambda`.
+
+Multiple methods based on extended system dynamics are implemented, with differ in how the bias potential :math:`U^{bias}(\lambda,t)` is constructed:
+
+ * `eABF`: extended adaptive biasing force
+ * `WTMeABF`: applies both the WTM and ABF bias potentials to the extended system
+ * `OPESeABF`: applies both the OPES and ABF bias potentials to the extended system
+
+The different types of extended-system dynamics can be used as follows:
+
+.. code-block:: python
+    :linenos:
+
+    from adaptive_sampling.sampling_tools import eABF, WTMeABF, OPESeABF
+
+    the_md = ... # initialize the molecular dynamics interface using the `adaptive_sampling.interface` module
+    the_cv = ... # define the collective variable (CV) using the `adaptive_sampling.colvars` module
+
+    the_bias = eABF(
+        the_md,
+        the_cv,
+        ext_sigma=0.1,          # Coupling width of the extended system to CVs in units of the CV (e.g. Angstrom for distance CVs, degree for angle CVs)
+        ext_mass=100,           # The bias factor gamma, which controls the smoothing of the bias potential, Default: None
+        nfull=100,              # Defines linear ramp for scaling up the adaptive biasing force (ABF), at `nfull` samples the full force is applied. 
+        #...,                   # Additional inherited keyword arguments from the `ABF`, and `EnhancedSampling` class.
+    )
+
+    the_bias = WTMeABF(
+        the_md,
+        the_cv,
+        ext_sigma=0.1,          # Coupling width of the extended system to CVs in units of the CV (e.g. Angstrom for distance CVs, degree for angle CVs)
+        ext_mass=100,           # The bias factor gamma, which controls the smoothing of the bias potential, Default: None
+        enable_abf=True,        # If True, the ABF bias is applied to the extended system
+        nfull=100,              # Defines linear ramp for scaling up the adaptive biasing force (ABF), at `nfull` samples the full force is applied. 
+        hill_height=1.0,        # Height of the Gaussian hills in kJ/mol
+        hill_std=0.2,           # Standard deviation of the Gaussian hills in units of the CV (e.g. Angstrom for distance CVs, degree for angle CVs), can also be a list of floats for 2D CVs
+        hill_drop_freq=100,     # Frequency of adding new Gaussian hills in MD steps (e.g. every 100 steps)
+        #...,                   # Additional inherited keyword arguments from the `WTM`, `ABF` and `EnhancedSampling` class.
+    )
+
+    the_bias = OPESeABF(
+        the_md,
+        the_cv,
+        ext_sigma=0.1,          # Coupling width of the extended system to CVs in units of the CV (e.g. Angstrom for distance CVs, degree for angle CVs)
+        ext_mass=100,           # The bias factor gamma, which controls the smoothing of the bias potential, Default: None
+        enable_abf=True,        # If True, the ABF bias is applied to the extended system
+        nfull=100,              # Defines linear ramp for scaling up the adaptive biasing force (ABF), at `nfull` samples the full force is applied. 
+        kernel_std=0.1,         # Initial standard deviation of OPES kernels, if None, kernel_std will be estimated from initial MD with `adaptive_std_freq*update_freq` steps
+        update_freq=100,        # Frequency of adding new Gaussian kernels in MD steps (e.g. every 100 steps)
+        energy_barr=20.0,       # Expected energy barrier in kJ/mol
+        #...,                   # Additional inherited keyword arguments from the `OPES`, `ABF` and `EnhancedSampling` class.
+    )
+
+Accelerated molecular dynamics (aMD)
+-------------------------------------
+
+Accelerated molecular dynamics (aMD) is a method to enhance the sampling of rare events by globally modifying the potential energy surface of the system to lower the energy barriers of transitions.
+Especially, aMD methods do not require a CV, but instead apply a bias potential to the entire system.
+
+The bias potential is given by:
+
+.. math::
+
+    U^\mathrm{aMD}(\mathbf{x}, U) = 
+        \begin{cases}
+            U(\mathbf{x}) & \mathrm{if} \; U(\mathbf{x}) \geq E, \\
+            U(\mathbf{x}) + \Delta U(U(\mathbf{x})) & \mathrm{if} \; U(\mathbf{x}) <  E \:.
+        \end{cases}
+
+where :math:`E` is a threshold energy and :math:`\Delta U(U(\mathbf{x}))` is the boost energy.
+For the boost energy, different options are available:
+
+ * `aMD`: accelerated MD as introduced by Hamelberg et al. * `aMD`: accelerated MD as introduced by Hamelberg et al. (https://doi.org/10.1063/1.1755656)
+ * `GaMD`: Gaussian accelerated MD as introduced by Miao et al. (https://doi.org/10.1021/acs.jctc.5b00436)
+ * `SaMD`: Sigmoid accelerated MD as introduced by Zhao et al. (https://doi.org/10.1021/acs.jpclett.2c03688)
+
+The different types of aMD can be used as follows:
+
+.. code-block:: python
+    :linenos:
+
+    from adaptive_sampling.sampling_tools import aMD
+
+    the_md = ... # initialize the molecular dynamics interface using the `adaptive_sampling.interface` module
+    the_cv = ... # define the collective variable (CV) using the `adaptive_sampling.colvars` module
+
+    the_bias = aMD(
+        amd_parameter,             # Acceleration parameter; SaMD, GaMD == sigma0; aMD == alpha
+        init_step,                 # Initial steps where no bias is applied to estimate min, max and var of potential energy
+        equil_steps,               # Equilibration steps, min, max and var of potential energy is still updated, force constant of coupling is calculated from previous steps
+        the_md,                    # The MD interface from `adaptive_sampling.interface`
+        the_cv,                    # The CV does not affect sampling in aMD, but is still required for the `EnhancedSampling` base class. Can be used to monitor CVs of interest.
+        amd_method='GaMD_lower',   # 'aMD': accelerated MD, 'GaMD_lower': lower bound of Gaussian accelerated MD, 'GaMD_upper': upper bound of Gaussian accelerated MD, 'SaMD': sigmoid accelerated MD
+        confine=False,             # If system should be confined at boundaries of the CV definition with harmonic walls.
+        #...,                      # Additional inherited keyword arguments from the `EnhancedSampling` class.
+    )
+
+The global conformational sampling as provided by `aMD` can be combined with local sampling acceleration of the selected CVs in the `WTMeABF` method:
+
+.. code-block:: python
+    :linenos:
+
+    from adaptive_sampling.sampling_tools import aWTMeABF
+
+    the_md = ... # initialize the molecular dynamics interface using the `adaptive_sampling.interface` module
+    the_cv = ... # define the collective variable (CV) using the `adaptive_sampling.colvars` module
+
+    the_bias = aWTMeABF(
+        amd_parameter,             # Acceleration parameter; SaMD, GaMD == sigma0; aMD == alpha
+        init_step,                 # Initial steps where no bias is applied to estimate min, max and var of potential energy
+        equil_steps,               # Equilibration steps, min, max and var of potential energy is still updated, force constant of coupling is calculated from previous steps
+        the_md,                    # The MD interface from `adaptive_sampling.interface`
+        the_cv,                    # The CV does not affect sampling in aWTMeABF, but is still required for the `EnhancedSampling` base class. Can be used to monitor CVs of interest.
+        amd_method='GaMD_lower',   # 'aMD': accelerated MD, 'GaMD_lower': lower bound of Gaussian accelerated MD, 'GaMD_upper': upper bound of Gaussian accelerated MD, 'SaMD': sigmoid accelerated MD
+        confine=True,              # If system should be confined at boundaries of the CV definition with harmonic walls.
+        ext_sigma=0.1,             # Coupling width of the extended system to CVs in units of the CV (e.g. Angstrom for distance CVs, degree for angle CVs)
+        ext_mass=100,              # The bias factor gamma, which controls the smoothing of the bias potential, Default: None
+        nfull=100,                 # Defines linear ramp for scaling up the adaptive biasing force (ABF), at `nfull` samples the full force is applied. 
+        hill_height=1.0,           # Height of the Gaussian hills in kJ/mol
+        hill_std=0.2,              # Standard deviation of the Gaussian hills in units of the CV (e.g. Angstrom for distance CVs, degree for angle CVs), can also be a list of floats for 2D CVs
+        hill_drop_freq=100,        # Frequency of adding new Gaussian hills in MD
+        #...,                      # Additional inherited keyword arguments from the `aMD`, `WTM`, `ABF` and `EnhancedSampling` classes.
+    )

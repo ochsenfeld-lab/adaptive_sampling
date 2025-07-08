@@ -195,8 +195,8 @@ Now, the MD is ready to run:
     the_md.run(nsteps=500000) # 500000 * 2 fs = 1 ns
 
 
-Importance sampling
--------------------
+Sampling tools
+--------------
 
 Importance sampling algorithms facilitate the calculation of reaction and activation free energies by sampling molecular transitions.
 In the `adaptive sampling` package these are located in the `sampling_tools` subpackage.
