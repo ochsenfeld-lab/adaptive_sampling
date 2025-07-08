@@ -174,6 +174,7 @@ class aMD(EnhancedSampling):
                 'amd/Xi0': xi[0],
                 'amd/boost_pot': self.amd_pot,
                 'amd/pot': epot,
+                'amd/bias_force_norm': np.linalg.norm(bias_force),
             }
             if md_state.step < self.equil_steps:
                 data.update({
@@ -187,6 +188,13 @@ class aMD(EnhancedSampling):
                     'amd_equil/k1': self.k1,
                     'amd_equil/k': self.k,
                 })
+            if self.the_md.calculator.theorytype == 'QM/MM':
+                atom_bias_force = bias_force.reshape(self.the_md.natoms, 3)
+                qm_bias_force = atom_bias_force[self.the_md.calculator.xatom_mask]
+                boost_forces_qm_fraction = np.linalg.norm(qm_bias_force) / np.linalg.norm(atom_bias_force)
+                data.update({
+                    "amd/boost_forces_qm_fraction": boost_forces_qm_fraction,
+                }) 
             import wandb
             wandb.define_metric("*", step_metric='time_ps')
             wandb.log(
