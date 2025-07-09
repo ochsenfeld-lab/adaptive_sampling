@@ -219,7 +219,8 @@ To apply simple harmonic constraints, like for example often used in Umbrella Sa
         force_constants=100.0,             # In kJ/mol/(CV unit)^2, can also be a list for multiple harmonic constraints
         equil_positions=1.0,               # In the unit of the CV, can also be a list for multiple harmonic constraints
         colvars=[
-            ['distance', [0,1]]            # Definition of the Collective Variable
+            ['distance', [0,1]],           # Definition of the Collective Variable
+            # Additional CVs can be added to the list
         ],
         outputfile='constraints_traj.dat', # The output file
         output_stride=1,                   # The output stride

@@ -90,7 +90,7 @@ The following examples show how to define common CVs for sampling algorithms tha
     # List containing distance definition and additional parameters of switching function 
     cv_def = [0, 1, r_0, n, m]
 
-* **Minimum distance** out of a list of distances:
+* **Minimum distance** out of a list of distances `d`:
 
 .. math::
 
@@ -114,7 +114,7 @@ The following examples show how to define common CVs for sampling algorithms tha
 .. code-block:: python
     :linenos:
 
-    # Linear combination of two CVs, three versions are available:
+    # Linear combination of CVs, three versions are available:
     cv_type = 'linear_combination'   # type of CV is None, so that units are not converted
     cv_type = 'lin_comb_dists'       # type of CV is 'distance', so that input and output units are Angstrom
     cv_type = 'lin_comb_angles'      # type of CV is 'angle', so that input and output units are degrees
@@ -129,7 +129,83 @@ The following examples show how to define common CVs for sampling algorithms tha
 Path CVs (PCVs)
 ---------------
 
+In PCVs, the CV is given by the progress $s$ along a high-dimensional path and the distance $z$ to the path. 
 
+The `adaptive_sampling.colvars.PathCV` class implements two different types of PCVs:
+
+1. The **arithmetic PCV**, as suggested by `Branduardi et al. <https://doi.org/10.1063/1.2432340>`_:
+
+.. math::
+
+    s = \frac{1}{P-1}\frac{\sum_{i=0}^{P} (i-1) e^{-\lambda |\mathbf{x}-\mathbf{x}_i|}}{\sum_{i=0}^{P} e^{-\lambda |\mathbf{x}-\mathbf{x}_i|}}
+
+.. math::
+
+    z = -\frac{1}{\lambda} \ln\left(\sum_{i=0}^{P} e^{-\lambda |\mathbf{x}-\mathbf{x}_i|}\right) 
+
+with :math:`P` being the number of nodes along the path, :math:`\mathbf{x}_i` the Cartesian coordinates of the :math:`i`-th path node, and :math:`\lambda` a parameter that ensures that the path is smooth and differentiable.
+Any distance metric can be used to calculate the distance :math:`|\mathbf{x}-\mathbf{x}_i|` between the current coordinates :math:`\mathbf{x}` and the path nodes :math:`\mathbf{x}_i`.
+
+2. The **geometric PCV**, as suggested by `Leines et al. <https://doi.org/10.1103/PhysRevLett.109.020601>`_: 
+
+.. math::
+
+    s(\mathbf{z}) = \frac{m}{M} \pm \frac{1}{2M} \bigg(\frac{\sqrt{\mathbf{v}_1 \cdot \mathbf{v}_3)^2 - |\mathbf{v}_3|^2 (|\mathbf{v}_1|^2-|\mathbf{v}_2|^2)} - (\mathbf{v}_1\cdot\mathbf{v}_3)}{|\mathbf{v}_3|^2} - 1 \bigg) \ ,
+
+.. math::
+
+    z(\mathbf{z}) = \bigg| \mathbf{v}_1 + \frac{1}{2} \bigg(\frac{ \sqrt{\mathbf{v}_1 \cdot \mathbf{v}_3)^2 - |\mathbf{v}_3|^2 (|\mathbf{v}_1|^2-|\mathbf{v}_2|^2)} - (\mathbf{v}_1\cdot\mathbf{v}_3)}{|\mathbf{v}_3|^2} - 1 \bigg) \mathbf{v}_4 \bigg| \ ,
+
+with index of the first, second and third-closest nodes :math:`m`, :math:`n`, :math:`k`, respectively, and
+vectors :math:`\textbf{v}_1=\textbf{z}_{m} - \textbf{z}`, :math:`\textbf{v}_2=\textbf{z} - \textbf{z}_{m-1}`, 
+:math:`\textbf{v}_3=\textbf{z}_{m+1} - \textbf{z}_{m}` and :math:`\textbf{v}_4=\mathbf{z}_{} - \mathbf{z}_{m-1}`.
+The :math:`\pm` is negative if :math:`\mathbf{z}` is left of the closest path node, and positive otherwise. 
+Other than the arithmetic PCV, the geometric PCV is always applied in the space :math:`\mathbf{z}` of selected CVs. 
+
+PCVs can be defined as outlined below:
+
+.. code-block:: python
+    :linenos:
+
+    cv_space = [
+        ['distance', [0, 1]],  # distance between atoms 0 and 1
+        ['distance', [2, 3]],  # distance between atoms 2 and 3
+        #... more CVs can be added
+    ]
+
+    # Define parameters of the `adaptive_sampling.colvars.PathCV` class as a dictionary
+    cv_def = {
+        "guess_path": "path.xyz",           # Path file containing the path nodes, can be a `.xzy` or `.npy` file.
+        "coordinate_system": "cv_space",    # Coordinate system used by the PCV, e.g. "cv_space" or "cartesian".
+        "active": cv_space,                 # If `coordinate_system="cv_space"`, the CV space used by the PCV. If `coordinate_system="cartesian"`, indices of atoms that are included in the path CV
+        "n_interpolate": 0,                 # Number of nodes that are added between original nodes by linear interpolation, if negative, slice path nodes according to `self.path[::abs(n_interpolate)]`
+        "smooth_damping": 0.1,              # Controls smoothing of path (0: no smoothing, 1: linear interpolation between neighbours).
+        "reparam_steps": 100,               # Maximum number of steps for reparametrization of the path to ensure equidistant spacing of path nodes.
+        "reparam_tol": 1e-5,                # Tolerance for reparametrization of the path to ensure equidistant spacing of path nodes.
+        "metric": "rmsd",                   # Distance metric used to calculate distance between current coordinates and path nodes.
+        "adaptive": False,                  # If True, the path is adapted during the simulation to converge to the minimum free energy path. Only for the geometric PCV.
+        "requires_z": True,                 # If True, the distance to the path is calculated along with the progress along the path. If False, only the progress along the path is calculated.
+    }
+
+    # Definition of the PCV as required for methods derived from the `EnhancedSampling` base class.
+    #                           MIN  MAX  BIN_WIDTH
+    the_cv = [["gpath", cv_def, 0.0, 1.0, 0.01]]       # geometric PCV
+    the_cv = [["path", cv_def, 0.0, 1..0, 0.01]]       # arithmetic PCV
+   
+    # Definition of using the both the `s` and `z` values in the simulation. NOT YET TESTED!
+    the_cv = [
+        ["gpath", cv_def, 0.0, 1.0, 0.01], 
+        ["path_z", cv_def, 0.0, 5.0, 0.1], 
+    ]
+
+In the CV space of PCVs, currently the following CVs are supported:
+ * **Distance**: Distance between two atoms or groups of atoms.
+ * **Angle**: Angle between three atoms or groups of atoms.
+ * **Torsion**: Torsion angle between four atoms or groups of atoms.
+ * **Conntact**: A switching function between two groups of atoms. (see `Switching function` in the "Common, simple CVs" section)
+ * **Min_distance**: Minimum distance out of a list of distances.
+ * **Coordination_number**: Coordination numbers of atoms.
+ * **CEC**: (Modified) Center-of-Excess Charge (mCEC) coordinate.
 
 Machine Learning CVs (MLCVs):
 -----------------------------
@@ -156,7 +232,7 @@ The `adaptive_sampling.colvars.MLCOLVAR` class can then be used to run simulatio
         #...
     ]
 
-    # Parameters of the `adaptive_sampling.colvars.MLCOLVAR` class as a dictionary
+    # Define parameters of the `adaptive_sampling.colvars.MLCOLVAR` class as a dictionary
     cv_def = {
         "model": "model.ptc",                              # path to the pretrained model in torchscript format.
         "coordinate_system": "cv_space",                   # coordinate system used by the MLCV, e.g. "cv_space" or "cartesian".
