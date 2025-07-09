@@ -276,6 +276,7 @@ class AshMD:
             data.update({
                 "barostat/V": self.barostat.volume,         # nm^3
                 "barostat/p": self.barostat.pressure,       # bar
+                "barostat/p_finitediff": self.barostat.computeCurrentPressure(numeric=True),       # bar
                 "barostat/rho": self.barostat.density,      # g/cm^3
                 "barostat/p_inst": self.barostat.instantaneous_pressure, # bar
             })
@@ -862,7 +863,8 @@ class MonteCarloBarostatASH:
         """
         from adaptive_sampling.sampling_tools.utils import welford_var
         self.count_ekin += 1
-        mol_ekin = self.computeMolecularKineticEnergy(components=1) # kJ/mol
+        mol_ekin = self.computeKineticEnergy()
+        #self.computeMolecularKineticEnergy(components=1) # kJ/mol
         self.avg_ekin, self.m2_ekin, self.var_ekin = welford_var(
             self.count_ekin, self.avg_ekin, self.m2_ekin, mol_ekin, tau
         )
@@ -939,6 +941,7 @@ class MonteCarloBarostatASH:
                 charge=self.the_md.charge,
                 mult=self.the_md.mult,
                 Grad=False,
+                printlevel=self.the_md.calculator.printlevel,
             )
             energy1 = results.energy * units.atomic_to_kJmol
        
@@ -957,6 +960,7 @@ class MonteCarloBarostatASH:
                 charge=self.the_md.charge,
                 mult=self.the_md.mult,
                 Grad=False,
+                printlevel=self.the_md.calculator.printlevel,
             )
             energy2 = results.energy * units.atomic_to_kJmol
             os.chdir(self.the_md.cwd)
@@ -991,6 +995,10 @@ class MonteCarloBarostatASH:
         current_pressure -= np.sum(self.the_md.coords * self.the_md.forces * units.atomic_to_kJmol)/(3.*self.volume)
 
         return current_pressure / (self.AVOGADRO * 1e-25) # convert kJ/mol/nm^3 to bar 
+    
+    def computeKineticEnergy(self):
+        """Computes the current kinetic energy based on all atoms in kJ/mol."""
+        return np.sum(self.the_md.momenta * self.the_md.momenta / (2 * self.the_md.masses)) * units.atomic_to_kJmol
 
 class StochasticCellRescalingBarostatASH(MonteCarloBarostatASH):
     """Stochastic Cell Rescaling Barostat for OpenMMTheory in AshMD
@@ -1035,9 +1043,9 @@ class StochasticCellRescalingBarostatASH(MonteCarloBarostatASH):
 
         # calculate the current pressure
         current_pressure = 2 * current_kinetic_energy / (3 * self.volume)
-        current_pressure -= np.sum(self.the_md.coords * self.the_md.forces * units.atomic_to_kJmol)/(3.*self.volume)
+        current_pressure -= np.sum(self.the_md.coords * self.the_md.forces * units.atomic_to_kJmol)/(3.*self.volume) # kJ/mol/nm^3, neglects PBCs!
 
-        # Instead of changes acting directly on V, epsilon = log(V/V_0) is propagated, where V_0 is an arbitrary reference volume, chosen to be 1
+        # Instead of changes acting directly on V, epsilon = log(V/V_0) is propagated, where V_0 is an arbitrary reference volume, chosen to be 1 nm^3
         dEpsilon_det = - self.beta_T / self.tau_p * (self.target_pressure - current_pressure) * self.the_md.dt # TODO CHECK UNITS
         variance = 2 * units.kB_in_atomic * units.atomic_to_kJmol * self.the_md.target_temp * self.beta_T / (self.volume * self.tau_p) * self.the_md.dt
         dEpsilon_stoch = np.sqrt(variance) * np.random.randn()
