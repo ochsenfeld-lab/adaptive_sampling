@@ -110,7 +110,7 @@ A full example of setting up OPES simulations is given below:
         energy_barr=20.0,           # Barrier factor in kJ/mol, which sets an upper bound to the bias potential, should roughly correspond to the energy barrier of the transition to be sampled.
         bandwidth_rescaling=True,   # If True, the kernel standard deviation shrinks over time to converge finer details of the PMF.
         bias_factor=None,           # The bias factor gamma, which controls the smoothing of the probability density, Default: default is `beta * energy_barr`
-        adaptive_std=False,         # If True, the kernel standard deviation is adapted based on the standard deviation of the CV, useful for simulations using poor CVs. 
+        adaptive_std=True,         # If True, the kernel standard deviation is adapted based on the standard deviation of the CV, useful for simulations using poor CVs. 
         adaptive_std_freq=10,       # Exponential decay time for running estimate of the CVs standard deviation
         explore=False,              # If True, use the exploration mode of OPES.
         normalize=True,             # Always recommended. Normalize OPES probability density over explored space. 
@@ -121,7 +121,13 @@ A full example of setting up OPES simulations is given below:
         #...,                       # Additional inherited keyword arguments from the `EnhancedSampling` class.
     )
 
-While the OPES implementation features many options, most of them are not critical and should almost always be left at the default option. A more minimalistic example of using OPES is given below:
+While the OPES implementation features many options, most of them are not critical and should almost always be left at the default option. For the subset of parameters that toggle the features of the present OPES implementationthe default settings have been shown to provide the best results in general. These include the linear scaling normalization (`approximate_norm=True` and `normalize=True`), the saturating number of Gaussian kernels by recursive merging (`recursive_merge=True`, `merge_threshold=1.0`), and the efficient refinement over time (`bandwidth_rescaling=True`, `adaptive_std=True`). 
+Furthermore, there are parameters that can affect the simulation within a given choice of features. 
+ - The `kernel_std` parameter controls the intial standard deviation of the kernels and significantly enhances the efficiency if being set to provide fast escape from the intial basin. However, if there is no preliminary knowledge about the PMF one can set `kernel_std=None` to automatically estimate the initial standard deviation from an unbiased MD trajectory in the starting basin.
+ - The `update_freq` parameter controls how often new Gaussian kernels are added to the bias potential. A value of 100 to 500 steps is a good default, but it can be adjusted based on the system and the desired sampling rate.
+ - The `energy_barr` parameter sets the barrier height for the bias potential. This value should be chosen based on the expected energy barrier of the transition being sampled.
+
+A more minimalistic example of using OPES is given below:
 
 .. code-block:: python
     :linenos:
