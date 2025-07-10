@@ -13,11 +13,13 @@ This package implements various sampling algorithms for the calculation of free 
 	
 * 	(Well-Tempered) Metadynamics (WTM) [5] and WTM-eABF [6]
 
-* 	Accelerated MD (aMD), Gaussian accelerated MD (GaMD), Sigmoid Accelerated MD (SaMD) [7, 8, 9]
+*   On-the-fly Probability Enhanced Sampling (OPES) [7] and OPES-eABF [8]
 
-*	Gaussian-accelerated WTM-eABF [10]
+* 	Accelerated MD (aMD), Gaussian accelerated MD (GaMD), Sigmoid Accelerated MD (SaMD) [9, 10, 11]
 
-*   Free-energy Nudged Elastic Band Method [11]
+*	Gaussian-accelerated WTM-eABF [12]
+
+*   Free-energy Nudged Elastic Band Method [13]
 
 ## Implemented Collective Variables:
 
@@ -27,7 +29,7 @@ This package implements various sampling algorithms for the calculation of free 
 
 *   Minimized Cartesian RMSD (Kabsch algorithm)
 
-*   Adaptive path collective variables (PCVs) [12, 13]
+*   Adaptive path collective variables (PCVs) [14, 15]
 
 ## Install:
 To install adaptive_sampling type:
@@ -143,11 +145,8 @@ pmf, rho = mbar.pmf_from_weights(grid, cv[indices], weights, equil_temp=300.0)
 ```
 
 ## Documentation:
-Code documentation can be created with pdoc3:
-```shell
-$ pip install pdoc3
-$ pdoc --html adaptive_sampling -o doc/
-```
+Code documentation can be created with sphinx as detailed in the `docs` folder.
+
 ## References:
 1.  Comer et al., J. Phys. Chem. B (2015); <https://doi.org/10.1021/jp506633n> 
 2.  Lesage et al., J. Phys. Chem. B (2017); <https://doi.org/10.1021/acs.jpcb.6b10055>
@@ -155,20 +154,25 @@ $ pdoc --html adaptive_sampling -o doc/
 4.  Hulm et al., J. Chem. Phys. (2022); <https://doi.org/10.1063/5.0095554>
 5.  Barducci et al., Phys. rev. lett. (2008); <https://doi.org/10.1103/PhysRevLett.100.020603>
 6.  Fu et al., J. Phys. Chem. Lett. (2018); <https://doi.org/10.1021/acs.jpclett.8b01994>
-7.  Hamelberg et al., J. Chem. Phys. (2004); <https://doi.org/10.1063/1.1755656>
-8.  Miao et al., J. Chem. Theory Comput. (2015); <https://doi.org/10.1021/acs.jctc.5b00436>
-9.  Zhao et al., J. Phys. Chem. Lett. (2023); <https://doi.org/10.1021/acs.jpclett.2c03688>
-10.  Chen et al., J. Chem. Theory Comput. (2021); <https://doi.org/10.1021/acs.jctc.1c00103>
-11.  Semelak et al., J. Chem. Theory Comput. (2023); <https://doi.org/10.1021/acs.jctc.3c00366>
-12.  Branduardi, et al., J. Chem. Phys. (2007); <https://doi.org/10.1063/1.2432340>
-13.  Leines et al., Phys. Ref. Lett. (2012); <https://doi.org/10.1103/PhysRevLett.109.020601>
+7.  Invernizzi et al., J. Phys. Chem. Lett. (2020); <https://doi.org/10.1021/acs.jpclett.0c00497>
+8.  Hulm et al., J. Chem. Theory Comput. (2025); <https://doi.org/10.1021/acs.jctc.5c00395>
+9.  Hamelberg et al., J. Chem. Phys. (2004); <https://doi.org/10.1063/1.1755656>
+10. Miao et al., J. Chem. Theory Comput. (2015); <https://doi.org/10.1021/acs.jctc.5b00436>
+11. Zhao et al., J. Phys. Chem. Lett. (2023); <https://doi.org/10.1021/acs.jpclett.2c03688>
+12. Chen et al., J. Chem. Theory Comput. (2021); <https://doi.org/10.1021/acs.jctc.1c00103>
+13. Semelak et al., J. Chem. Theory Comput. (2023); <https://doi.org/10.1021/acs.jctc.3c00366>
+14. Branduardi, et al., J. Chem. Phys. (2007); <https://doi.org/10.1063/1.2432340>
+15. Leines et al., Phys. Ref. Lett. (2012); <https://doi.org/10.1103/PhysRevLett.109.020601>
 
 ## This and Related Work:
 If you use this package in your work please cite:
 * 	Hulm et al., J. Chem. Phys., 157, 024110 (2022); <https://doi.org/10.1063/5.0095554>
 
 Other related references:
+* 	Hulm et al., J. Chem. Phys., 157, 024110 (2022); <https://doi.org/10.1063/5.0095554>
 *	Dietschreit et al., J. Chem. Phys., (2022); <https://aip.scitation.org/doi/10.1063/5.0102075>
 *   Hulm et al., J. Chem. Theory. Comput., (2023); <https://doi.org/10.1021/acs.jctc.3c00938>
 *   Stan et. al., ACS Cent. Sci., (2024); <https://doi.org/10.1021/acscentsci.3c01403>
 *   Pöverlein et. al., J. Chem. Theory, Comput., (2024); <https://doi.org/10.1021/acs.jctc.4c00199>
+*   Hulm et al., J. Chem. Theory Comput. (2025); <https://doi.org/10.1021/acs.jctc.5c00395>
+
