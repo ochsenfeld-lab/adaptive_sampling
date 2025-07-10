@@ -30,8 +30,8 @@ The CV `type` can be one of the following:
 
 In the following section, we provide examples of setting up different CVs.
 
-Common, simple CVs
-------------------
+Common CVs
+----------
 
 The following examples show how to define common CVs for sampling algorithms that derive from the `EnhancedSampling` class.
 
@@ -71,11 +71,11 @@ The following examples show how to define common CVs for sampling algorithms tha
     # Indices of atoms or list of indices to calculate dihedral angle between centers of mass
     cv_def = [0, 1, 2, 3]  
 
-* **Switching function** between two groups of atoms:
+* **Switching function** :math:`a_{ij}` between two groups of atoms with switching distance :math:`sigma_ij` and exponents :math:`n` and :math:`m`:
 
 .. math::
 
-    f(r) = \frac{1-(\frac{r}{r_0})^n}{1-(\frac{r}{r_0})^m}
+    a_{ij} = \frac{1-(\frac{r_{ij}}{\sigma_{ij}})^n}{1-(\frac{r_{ij}}{\sigma_{ij}})^m} 
 
 .. code-block:: python
     :linenos:
@@ -129,7 +129,8 @@ The following examples show how to define common CVs for sampling algorithms tha
 Path CVs (PCVs)
 ---------------
 
-In PCVs, the CV is given by the progress $s$ along a high-dimensional path and the distance $z$ to the path. 
+In PCVs, the CV is given by the progress :math:`s` along a high-dimensional path and the distance :math:`z` to the path. 
+PCVs are highly useful to map high-dimensional, non-linear transition onto a one dimensional reaction coordinate, as demonstrated `here <https://doi.org/10.1021/acs.jctc.3c00938>`_.
 
 The `adaptive_sampling.colvars.PathCV` class implements two different types of PCVs:
 
@@ -190,7 +191,7 @@ PCVs can be defined as outlined below:
     # Definition of the PCV as required for methods derived from the `EnhancedSampling` base class.
     #                           MIN  MAX  BIN_WIDTH
     the_cv = [["gpath", cv_def, 0.0, 1.0, 0.01]]       # geometric PCV
-    the_cv = [["path", cv_def, 0.0, 1..0, 0.01]]       # arithmetic PCV
+    the_cv = [["path", cv_def, 0.0, 1.0, 0.01]]       # arithmetic PCV
    
     # Definition of using the both the `s` and `z` values in the simulation. NOT YET TESTED!
     the_cv = [
@@ -259,12 +260,86 @@ In the CV space of mlcolvars, currently the following CVs are supported:
 The Modified Center-of-Excess Charge (mCEC):
 --------------------------------------------
 
+The mCEC coordinate can be used to model long-range proton transfer (pT), as demonstrated `here <https://pubs.acs.org/doi/10.1021/acs.jctc.4c00199>`_.
+
+The mCEC reaction coordinate, which was originally suggested by `König et al. <https://pubs.acs.org/doi/abs/10.1021/jp052328q>`_, is given by
+
+.. math::
+
+    \zeta_\mathrm{CEC}(\mathbf{x}) = \sum_i^{N_H} \mathbf{x}_i - \sum_j^{N_X} w_j \mathbf{x}_j - \sum_i^{N_H} \sum_j^{N_X} f_\mathrm{SW}(\mid \mathbf{x}_i- \mathbf{x}_j \mid)(\mathbf{x}_i-\mathbf{x}_j)\,,
+
+where :math:`N_H`, :math:`N_X` are the number of involved protons and heavy atoms, respectively, and :math:`\mathbf{x}_i` denotes the Cartesian coordinates of atom :math:`i`.
+The weights :math:`w_j` are given by the minimal number of protons associated with atom :math:`j` during pT, and :math:`f_\mathrm{SW}` is the switching function
+
+.. math::
+
+    f_\mathrm{SW}(r)= \big(1+e^{(r-r_\mathrm{SW})/d_\mathrm{SW}} \big)
+ 
+where :math:`r_\mathrm{SW}` controls the switching distance and :math:`d_\mathrm{SW}` how fast the function switches from one to zero. 
+The first two terms of :math:`\zeta_\mathrm{CEC}` reflect the position of the excess proton in a water wire, while the third term is a correction that removes all contributions from the CEC that are not relevant to pT.
+
+As :math:`\zeta` is a three-dimensional quantity, it has to be projected to a one dimensional CV, for which we typically use
+
+.. math::
+
+    \xi_\mathrm{CEC}(\mathbf{x})=(\zeta_\mathrm{CEC}-\mathbf{x}_d)\cdot \frac{\mathbf{x}_a-\mathbf{x}_d}{\mid \mathbf{x}_a-\mathbf{x}_d \mid} \,,
+
+with coordinates of first donor and last acceptor atom :math:`\mathbf{x}_d` and :math:`\mathbf{x}_a`, respectively.
+Note, that other projections as described in the original publication are implemented as well. 
+
+The mCEC reaction coordinate can be used as follows:
+
+.. code-block:: python
+    :linenos:
+
+    # Define parameters of the `adaptive_sampling.colvars.PT` class as a dictionary
+    cv_def = {
+        "proton_idx": [8, 26, 27, 29, 30],     # Indices of protons that participate in pT
+        "heavy_idx": [7, 25, 28, 22],          # Indices of heavy atoms that participate in pT
+        "heavy_weights": [0.0, 2.0, 2.0, 0.0], # Weights of heavy atoms
+        "ref_idx": [7, 22],                    # Indices of reference atoms to define pT vector (usually first donor and last acceptor)
+        "modified": True,                      # Use modified CEC
+        "d_sw": 0.2,                           # Parameter for the switching function
+        "r_sw": 1.4,                           # Parameter for the switching function
+    }
+
+    # Definition of the CEC as required for methods derived from the `EnhancedSampling` base class.
+    #                         MIN  MAX  BIN_WIDTH
+    the_cv = [["CEC", cv_def, 0.0, 10.0, 0.1]]  
+
 Graph-based CVs (Graph-CVs):
 ----------------------------
 
+Molecular graph-based CVs allow for a means of reaction discovery by enhancing general bond breaking and formation. 
+Such CVs associate to the graph a symmetric adjacency matrix :math:`\mathbf{A}` whose elements :math:`a_{ij}` indicate whether atoms :math:`i` and :math:`j` are linked by a chemical bond. 
+If a chemical bond is present is expressed by the switching function:
 
+.. math::
 
+    a_{ij} = \frac{1-(\frac{r_{ij}}{\sigma_{ij}})^n}{1-(\frac{r_{ij}}{\sigma_{ij}})^m} \,,
 
+where :math:`\sigma_{ij}` are typical bond length between atoms :math:`i` and :math:`j`.
 
+As proposed by `Raucci et al. <https://doi.org/10.1021/acs.jpclett.1c03993>`_ the maximal eigenvalue of :math:`\mathbf{A}` can be employed as CV to accelerate bond rearrangements:
 
+.. math:: 
+
+    \lambda^\mathbf{max} = \mathrm{max}\big[\mathrm{eig}(\mathbf{A})\big]
+
+Below is an example of using :math:`\lambda^\mathrm{max}` as CV:
+
+.. code-block:: python
+    :linenos:
+
+    # Define parameters of the `adaptive_sampling.colvars.GRAPH_CV` class as a dictionary
+    cv_def = {
+        "atom_indices"=[i for i in range(10)],  # Indices of atoms that are included in the Graph CV
+        "atom_types"=["C" for _ in range(10)],  # Atom types of atoms that are included in the Graph CV. Supported are: "H", "O", "C", "N", "P". Otherwise, the value corresponding to a CC bond distance is taken as default.
+        "N"=6,                                  # Exponent of switching function N
+        "M"=12,                                 # Exponent of switching function M
+    }
+
+    # Definition of the Graph CV as required for methods derived from the `EnhancedSampling` base class.
+    #                                 MIN  MAX  BIN_WIDTH
+    the_cv = [["lambda_max", cv_def, -1.0, 1.0, 0.05]] 
 
