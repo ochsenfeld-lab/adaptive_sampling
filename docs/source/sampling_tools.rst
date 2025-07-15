@@ -147,6 +147,8 @@ A more minimalistic example of using OPES is given below:
         #...,                       # Additional inherited keyword arguments from the `EnhancedSampling` class.
     )
 
+A variant of the OPES method is `OPES_Explore`, which is designed to maximize sampling of the CV space. Exploration can come to halt if the algorithm discovers a new meta-stable state in an already explored CV region for a suboptimal variable. This would not lead to a significant change in the normalization factor Zn , which should refer to the exploration history and contribute to pushing the system out of local minima. In the case of exploring a already sampled space, the bias needs to change, so that an exit can effectively be accelerated. With OPESexplore, the bias is built from an on-the-fly estimate of the sampled distribution where for this variant the target distribution :math:`p^{target}(\xi)= p^{WT}(\xi)` is well tempered. This altered target distribution leads to a sacrifice in convergence efficiency and can even prevent the system from converging to the correct PMF. It can be used to sample an unknown CV space efficiently when accuracy is not the primary concern, but rather the exploration of the CV space. Then again, OPES can be used to refine the sampling and provide accurate results.
+
 For more information on OPES and OPES explore, refer to the original publications:
     * OPES: https://doi.org/10.1021/acs.jpclett.0c00497
     * OPES_Explore: https://doi.org/10.1021/acs.jctc.2c00152
