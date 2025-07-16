@@ -2,6 +2,7 @@ import math
 
 # conversions
 J_to_atomic = 1.0 / 4.359744e-18
+amu_to_atomic = 1822.888486
 atomic_to_kJmol = 2625.499639
 kJ_to_kcal = 0.239006
 atomic_to_K = 315775.04e0
@@ -9,7 +10,9 @@ BOHR_to_ANGSTROM = 0.52917721092e0
 BOHR_to_NANOMETER = BOHR_to_ANGSTROM / 10.0
 DEGREES_per_RADIAN = 180.0 / math.pi
 atomic_to_kg = 1.66054e-27
-atomic_to_fs = 1.0327503e0
+atomic_to_fs_times_sqrt_amu2au = 1.0327503e0    # The momenta in the entire package are in a.u. * sqrt(amu2au)
+                                                # This facilitates squaring the momenta and dividing by the masses in amu to obtain the correct kinetic energy
+                                                # However, therefor the timestep needs to be adjusted accordingly.
 atomic_to_bar = 2.9421912e8
 
 # constants

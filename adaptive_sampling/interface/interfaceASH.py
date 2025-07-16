@@ -58,7 +58,7 @@ class AshMD:
         self.calculator = calculator
         self.mute = mute
         self.dt = dt
-        self.dt_atomic = dt / units.atomic_to_fs  # timestep in atomic units
+        self.dt_atomic = dt / units.atomic_to_fs_times_sqrt_amu2au  # timestep in atomic units over sqrt(amu2au)
         self.langevin = thermostat
         self.target_temp = target_temp
         self.friction = friction
@@ -76,7 +76,7 @@ class AshMD:
         self.ndegrees = 3.0e0 * self.natoms - 6.0e0
         self.forces = np.zeros_like(self.coords) 
         self.qm_forces = np.zeros_like(self.coords)
-        self.momenta = np.zeros_like(self.coords)
+        self.momenta = np.zeros_like(self.coords)                   # momenta are in a.u. * sqrt(amu2au)
         self.bias_forces = np.zeros_like(self.forces)
         self.biaspots = []
 

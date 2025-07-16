@@ -84,7 +84,7 @@ def czar(
 
     hist = np.zeros(len(grid), dtype=float)
     f_corr = np.zeros(len(grid), dtype=float)
-    for i, x in enumerate(grid_local):
+    for i, x in enumerate(grid):
         la_x = la[np.where(np.logical_and(cv >= x - dx2, cv < x + dx2))]
         hist[i] = len(la_x)
         if hist[i] > 0:

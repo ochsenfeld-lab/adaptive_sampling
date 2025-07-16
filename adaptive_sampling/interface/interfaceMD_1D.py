@@ -25,7 +25,7 @@ class MD:
         self.coords = np.array(coords_in)
         self.natoms = 1
         self.dt_fs = dt_in
-        self.dt = dt_in / units.atomic_to_fs
+        self.dt = dt_in / units.atomic_to_fs_times_sqrt_amu2au
         self.target_temp = target_temp_in
         self.forces = np.zeros(self.natoms)
         self.momenta = np.zeros(self.natoms)
