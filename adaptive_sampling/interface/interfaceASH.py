@@ -70,7 +70,7 @@ class AshMD:
         )
         self.charge = self.molecule.charge
         self.mult = self.molecule.mult
-        self.mass = np.asarray(self.molecule.masses)
+        self.mass = np.asarray(self.molecule.masses) * units.amu_to_atomic
         self.masses = np.repeat(self.mass, 3)
         self.natoms = int(len(self.coords) / 3)
         self.ndegrees = 3.0e0 * self.natoms - 6.0e0
@@ -272,14 +272,20 @@ class AshMD:
                 "amd/boost_ratio": np.linalg.norm(self.bias_forces) / np.linalg.norm(self.forces - self.bias_forces),    # ratio of |boost_forces|/|unboosted forces|
                 "time_per_step": self.time_last_step,
             }
-        if self.apply_barostat: 
+        if self.apply_barostat:
             data.update({
                 "barostat/V": self.barostat.volume,         # nm^3
-                "barostat/p": self.barostat.pressure,       # bar
-                "barostat/p_finitediff": self.barostat.computeCurrentPressure(numeric=True),       # bar
                 "barostat/rho": self.barostat.density,      # g/cm^3
-                "barostat/p_inst": self.barostat.instantaneous_pressure, # bar
             })
+            # not all barostats have these implemented
+            try: 
+                data.update({
+                    "barostat/p": self.barostat.pressure,       # bar
+                    "barostat/p_finitediff": self.barostat.computeCurrentPressure(numeric=True),       # bar
+                    "barostat/p_inst": self.barostat.instantaneous_pressure, # bar
+                })
+            except:
+                pass
         import wandb
         wandb.define_metric("*", step_metric='time_ps')
         wandb.log(
@@ -985,13 +991,8 @@ class MonteCarloBarostatASH:
         return pressure / (self.AVOGADRO*1e-25) # convert kJ/mol/nm^2 to Bar
 
     def computeInstantaneousPressure(self):
-        momenta = self.the_md.momenta.reshape((self.the_md.natoms, 3))
-        masses = self.the_md.mass  # shape (natoms,)
-        ke_per_atom = np.sum(momenta**2, axis=1) / (2 * masses)
-        current_kinetic_energy = np.sum(ke_per_atom) * units.atomic_to_kJmol
-
         # calculate the current pressure
-        current_pressure = 2 * current_kinetic_energy / (3 * self.volume)
+        current_pressure = 2 * self.computeKineticEnergy() / (3 * self.volume)
         current_pressure -= np.sum(self.the_md.coords * self.the_md.forces * units.atomic_to_kJmol)/(3.*self.volume)
 
         return current_pressure / (self.AVOGADRO * 1e-25) # convert kJ/mol/nm^3 to bar 
@@ -1000,6 +1001,106 @@ class MonteCarloBarostatASH:
         """Computes the current kinetic energy based on all atoms in kJ/mol."""
         return np.sum(self.the_md.momenta * self.the_md.momenta / (2 * self.the_md.masses)) * units.atomic_to_kJmol
 
+class PeriodicPistonByBoxRescaling(MonteCarloBarostatASH):
+    def __init__(self,
+        the_md: AshMD,
+        min_volume_ratio: float,
+        box_scaling_frequency: int,
+        period_length: float,
+        equil_steps: int=0,
+        keep_molecular_bonds_fixed: bool=False,
+        scale_momenta: bool=False
+    ):
+        self.the_md = the_md
+        self.min_volume_ratio = min_volume_ratio
+        self.box_scaling_frequency = box_scaling_frequency
+        self.period_length = period_length
+        self.equil_steps = equil_steps
+        self.keep_molecular_bonds_fixed = keep_molecular_bonds_fixed
+        self.scale_momenta = scale_momenta
+
+        self.original_box = self.getPeriodicBoxVectors() # nm
+        self.box = self.original_box
+        self.volume = self.getVolume(self.original_box)
+        self.density = self.the_md.mass.sum() / self.volume * self.DALTON2GRAMM / 1.e-21
+        self.old_L_scale = 1
+    
+        self.simulation = the_md.calculator.mm_theory.create_simulation()       
+        self.molecules = [list(mol) for mol in self.simulation.context.getMolecules()]
+        self.nMolecules = len(self.molecules)
+        self.wrapMoleculesToPeriodicBox(self.original_box)
+
+    def get_current_scale(self):
+        time = self.the_md.dt * (self.the_md.step - self.equil_steps)  # fs
+
+        # This is the scale taken from the hyperreactor spherical piston
+        # This might not be suitable, as spherical piston influences second derivative of coords,
+        # while this scale affects the positions directly
+        return min(1, 1 + (1 - self.min_volume_ratio) * np.sin(0.5 * np.pi * np.cos(2 * np.pi * time / self.period_length)))
+
+    def updateState(self):
+        self.wrapMoleculesToPeriodicBox(self.box)
+        if self.the_md.step < self.equil_steps or self.the_md.step % self.box_scaling_frequency != 0: # If still in eqilibration, dont apply rescaling
+            return
+        # Check for compression cycle function
+        V_scale = self.get_current_scale()
+        L_scale = np.cbrt(V_scale)
+
+        if L_scale == self.old_L_scale:
+            # If the scale does not change, don't use resources on rescaling
+            return
+
+        # scale coordinates and Box
+        self.box = self.original_box * L_scale
+        self.volume = self.getVolume(self.box)
+        self.density = self.the_md.mass.sum() / self.volume * self.DALTON2GRAMM / 1.e-21
+
+        relative_L_change = L_scale / self.old_L_scale
+
+        # scale coordinates and boxes
+        # only shifts molecules but keeps their internal bonds fixed in length
+        # NOTE: This is not meaningful if molecular membership is not updated after reactions
+        if self.keep_molecular_bonds_fixed:
+            coordsNew = self.scaleCoords(relative_L_change) # nm, 
+            self.the_md.coords = coordsNew / units.BOHR_to_NANOMETER
+        else:
+            self.the_md.coords *= relative_L_change
+        self.setPeriodicBoxVectors(self.box)
+        self.wrapMoleculesToPeriodicBox(self.box)
+
+        # optionally scale momenta
+        if self.scale_momenta:
+            # momenta are scaled inversely to coordinates according to SCR paper. It needs to be tested if this is a good idea.
+            # NOTE: Above, the coordinates are not simply scaled, only the relative positions of the molecules
+            # This is not consistent with just scaling the momenta directly, without regarding molecular membership
+            self.the_md.momenta /= relative_L_change
+
+        # Keep track of previous L_scale
+        self.old_L_scale = L_scale
+
+    def wrapMoleculesToPeriodicBox(self, box, wrap_qm: bool=True):
+
+        """Wrap coordinates of molecules in `self.the_md` to periodic range arround center of the box
+        
+        Args:
+            box: periodic box vectors in nm with origin at (0,0,0), shape (3, 3)
+        """
+        box_au = np.copy(box) / units.BOHR_to_NANOMETER 
+        coordsNew = np.copy(self.the_md.coords).reshape((self.the_md.natoms, 3))
+
+        # center QMOrigin in periodic box
+        coordsQMOrigin = coordsNew[self.the_md.calculator.xatom_mask].sum(axis=0) / self.the_md.calculator.sum_xatom_mask
+        diff = coordsQMOrigin - np.array([box_au[0,0], box_au[1,1], box_au[2,2]])/2.0
+        coordsNew -= diff
+        
+        # wrap coordinates arround the center of the periodic box
+        for molAtoms in self.molecules:
+            center = (coordsNew[molAtoms]).sum(axis=0) / float(len(molAtoms))
+            diff  = box_au[2]*np.floor(center[2]/box_au[2][2])
+            diff += box_au[1]*np.floor((center[1]-diff[1])/box_au[1][1])
+            diff += box_au[0]*np.floor((center[0]-diff[0])/box_au[0][0])
+            coordsNew[molAtoms] -= diff
+        self.the_md.coords = coordsNew.flatten() 
 class StochasticCellRescalingBarostatASH(MonteCarloBarostatASH):
     """Stochastic Cell Rescaling Barostat for OpenMMTheory in AshMD
 
@@ -1034,13 +1135,7 @@ class StochasticCellRescalingBarostatASH(MonteCarloBarostatASH):
         #self.updateAvgKinEnergy(tau=self.frequency)
         if self.the_md.step%self.frequency != 0:
             return
-         
-        # calculate the current kinetic energy
-        momenta = self.the_md.momenta.reshape((self.the_md.natoms, 3))
-        masses = self.the_md.mass  # shape (natoms,)
-        ke_per_atom = np.sum(momenta**2, axis=1) / (2 * masses)
-        current_kinetic_energy = np.sum(ke_per_atom) * units.atomic_to_kJmol
-
+        current_kinetic_energy = self.computeKineticEnergy()
         # calculate the current pressure
         current_pressure = 2 * current_kinetic_energy / (3 * self.volume)
         current_pressure -= np.sum(self.the_md.coords * self.the_md.forces * units.atomic_to_kJmol)/(3.*self.volume) # kJ/mol/nm^3, neglects PBCs!
