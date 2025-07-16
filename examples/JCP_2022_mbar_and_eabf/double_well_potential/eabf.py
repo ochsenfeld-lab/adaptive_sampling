@@ -52,7 +52,7 @@ print(
 print(
     "%11.2f\t%14.6f\t%14.6f\t%14.6f\t%14.6f\t%14.6f\t%14.6f"
     % (
-        the_md.step * the_md.dt * atomic_to_fs,
+        the_md.step * the_md.dt * atomic_to_fs_times_sqrt_amu2au,
         the_md.coords[0],
         the_md.coords[1],
         the_md.epot,
@@ -78,7 +78,7 @@ while step_count < nsteps:
     print(
         "%11.2f\t%14.6f\t%14.6f\t%14.6f\t%14.6f\t%14.6f\t%14.6f"
         % (
-            the_md.step * the_md.dt * atomic_to_fs,
+            the_md.step * the_md.dt * atomic_to_fs_times_sqrt_amu2au,
             the_md.coords[0],
             the_md.coords[1],
             the_md.epot,
