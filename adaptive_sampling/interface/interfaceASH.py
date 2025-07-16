@@ -70,7 +70,7 @@ class AshMD:
         )
         self.charge = self.molecule.charge
         self.mult = self.molecule.mult
-        self.mass = np.asarray(self.molecule.masses) * units.amu_to_atomic
+        self.mass = np.asarray(self.molecule.masses)
         self.masses = np.repeat(self.mass, 3)
         self.natoms = int(len(self.coords) / 3)
         self.ndegrees = 3.0e0 * self.natoms - 6.0e0
