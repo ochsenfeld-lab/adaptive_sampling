@@ -27,6 +27,7 @@ class AshMD:
         mute: mute Calculator output
         scratch_dir: directory where `calculator` input and output files are stored
         neglect_PC_grad: only for QMMM calculations where the qm_gradient is used, e.g. hyperdynamics. Leaves the gradient for the PC atoms (MM region) at 0.
+        adaptive_QMMM: only for QMMM. If True, QM/MM partitioning is redone on the fly.
     """
 
     def __init__(
@@ -46,6 +47,7 @@ class AshMD:
         mute: bool = True,
         scratch_dir: str = "scratch/",
         neglect_PC_grad: bool = False,
+        adaptive_QMMM: bool = False,
         **kwargs,
     ):
         if fragment == None:
@@ -63,6 +65,9 @@ class AshMD:
         self.target_temp = target_temp
         self.friction = friction
         self.neglect_PC_grad = neglect_PC_grad
+        if adaptive_QMMM and calculator.theorytype != "QM/MM":
+            raise ValueError(f"adaptive QMMM set to True, so a QM/MM type calculator is required instead of {calculator.theorytype}.")
+        self.adaptive_QMMM = adaptive_QMMM
 
         # molecule
         self.coords = (
@@ -226,6 +231,10 @@ class AshMD:
                 self.barostat.updateState()
 
             self.propagate()
+
+            if self.adaptive_QMMM:
+                self.repartitionQMMM()
+
             self.calc()
 
             if bool(self.biaspots):
@@ -645,6 +654,26 @@ class AshMD:
             raise NotImplementedError(
                 " >>> AshMD: `get_sampling_data()` is missing `adaptive_sampling` package"
             ) from e
+
+    def repartitionQMMM(self):
+        def makeMM2QMTransitions(self) -> None:
+            # TODO
+            # for mol in mm_mols:
+                # if mol satisfies qm_conditions:
+                    # self.transformMM2QM(mol.atoms)
+            return
+        def makeQM2MMTransitions(self) -> None:
+            # TODO
+            # for mol in qm_mols:
+                # if mol not satisfies qm_conditions:
+                    # self.transformQM2MM(mol.atoms)
+            return
+
+        raise NotImplementedError("adaptive QMMM is not yet implemented.")
+
+    def transformMM2QM(self, atoms: list[int]) -> None:
+        
+        raise NotImplementedError("MM2QM transition not available")
 
 
 class MonteCarloBarostatASH:
@@ -1078,7 +1107,7 @@ class PeriodicPistonByBoxRescaling(MonteCarloBarostatASH):
         # Keep track of previous L_scale
         self.old_L_scale = L_scale
 
-    def wrapMoleculesToPeriodicBox(self, box, wrap_qm: bool=True):
+    def wrapMoleculesToPeriodicBox(self, box):
 
         """Wrap coordinates of molecules in `self.the_md` to periodic range arround center of the box
         
