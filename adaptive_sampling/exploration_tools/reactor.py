@@ -55,14 +55,17 @@ class Reactor(ABC):
         
         np.savez_compressed(prefix + "_pop.npz", *pop_old)
 
-    def write_bond_order_output(self, prefix: str = "aseMD", bo_array: np.array = None):
+    def write_bond_order_output(self, prefix: str = "aseMD", bo_array: np.array = None, input_is_matrix: bool=True):
         """saves bond orders in a ij order for each time step (needed for the post-processing)
 
         Args:
             filename: name of bond-orders file
             bo: matrix form of Wiberg/Mayer bond orders from the calculator
         """
-        bo_array_filtered = np.array([bo_array[0], filter_and_index_bo(bo_array[1])], dtype='object')
+        if input_is_matrix:
+            bo_array_filtered = np.array([bo_array[0], filter_and_index_bo(bo_array[1])], dtype='object')
+        else:
+            bo_array_filtered = np.array([bo_array[0], bo_array[1]], dtype='object')
         try:
             loaded_data = np.load(prefix + "_bo.npz", allow_pickle=True)
             bo_old = [loaded_data[key] for key in loaded_data]

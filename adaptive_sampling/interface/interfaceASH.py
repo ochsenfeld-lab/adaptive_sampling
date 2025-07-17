@@ -202,6 +202,8 @@ class AshMD:
         restart_freq: int = None,
         dcd_freq: int = None,
         wandb_freq: int = None,
+        bond_freq: int = None,
+        pop_freq: int = None,
         remove_rotation: bool = False,
         prefix: str = "ashMD_production",
         progress_bar: bool = False,
@@ -259,6 +261,11 @@ class AshMD:
                 self.print_dcd(prefix=prefix)
             if out_freq != None and self.step % out_freq == 0:
                 self.print_energy(prefix=prefix)
+            if bond_freq != None and self.step % bond_freq == 0:
+                self.write_bond_orders(prefix=prefix)
+            if pop_freq != None and self.step % pop_freq == 0:
+                self.write_pop(prefix=prefix)
+                
             self.time_last_step = time.perf_counter() - start_time
             self.time_per_step.append(self.time_last_step)
             if wandb_freq != None and self.step % wandb_freq == 0:
@@ -619,6 +626,43 @@ class AshMD:
                 f"{prefix}_traj.dcd", "w", force_overwrite=True
             )
         self.dcd.write(units.BOHR_to_ANGSTROM * self.coords.reshape(self.natoms, 3))
+
+    def write_bond_orders(self, prefix: str="AshMD"):
+        for biaspot in self.biaspots:
+            # proceed only if biaspot has a writer for the bond orders
+            if not hasattr(biaspot, 'write_bond_order_output'):
+                continue
+            bond_orders = np.loadtxt(f"{self.scratch_dir.rstrip('/')}/wbo") # [(atom1, atom2, bondorder), ...]
+            # make bondorders the first column to be consistent with the previous implementation of Stan-Bernhardt et al.
+
+            # change xtb atom index to 'global' qmmm atom index
+            bo = []
+            qmatoms = self.calculator.qmatoms
+            for element in bond_orders:
+                # xtb starts counting at 1, so subtract to get proper indices
+                atom1 = element[0] - 1
+                atom2 = element[1] - 1
+                cur_bo = element[2]
+                # threshold for bond order
+                if cur_bo < 0.5:
+                    continue
+                # link atoms are present in xtb but not in global atoms
+                # the linkatoms are always last for the xtb input, so their index would raise a Value error in qmatoms
+                atom1 = qmatoms[atom1] if atom1 < len(qmatoms) else -1
+                atom2 = qmatoms[atom2] if atom2 < len(qmatoms) else -1
+                bo.append([cur_bo, atom1, atom2])
+            self.bo_array = np.array([self.step*self.dt, bo], dtype='object')
+            biaspot.write_bond_order_output(prefix=prefix, bo_array=self.bo_array, input_is_matrix=False)
+
+    def write_pop(self, prefix: str="AshMD"):
+        for biaspot in self.biaspots:
+            # proceed only if biaspot has a writer for the bond orders
+            if not hasattr(biaspot, 'write_pop_output'):
+                continue
+            pop = np.loadtxt(f"{self.scratch_dir.rstrip('/')}/charges") # [(atom1, atom2, bondorder), ...]
+            # make bondorders the first column to be consistent with the previous implementation of Stan-Bernhardt et al.
+            self.pop_array = np.array([self.step*self.dt, pop], dtype='object')
+            biaspot.write_pop_output(prefix=prefix, pop_array=self.pop_array)
 
     def get_sampling_data(self):
         """interface to adaptive sampling algorithms. see: https://github.com/ahulm/adaptive_sampling"""

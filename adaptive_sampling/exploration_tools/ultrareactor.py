@@ -3,7 +3,7 @@ from .reactor import Reactor
 from ..sampling_tools.amd import aMD
 from ..units import *
 
-class Ultrareactor(aMD):
+class Ultrareactor(aMD, Reactor):
 
     def __init__(
         self,
