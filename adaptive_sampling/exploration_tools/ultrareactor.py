@@ -37,7 +37,10 @@ class Ultrareactor(aMD, Reactor):
         self.k_conf = k_conf*np.power(BOHR_to_ANGSTROM,2.0)/(atomic_to_kJmol*kJ_to_kcal)
 
         self.relative_soft_box_size = relative_soft_box_size
-        self.qm_confinement = qm_confinement.lower()
+
+        self.qm_confinement = qm_confinement
+
+
 
     def _soft_wall_bias(
             self
@@ -107,6 +110,8 @@ class Ultrareactor(aMD, Reactor):
             amd_bias += self._spherical_bias()
         elif self.qm_confinement == "box":
             amd_bias += self._soft_wall_bias()
+        elif self.qm_confinement is None:
+            pass
         else:
             raise ValueError(f"Confinement '{self.qm_confinement}' unknown. Choose between ['spherical', 'box']")
         return  amd_bias
