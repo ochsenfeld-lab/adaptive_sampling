@@ -640,14 +640,15 @@ class AshMD:
             qmatoms = self.calculator.qmatoms
             for element in bond_orders:
                 # xtb starts counting at 1, so subtract to get proper indices
-                atom1 = element[0] - 1
-                atom2 = element[1] - 1
+                atom1 = int(element[0]) - 1
+                atom2 = int(element[1]) - 1
                 cur_bo = element[2]
                 # threshold for bond order
                 if cur_bo < 0.5:
                     continue
                 # link atoms are present in xtb but not in global atoms
-                # the linkatoms are always last for the xtb input, so their index would raise a Value error in qmatoms
+                # the linkatoms are always last for the xtb input, so their index is smaller
+                # for robustness, bonds to linkatoms are indicated by a -1 atom index. This would allow for reconstruction
                 atom1 = qmatoms[atom1] if atom1 < len(qmatoms) else -1
                 atom2 = qmatoms[atom2] if atom2 < len(qmatoms) else -1
                 bo.append([cur_bo, atom1, atom2])
