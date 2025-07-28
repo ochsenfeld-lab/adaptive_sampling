@@ -25,7 +25,7 @@ class PLUMED_CV:
         try:
             import plumed
         except ImportError:
-            print("Found no plumed library. Install via: pip install plumed")
+            print("Found no plumed library. Install via: pip install plumed" )
 
         self.natoms = natoms
         self.masses = np.ones(natoms)

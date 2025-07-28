@@ -18,6 +18,7 @@ Welcome to the adaptive-sampling package documentation!
    sampling_tools
    colvars
    exploration_tools
+   processing_tools
    tutorials
    code
    publications

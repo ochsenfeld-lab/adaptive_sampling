@@ -71,7 +71,7 @@ The following examples show how to define common CVs for sampling algorithms tha
     # Indices of atoms or list of indices to calculate dihedral angle between centers of mass
     cv_def = [0, 1, 2, 3]  
 
-* **Switching function** :math:`a_{ij}` between two groups of atoms with switching distance :math:`sigma_ij` and exponents :math:`n` and :math:`m`:
+* **Switching function** :math:`a_{ij}` between two groups of atoms with switching distance :math:`\sigma_{ij}` and exponents :math:`n` and :math:`m`:
 
 .. math::
 
@@ -80,15 +80,15 @@ The following examples show how to define common CVs for sampling algorithms tha
 .. code-block:: python
     :linenos:
 
-    # Minimum distance between two groups of atoms
+    # Switching function between two groups of atoms
     cv_type = 'switching_function'
     
-    r_0 = 3.0  # Switching distance in Angstrom (default: 3.0)
-    n = 6      # Exponent nominator (default: 6)
-    m = 12     # Exponent denominator (default: 12)
+    sigma_ij = 3.0  # Switching distance in Angstrom (default: 3.0)
+    n = 6           # Exponent nominator (default: 6)
+    m = 12          # Exponent denominator (default: 12)
 
     # List containing distance definition and additional parameters of switching function 
-    cv_def = [0, 1, r_0, n, m]
+    cv_def = [0, 1, sigma_ij, n, m]
 
 * **Minimum distance** out of a list of distances `d`:
 
@@ -138,11 +138,11 @@ The `adaptive_sampling.colvars.PathCV` class implements two different types of P
 
 .. math::
 
-    s = \frac{1}{P-1}\frac{\sum_{i=0}^{P} (i-1) e^{-\lambda |\mathbf{x}-\mathbf{x}_i|}}{\sum_{i=0}^{P} e^{-\lambda |\mathbf{x}-\mathbf{x}_i|}}
+    s(\mathbf{x}) = \frac{1}{P-1}\frac{\sum_{i=0}^{P} (i-1) e^{-\lambda |\mathbf{x}-\mathbf{x}_i|}}{\sum_{i=0}^{P} e^{-\lambda |\mathbf{x}-\mathbf{x}_i|}}
 
 .. math::
 
-    z = -\frac{1}{\lambda} \ln\left(\sum_{i=0}^{P} e^{-\lambda |\mathbf{x}-\mathbf{x}_i|}\right) 
+    z(\mathbf{x}) = -\frac{1}{\lambda} \ln\left(\sum_{i=0}^{P} e^{-\lambda |\mathbf{x}-\mathbf{x}_i|}\right) 
 
 with :math:`P` being the number of nodes along the path, :math:`\mathbf{x}_i` the Cartesian coordinates of the :math:`i`-th path node, and :math:`\lambda` a parameter that ensures that the path is smooth and differentiable.
 Any distance metric can be used to calculate the distance :math:`|\mathbf{x}-\mathbf{x}_i|` between the current coordinates :math:`\mathbf{x}` and the path nodes :math:`\mathbf{x}_i`.
