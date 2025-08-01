@@ -11,6 +11,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
+      - uses: docker://pandoc/core:3.5
       - name: Install dependencies
         run: |
           pip install sphinx sphinx_rtd_theme sphinx-rtd-theme sphinx-copybutton nbsphinx
