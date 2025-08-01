@@ -1,0 +1,351 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="./">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Basic usage &mdash; adaptive-sampling 3.0.1 documentation</title>
+      <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=80d5e7a1" />
+      <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=e59714d7" />
+      <link rel="stylesheet" type="text/css" href="_static/copybutton.css?v=76b2166b" />
+
+  
+      <script src="_static/jquery.js?v=5d32c60e"></script>
+      <script src="_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="_static/documentation_options.js?v=08bfcbec"></script>
+      <script src="_static/doctools.js?v=9bcbadda"></script>
+      <script src="_static/sphinx_highlight.js?v=dc90522c"></script>
+      <script src="_static/clipboard.min.js?v=a7894cd8"></script>
+      <script src="_static/copybutton.js?v=f281be69"></script>
+      <script crossorigin="anonymous" integrity="sha256-Ae2Vz/4ePdIu6ZyI/5ZGsYnb+m0JlOmKPjt6XZ9JJkA=" src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.4/require.min.js"></script>
+    <script src="_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="Sampling tools" href="sampling_tools.html" />
+    <link rel="prev" title="Installation" href="install.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="index.html" class="icon icon-home">
+            adaptive-sampling
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="intro.html">Introduction</a></li>
+<li class="toctree-l1"><a class="reference internal" href="install.html">Installation</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Basic usage</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#molecular-dynamics-md-interfaces">Molecular dynamics (MD) interfaces</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#the-ase-interface">The ASE interface</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#the-ash-interface">The ASH interface</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#the-openmm-interface">The OpenMM interface</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#sampling-tools">Sampling tools</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#exploration-tools">Exploration tools</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="sampling_tools.html">Sampling tools</a></li>
+<li class="toctree-l1"><a class="reference internal" href="colvars.html">Collective Variables (CVs)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="exploration_tools.html">Exploration tools</a></li>
+<li class="toctree-l1"><a class="reference internal" href="processing_tools.html">Processing tools</a></li>
+<li class="toctree-l1"><a class="reference internal" href="tutorials.html">Tutorials</a></li>
+<li class="toctree-l1"><a class="reference internal" href="code.html">Code Documentation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="publications.html">Scientific articles using the <cite>adaptive_sampling</cite> package</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">adaptive-sampling</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">Basic usage</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="_sources/basics.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="basic-usage">
+<h1>Basic usage<a class="headerlink" href="#basic-usage" title="Link to this heading"></a></h1>
+<p>This section provides a brief overview of how to use the <cite>adaptive_sampling</cite> package. For more detailed information, please refer to the tutorials and code documentation.</p>
+<section id="molecular-dynamics-md-interfaces">
+<h2>Molecular dynamics (MD) interfaces<a class="headerlink" href="#molecular-dynamics-md-interfaces" title="Link to this heading"></a></h2>
+<p>The <cite>adaptive_sampling</cite> package provides interfaces to run molecular dynamics simulation on various levels of theory.
+These interfaces allow you to run simulations using the sampling and exploration tools provided by the package.</p>
+<blockquote>
+<div><ul class="simple">
+<li><p><strong>AseMD</strong>: For running <em>ab initio</em> molecular dynamics simulations using the calculators from the atomic simulation environment (ASE), which provides interfaces to various quantum chemistry packages.</p></li>
+<li><p><strong>AshMD</strong>: For running <em>ab initio</em> molecular dynamics simulations using the ASH package, which provides additional support for QM/MM simulations.</p></li>
+<li><p><strong>AdaptiveSamplingOpenMM</strong>: Allows performing molecular dynamics simulations using the OpenMM engine.</p></li>
+<li><p><strong>InterfaceMD_2D</strong>: Provides 2D potentials for testing of sampling methods.</p></li>
+</ul>
+</div></blockquote>
+<section id="the-ase-interface">
+<h3>The ASE interface<a class="headerlink" href="#the-ase-interface" title="Link to this heading"></a></h3>
+<p>The <cite>AseMD</cite> class allows for running adaptive sampling algorithms using any ASE calculator.
+Refer to the ASE <a class="reference external" href="https://wiki.fysik.dtu.dk/ase/">documentation</a> for more information on available calculators and molecular modeling workflows in ASE.
+In the below example we will use the <cite>tblite</cite> package and the GFN2-xTB tight-binding method.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="linenos"> 1</span> <span class="c1"># create an ASE fragment from an XYZ files</span>
+<span class="linenos"> 2</span><span class="kn">from</span> <span class="nn">ase.io</span> <span class="kn">import</span> <span class="n">read</span>
+<span class="linenos"> 3</span><span class="n">frag</span> <span class="o">=</span> <span class="n">read</span><span class="p">(</span><span class="s2">&quot;structure.xyz&quot;</span><span class="p">)</span>
+<span class="linenos"> 4</span>
+<span class="linenos"> 5</span><span class="c1"># Attach the tblite calculator to the fragment</span>
+<span class="linenos"> 6</span><span class="kn">from</span> <span class="nn">tblite.ase</span> <span class="kn">import</span> <span class="n">TBLite</span>
+<span class="linenos"> 7</span><span class="n">frag</span><span class="o">.</span><span class="n">calc</span> <span class="o">=</span> <span class="n">TBLite</span><span class="p">(</span><span class="n">method</span><span class="o">=</span><span class="s2">&quot;GFN2-xTB&quot;</span><span class="p">)</span>
+<span class="linenos"> 8</span>
+<span class="linenos"> 9</span><span class="c1"># Initialize the AseMD object</span>
+<span class="linenos">10</span><span class="kn">from</span> <span class="nn">adaptive_sampling.interface</span> <span class="kn">import</span> <span class="n">AseMD</span>
+<span class="linenos">11</span><span class="n">the_md</span> <span class="o">=</span> <span class="n">AseMD</span><span class="p">(</span>
+<span class="linenos">12</span>    <span class="n">atoms</span><span class="o">=</span><span class="n">frag</span><span class="p">,</span>               <span class="c1"># ASE fragment</span>
+<span class="linenos">13</span>    <span class="n">dt</span><span class="o">=</span><span class="mf">1.0</span><span class="p">,</span>                   <span class="c1"># Timestep in fs</span>
+<span class="linenos">14</span>    <span class="n">thermostat</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>          <span class="c1"># Apply an langevin thermostat</span>
+<span class="linenos">15</span>    <span class="n">target_temp</span><span class="o">=</span><span class="mf">300.0</span><span class="p">,</span>        <span class="c1"># The thermostat temperature</span>
+<span class="linenos">16</span>    <span class="n">scratch_dir</span><span class="o">=</span><span class="s2">&quot;./scratch/&quot;</span><span class="p">,</span> <span class="c1"># Location where scratch files of the calculator should be written</span>
+<span class="linenos">17</span><span class="p">)</span>
+<span class="linenos">18</span>
+<span class="linenos">19</span><span class="c1"># Initialize one or multiple sampling methods from `sampling_tools`</span>
+<span class="linenos">20</span><span class="kn">from</span> <span class="nn">adaptive_sampling.sampling_tools</span> <span class="kn">import</span> <span class="o">*</span>
+<span class="linenos">21</span><span class="n">the_bias</span> <span class="o">=</span> <span class="o">...</span>
+<span class="linenos">22</span>
+<span class="linenos">23</span><span class="c1"># Initialize the MD</span>
+<span class="linenos">24</span><span class="n">the_md</span><span class="o">.</span><span class="n">calc_init</span><span class="p">(</span>
+<span class="linenos">25</span>    <span class="n">init_momenta</span><span class="o">=</span><span class="s2">&quot;random&quot;</span><span class="p">,</span>   <span class="c1"># Method for momenta initialization</span>
+<span class="linenos">26</span>    <span class="n">biaspots</span><span class="o">=</span><span class="p">[</span><span class="n">the_bias</span><span class="p">,</span> <span class="p">],</span>   <span class="c1"># Set the sampling algorithms</span>
+<span class="linenos">27</span>    <span class="n">init_temp</span><span class="o">=</span><span class="mf">300.0</span><span class="p">,</span>         <span class="c1"># The initial temperature, if `init_momenta=&quot;random&quot;`</span>
+<span class="linenos">28</span>    <span class="n">restart_file</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>       <span class="c1"># Filename of restart file, if `init_momenta=&quot;read&quot;`</span>
+<span class="linenos">29</span><span class="p">)</span>
+<span class="linenos">30</span>
+<span class="linenos">31</span><span class="c1"># Ready for running the MD</span>
+<span class="linenos">32</span><span class="n">the_md</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">nsteps</span><span class="o">=</span><span class="mi">10000</span><span class="p">)</span>
+</pre></div>
+</div>
+</section>
+<section id="the-ash-interface">
+<h3>The ASH interface<a class="headerlink" href="#the-ash-interface" title="Link to this heading"></a></h3>
+<p>The <cite>AshMD</cite> class allows for running adaptive sampling algorithms using any ASH theory object.
+Refer to the ASH <a class="reference external" href="https://ash.readthedocs.io/en/latest/">documentation</a> for more information on available theory objects and molecular modeling workflows in ASH.
+In the below example we will perform a QM/MM MD simulation using the xTB method and an AMBER force field.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="linenos"> 1</span><span class="c1"># Create the ASH fragment from a PDB</span>
+<span class="linenos"> 2</span><span class="kn">import</span> <span class="nn">ash</span>
+<span class="linenos"> 3</span><span class="n">frag</span> <span class="o">=</span> <span class="n">ash</span><span class="o">.</span><span class="n">Fragment</span><span class="p">(</span>
+<span class="linenos"> 4</span>    <span class="n">pdbfile</span><span class="o">=</span><span class="s2">&quot;structure.pdb&quot;</span><span class="p">,</span>
+<span class="linenos"> 5</span>    <span class="n">charge</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>                           <span class="c1"># charge of the QM subsystem</span>
+<span class="linenos"> 6</span>    <span class="n">mult</span><span class="o">=</span><span class="mi">1</span>                              <span class="c1"># multiplicity of the QM subsystem</span>
+<span class="linenos"> 7</span><span class="p">)</span>
+<span class="linenos"> 8</span>
+<span class="linenos"> 9</span><span class="c1"># Create the MM Theory</span>
+<span class="linenos">10</span><span class="n">mm_theory</span> <span class="o">=</span> <span class="n">ash</span><span class="o">.</span><span class="n">OpenMMTheory</span><span class="p">(</span>
+<span class="linenos">11</span>    <span class="n">cluster_fragment</span><span class="o">=</span><span class="n">frag</span><span class="p">,</span>              <span class="c1"># ASH Fragment</span>
+<span class="linenos">12</span>    <span class="n">Amberfiles</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>                    <span class="c1"># Use Amber parameter file</span>
+<span class="linenos">13</span>    <span class="n">amberprmtopfile</span><span class="o">=</span><span class="sa">f</span><span class="s2">&quot;structure.parm7&quot;</span><span class="p">,</span> <span class="c1"># The Amber parameter file</span>
+<span class="linenos">14</span>    <span class="n">hydrogenmass</span><span class="o">=</span><span class="mf">1.0</span><span class="p">,</span>                   <span class="c1"># default: 1.5 (hydrogen mass repartitioning)</span>
+<span class="linenos">15</span>    <span class="n">rigidwater</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>                   <span class="c1"># constraints not compatible with QM/MM!</span>
+<span class="linenos">16</span>    <span class="n">autoconstraints</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>               <span class="c1"># constraints not compatible with QM/MM!</span>
+<span class="linenos">17</span>    <span class="n">periodic</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>                      <span class="c1"># Periodic boundary conditions or not.</span>
+<span class="linenos">18</span><span class="p">)</span>
+<span class="linenos">19</span>
+<span class="linenos">20</span><span class="c1"># Create the QM Theory</span>
+<span class="linenos">21</span><span class="n">qm_theory</span> <span class="o">=</span> <span class="n">ash</span><span class="o">.</span><span class="n">xTBTheory</span><span class="p">(</span>
+<span class="linenos">22</span>    <span class="n">xtbmethod</span><span class="o">=</span><span class="s2">&quot;GFN2&quot;</span><span class="p">,</span>                   <span class="c1"># The xTB method</span>
+<span class="linenos">23</span>    <span class="n">runmode</span><span class="o">=</span><span class="s2">&quot;inputfile&quot;</span><span class="p">,</span>                <span class="c1"># Only &quot;inputfile&quot; supports QM/MM</span>
+<span class="linenos">24</span><span class="p">)</span>
+<span class="linenos">25</span>
+<span class="linenos">26</span><span class="c1"># Create the QM/MM System</span>
+<span class="linenos">27</span><span class="n">qm_atoms</span> <span class="o">=</span> <span class="p">[</span><span class="n">i</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">23</span><span class="p">)]</span>    <span class="c1"># Indices of QM atoms</span>
+<span class="linenos">28</span><span class="n">qmmm_theory</span> <span class="o">=</span> <span class="n">ash</span><span class="o">.</span><span class="n">QMMMTheory</span><span class="p">(</span>
+<span class="linenos">29</span>    <span class="n">qm_theory</span><span class="o">=</span><span class="n">qm_theory</span><span class="p">,</span>                <span class="c1"># ASH QM Theory object</span>
+<span class="linenos">30</span>    <span class="n">mm_theory</span><span class="o">=</span><span class="n">mm_theory</span><span class="p">,</span>                <span class="c1"># ASH MM Theory object (should be OpenMMTheory)</span>
+<span class="linenos">31</span>    <span class="n">fragment</span><span class="o">=</span><span class="n">frag</span><span class="p">,</span>                      <span class="c1"># ASH Fragment</span>
+<span class="linenos">32</span>    <span class="n">embedding</span><span class="o">=</span><span class="s2">&quot;Elstat&quot;</span><span class="p">,</span>                 <span class="c1"># QM/MM embedding type</span>
+<span class="linenos">33</span>    <span class="n">qmatoms</span><span class="o">=</span><span class="n">qm_atoms</span><span class="p">,</span>                   <span class="c1"># The QM atoms (list of atom indices)</span>
+<span class="linenos">34</span><span class="p">)</span>
+<span class="linenos">35</span>
+<span class="linenos">36</span><span class="c1"># Initialize the AseMD interface</span>
+<span class="linenos">37</span><span class="kn">from</span> <span class="nn">adaptive_sampling.interface.interfaceASH</span> <span class="kn">import</span> <span class="n">AshMD</span>
+<span class="linenos">38</span><span class="n">the_md</span> <span class="o">=</span> <span class="n">AshMD</span><span class="p">(</span>
+<span class="linenos">39</span>    <span class="n">fragment</span><span class="o">=</span><span class="n">frag</span><span class="p">,</span>                      <span class="c1"># ASH fragment</span>
+<span class="linenos">40</span>    <span class="n">calculator</span><span class="o">=</span><span class="n">qmmm_theory</span><span class="p">,</span>             <span class="c1"># ASH calculator</span>
+<span class="linenos">41</span>    <span class="n">dt</span><span class="o">=</span><span class="mf">1.0</span><span class="p">,</span>                             <span class="c1"># Time step in fs</span>
+<span class="linenos">42</span>    <span class="n">thermostat</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>                    <span class="c1"># Apply Langevin thermostat</span>
+<span class="linenos">43</span>    <span class="n">target_temp</span><span class="o">=</span><span class="mf">300.0</span><span class="p">,</span>                  <span class="c1"># The target temperature in Kelvin</span>
+<span class="linenos">44</span>    <span class="n">barostat</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>                      <span class="c1"># Apply Monte-Carlo barostat</span>
+<span class="linenos">45</span>    <span class="n">target_pressure</span><span class="o">=</span><span class="mf">1.0</span><span class="p">,</span>                <span class="c1"># The target pressure in Bar</span>
+<span class="linenos">46</span>    <span class="n">barostat_freq</span><span class="o">=</span><span class="mi">25</span><span class="p">,</span>                   <span class="c1"># Frequency of updating the barostat</span>
+<span class="linenos">47</span><span class="p">)</span>
+<span class="linenos">48</span>
+<span class="linenos">49</span><span class="c1"># Initialize one or multiple sampling methods from `sampling_tools`</span>
+<span class="linenos">50</span><span class="kn">from</span> <span class="nn">adaptive_sampling.sampling_tools</span> <span class="kn">import</span> <span class="o">*</span>
+<span class="linenos">51</span><span class="n">the_bias</span> <span class="o">=</span> <span class="o">...</span>
+<span class="linenos">52</span>
+<span class="linenos">53</span><span class="c1"># Initialize the MD</span>
+<span class="linenos">54</span><span class="n">the_md</span><span class="o">.</span><span class="n">calc_init</span><span class="p">(</span>
+<span class="linenos">55</span>    <span class="n">init_momenta</span><span class="o">=</span><span class="s2">&quot;random&quot;</span><span class="p">,</span>              <span class="c1"># Method for momenta initialization</span>
+<span class="linenos">56</span>    <span class="n">biaspots</span><span class="o">=</span><span class="p">[</span><span class="n">the_bias</span><span class="p">,</span> <span class="p">],</span>              <span class="c1"># Set the sampling algorithms</span>
+<span class="linenos">57</span>    <span class="n">init_temp</span><span class="o">=</span><span class="mf">300.0</span><span class="p">,</span>                    <span class="c1"># The initial temperature, if `init_momenta=&quot;random&quot;`</span>
+<span class="linenos">58</span>    <span class="n">restart_file</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>                  <span class="c1"># Filename of restart file, if `init_momenta=&quot;read&quot;`</span>
+<span class="linenos">59</span><span class="p">)</span>
+<span class="linenos">60</span>
+<span class="linenos">61</span><span class="c1"># Ready to run the MD</span>
+<span class="linenos">62</span><span class="n">the_md</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">nsteps</span><span class="o">=</span><span class="mi">2</span><span class="p">)</span>
+</pre></div>
+</div>
+</section>
+<section id="the-openmm-interface">
+<h3>The OpenMM interface<a class="headerlink" href="#the-openmm-interface" title="Link to this heading"></a></h3>
+<p>This section provides a minimal example for using the OpenMM interface together with AMBER style <cite>prmtop</cite> and <cite>crd</cite> files.
+Note that also other file formats are supported by OpenMM.
+You can initialize the <cite>AdaptiveSamplingOpenMM</cite> class as follows:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="linenos"> 1</span><span class="kn">from</span> <span class="nn">sys</span> <span class="kn">import</span> <span class="n">stdout</span>
+<span class="linenos"> 2</span>
+<span class="linenos"> 3</span><span class="kn">from</span> <span class="nn">openmm</span> <span class="kn">import</span> <span class="o">*</span>
+<span class="linenos"> 4</span><span class="kn">from</span> <span class="nn">openmm.app</span> <span class="kn">import</span> <span class="o">*</span>
+<span class="linenos"> 5</span><span class="kn">from</span> <span class="nn">openmm.unit</span> <span class="kn">import</span> <span class="o">*</span>
+<span class="linenos"> 6</span>
+<span class="linenos"> 7</span><span class="kn">from</span> <span class="nn">adaptive_sampling.interface</span> <span class="kn">import</span> <span class="n">AdaptiveSamplingOpenMM</span>
+<span class="linenos"> 8</span>
+<span class="linenos"> 9</span><span class="c1"># Setup OpenMM</span>
+<span class="linenos">10</span><span class="n">prmtop</span> <span class="o">=</span> <span class="n">AmberPrmtopFile</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;structure.prmtop&quot;</span><span class="p">)</span>
+<span class="linenos">11</span><span class="n">crd</span> <span class="o">=</span> <span class="n">AmberInpcrdFile</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;structure.crd&quot;</span><span class="p">)</span>
+<span class="linenos">12</span><span class="n">system</span> <span class="o">=</span> <span class="n">prmtop</span><span class="o">.</span><span class="n">createSystem</span><span class="p">(</span>
+<span class="linenos">13</span>    <span class="n">nonbondedMethod</span><span class="o">=</span><span class="n">NoCutoff</span><span class="p">,</span>
+<span class="linenos">14</span>    <span class="n">constraints</span><span class="o">=</span><span class="n">HBonds</span><span class="p">,</span>
+<span class="linenos">15</span><span class="p">)</span>
+<span class="linenos">16</span>
+<span class="linenos">17</span><span class="c1"># Initialize the `AdaptiveSamplingOpenMM` interface to couple the OpenMM simulation to a bias potential</span>
+<span class="linenos">18</span><span class="n">the_md</span> <span class="o">=</span> <span class="n">AdaptiveSamplingOpenMM</span><span class="p">(</span>
+<span class="linenos">19</span>    <span class="n">crd</span><span class="o">.</span><span class="n">positions</span><span class="p">,</span>
+<span class="linenos">20</span>    <span class="n">prmtop</span><span class="o">.</span><span class="n">topology</span><span class="p">,</span>
+<span class="linenos">21</span>    <span class="n">system</span><span class="p">,</span>
+<span class="linenos">22</span>    <span class="n">dt</span><span class="o">=</span><span class="mf">2.0</span><span class="p">,</span>               <span class="c1"># timestep in fs</span>
+<span class="linenos">23</span>    <span class="n">equil_temp</span><span class="o">=</span><span class="mf">300.0</span><span class="p">,</span>     <span class="c1"># temperature of simulation in Kelvin</span>
+<span class="linenos">24</span>    <span class="n">langevin_damping</span><span class="o">=</span><span class="mf">1.0</span><span class="p">,</span> <span class="c1"># langevin damping in 1/ps</span>
+<span class="linenos">25</span><span class="p">)</span>
+<span class="linenos">26</span>
+<span class="linenos">27</span><span class="c1"># The OpenMM `simulation` and `integrator` objects are set up internally, but can still be modified by calling `the_md.simulation` or `the_md.integrator`</span>
+<span class="linenos">28</span><span class="n">the_md</span><span class="o">.</span><span class="n">integrator</span><span class="o">.</span><span class="n">setConstraintTolerance</span><span class="p">(</span><span class="mf">0.00001</span><span class="p">)</span>
+<span class="linenos">29</span><span class="n">the_md</span><span class="o">.</span><span class="n">simulation</span><span class="o">.</span><span class="n">reporters</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">DCDReporter</span><span class="p">(</span><span class="s1">&#39;trajectory.dcd&#39;</span><span class="p">,</span> <span class="mi">100</span><span class="p">))</span>
+</pre></div>
+</div>
+<p>Before running the MD any importance sampling algorithm from <cite>sampling_tools</cite> has to be attached to the OpenMM interface:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="linenos">1</span><span class="kn">from</span> <span class="nn">adaptive_sampling.sampling_tools</span> <span class="kn">import</span> <span class="o">*</span>
+<span class="linenos">2</span><span class="n">the_bias</span> <span class="o">=</span> <span class="o">...</span> <span class="c1"># init sampling algorithm</span>
+<span class="linenos">3</span><span class="n">the_md</span><span class="o">.</span><span class="n">set_sampling_algorithm</span><span class="p">(</span><span class="n">the_bias</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>If you want to apply multiple sampling algorithms, you can specify those as a list:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="linenos">1</span><span class="kn">from</span> <span class="nn">adaptive_sampling.sampling_tools</span> <span class="kn">import</span> <span class="o">*</span>
+<span class="linenos">2</span><span class="n">the_bias1</span> <span class="o">=</span> <span class="o">...</span> <span class="c1"># init first sampling algorithm</span>
+<span class="linenos">3</span><span class="n">the_bias2</span> <span class="o">=</span> <span class="o">...</span> <span class="c1"># init second sampling algorithm, e.g. additional harmonic constraint</span>
+<span class="linenos">4</span><span class="n">the_md</span><span class="o">.</span><span class="n">set_sampling_algorithm</span><span class="p">([</span><span class="n">the_bias1</span><span class="p">,</span> <span class="n">the_bias2</span><span class="p">])</span>
+</pre></div>
+</div>
+<p>Now, the MD is ready to run:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="linenos">1</span><span class="n">the_md</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">nsteps</span><span class="o">=</span><span class="mi">500000</span><span class="p">)</span> <span class="c1"># 500000 * 2 fs = 1 ns</span>
+</pre></div>
+</div>
+</section>
+</section>
+<section id="sampling-tools">
+<h2>Sampling tools<a class="headerlink" href="#sampling-tools" title="Link to this heading"></a></h2>
+<p>Importance sampling algorithms facilitate the calculation of reaction and activation free energies by sampling molecular transitions.
+In the <cite>adaptive sampling</cite> package these are located in the <cite>sampling_tools</cite> subpackage.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="linenos">1</span><span class="kn">from</span> <span class="nn">adaptive_sampling.sampling_tools</span> <span class="kn">import</span> <span class="o">*</span>
+</pre></div>
+</div>
+<p>Implemented are a wide range of sampling algorithms, including well-tempered metadynamics (WTM) and its successor on-the-fly probability enhanced sampling (OPES), the adaptive biasing force (ABF) method or extended-system based hybrid methods (WTM-eABF, OPES-eABF).</p>
+<p>To apply simple harmonic constraints, like for example often used in Umbrella Sampling (US), you can use the <cite>Harmonic_Constraint</cite> class.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="linenos"> 1</span><span class="kn">from</span> <span class="nn">adaptive_sampling.sampling_tools</span> <span class="kn">import</span> <span class="n">Harmonic_Constraint</span>
+<span class="linenos"> 2</span><span class="n">the_bias</span> <span class="o">=</span> <span class="n">Harmonic_Constraint</span><span class="p">(</span>
+<span class="linenos"> 3</span>    <span class="n">the_md</span><span class="p">,</span>
+<span class="linenos"> 4</span>    <span class="n">force_constants</span><span class="o">=</span><span class="mf">100.0</span><span class="p">,</span>             <span class="c1"># In kJ/mol/(CV unit)^2, can also be a list for multiple harmonic constraints</span>
+<span class="linenos"> 5</span>    <span class="n">equil_positions</span><span class="o">=</span><span class="mf">1.0</span><span class="p">,</span>               <span class="c1"># In the unit of the CV, can also be a list for multiple harmonic constraints</span>
+<span class="linenos"> 6</span>    <span class="n">colvars</span><span class="o">=</span><span class="p">[</span>
+<span class="linenos"> 7</span>        <span class="p">[</span><span class="s1">&#39;distance&#39;</span><span class="p">,</span> <span class="p">[</span><span class="mi">0</span><span class="p">,</span><span class="mi">1</span><span class="p">]],</span>           <span class="c1"># Definition of the Collective Variable</span>
+<span class="linenos"> 8</span>        <span class="c1"># Additional CVs can be added to the list</span>
+<span class="linenos"> 9</span>    <span class="p">],</span>
+<span class="linenos">10</span>    <span class="n">outputfile</span><span class="o">=</span><span class="s1">&#39;constraints_traj.dat&#39;</span><span class="p">,</span> <span class="c1"># The output file</span>
+<span class="linenos">11</span>    <span class="n">output_stride</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>                   <span class="c1"># The output stride</span>
+<span class="linenos">12</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>The OPES-eABF hybrid sampling method can be applied as follows:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="linenos">1</span><span class="kn">from</span> <span class="nn">adaptive_sampling.sampling_tools</span> <span class="kn">import</span> <span class="n">OPESeABF</span>
+<span class="linenos">2</span><span class="n">the_cv</span> <span class="o">=</span> <span class="p">[</span>
+<span class="linenos">3</span>    <span class="c1"># TYPE       IDX    MIN  MAX  BIN WIDTH</span>
+<span class="linenos">4</span>    <span class="p">[</span><span class="s1">&#39;distance&#39;</span><span class="p">,</span> <span class="p">[</span><span class="mi">0</span><span class="p">,</span><span class="mi">1</span><span class="p">],</span> <span class="mf">1.0</span><span class="p">,</span> <span class="mf">5.0</span><span class="p">,</span> <span class="mf">0.1</span><span class="p">]</span>
+<span class="linenos">5</span><span class="p">]</span>
+<span class="linenos">6</span><span class="n">the_bias</span> <span class="o">=</span> <span class="n">OPESeABF</span><span class="p">(</span>
+<span class="linenos">7</span>    <span class="n">the_md</span><span class="p">,</span>
+<span class="linenos">8</span>    <span class="n">the_cv</span><span class="p">,</span>
+<span class="linenos">9</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>Here, default parameters of OPES-eABF are applied, estimating parameters like the coupling width to the extended system and the kernel standard deviation from the first 1000 MD steps, before applying any bias.</p>
+<p>For more information on OPES-eABF parameters and other sampling methods visit the corresponding section of the documentation, as well as the Code Documentation.</p>
+</section>
+<section id="exploration-tools">
+<h2>Exploration tools<a class="headerlink" href="#exploration-tools" title="Link to this heading"></a></h2>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="install.html" class="btn btn-neutral float-left" title="Installation" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="sampling_tools.html" class="btn btn-neutral float-right" title="Sampling tools" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2025, MIT License.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

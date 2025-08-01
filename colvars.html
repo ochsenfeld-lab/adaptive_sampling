@@ -1,0 +1,419 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="./">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Collective Variables (CVs) &mdash; adaptive-sampling 3.0.1 documentation</title>
+      <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=80d5e7a1" />
+      <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=e59714d7" />
+      <link rel="stylesheet" type="text/css" href="_static/copybutton.css?v=76b2166b" />
+
+  
+      <script src="_static/jquery.js?v=5d32c60e"></script>
+      <script src="_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="_static/documentation_options.js?v=08bfcbec"></script>
+      <script src="_static/doctools.js?v=9bcbadda"></script>
+      <script src="_static/sphinx_highlight.js?v=dc90522c"></script>
+      <script src="_static/clipboard.min.js?v=a7894cd8"></script>
+      <script src="_static/copybutton.js?v=f281be69"></script>
+      <script crossorigin="anonymous" integrity="sha256-Ae2Vz/4ePdIu6ZyI/5ZGsYnb+m0JlOmKPjt6XZ9JJkA=" src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.4/require.min.js"></script>
+      <script>window.MathJax = {"tex": {"inlineMath": [["$", "$"], ["\\(", "\\)"]], "processEscapes": true}, "options": {"ignoreHtmlClass": "tex2jax_ignore|mathjax_ignore|document", "processHtmlClass": "tex2jax_process|mathjax_process|math|output_area"}}</script>
+      <script defer="defer" src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+    <script src="_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="Exploration tools" href="exploration_tools.html" />
+    <link rel="prev" title="Sampling tools" href="sampling_tools.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="index.html" class="icon icon-home">
+            adaptive-sampling
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="intro.html">Introduction</a></li>
+<li class="toctree-l1"><a class="reference internal" href="install.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="basics.html">Basic usage</a></li>
+<li class="toctree-l1"><a class="reference internal" href="sampling_tools.html">Sampling tools</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Collective Variables (CVs)</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#common-cvs">Common CVs</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#path-cvs-pcvs">Path CVs (PCVs)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#machine-learning-cvs-mlcvs">Machine Learning CVs (MLCVs):</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#the-modified-center-of-excess-charge-mcec">The Modified Center-of-Excess Charge (mCEC):</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#graph-based-cvs-graph-cvs">Graph-based CVs (Graph-CVs):</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="exploration_tools.html">Exploration tools</a></li>
+<li class="toctree-l1"><a class="reference internal" href="processing_tools.html">Processing tools</a></li>
+<li class="toctree-l1"><a class="reference internal" href="tutorials.html">Tutorials</a></li>
+<li class="toctree-l1"><a class="reference internal" href="code.html">Code Documentation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="publications.html">Scientific articles using the <cite>adaptive_sampling</cite> package</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">adaptive-sampling</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">Collective Variables (CVs)</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="_sources/colvars.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="collective-variables-cvs">
+<h1>Collective Variables (CVs)<a class="headerlink" href="#collective-variables-cvs" title="Link to this heading"></a></h1>
+<p>CVs are used to define the reaction coordinates of interest in adaptive sampling simulations.
+The <cite>adaptive_sampling.colvars</cite> module provides a variety of CV definitions.</p>
+<p>The CVs are initialized internally in the <cite>EnhancedSampling</cite> class, which is the base class for most sampling methods in <cite>adaptive_sampling.sampling_tools</cite>.
+The basic syntax for defining CVs is given below, where the distance between two atoms is used as a CV and a grid of 20 bins is created between 1.0 and 3.0 with a bin width of 0.1:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">cv_type</span> <span class="o">=</span> <span class="s1">&#39;distance&#39;</span>  <span class="c1"># Type of CV, e.g. &#39;distance&#39;, &#39;angle&#39;, &#39;torsion&#39;, etc</span>
+<span class="n">cv_def</span> <span class="o">=</span> <span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">]</span>       <span class="c1"># Definition of CV, e.g., for &#39;distance&#39; indices of atoms</span>
+<span class="n">min_cv</span> <span class="o">=</span> <span class="mf">1.0</span>          <span class="c1"># Minimum value of CV in the range of interest</span>
+<span class="n">max_cv</span> <span class="o">=</span> <span class="mf">3.0</span>          <span class="c1"># Maximum value of CV in the range of interest</span>
+<span class="n">bin_width</span> <span class="o">=</span> <span class="mf">0.1</span>       <span class="c1"># Width of the histogram bin for the CV in the range of interest</span>
+<span class="n">the_cv</span> <span class="o">=</span> <span class="p">[</span>
+    <span class="p">[</span><span class="n">cv_type</span><span class="p">,</span> <span class="n">cv_def</span><span class="p">,</span> <span class="n">min_cv</span><span class="p">,</span> <span class="n">max_cv</span><span class="p">,</span> <span class="n">bin_width</span><span class="p">],</span>
+    <span class="c1"># An additional second CV can be added to the list</span>
+<span class="p">]</span>
+</pre></div>
+</div>
+<p>Internally, in the <cite>EnhancedSampling</cite> class the <cite>get_cv</cite> function of the <cite>adaptive_sampling.colvars.CV</cite> class is called in every MD step.
+Therefore, all CVs that are defined in the <cite>CV.get_cv()</cite> function are available for sampling.</p>
+<p>Each CV is gets associated with a <cite>type</cite> in the <cite>get_cv</cite> function, that defines how units of CVs are handled.
+The CV <cite>type</cite> can be one of the following:</p>
+<blockquote>
+<div><ul class="simple">
+<li><p>“<cite>distance</cite>”: For distance based CVs, input and output units are in Angstrom. Internally, atomic units (Bohr) are used.</p></li>
+<li><p>“<cite>angle</cite>”: For angle based CVs, input and output units are in degrees. Internally, radians are used.</p></li>
+<li><p>“<cite>None</cite>”: For CVs in arbitrary units, input and output units are not converted.</p></li>
+</ul>
+</div></blockquote>
+<p>In the following section, we provide examples of setting up different CVs.</p>
+<section id="common-cvs">
+<h2>Common CVs<a class="headerlink" href="#common-cvs" title="Link to this heading"></a></h2>
+<p>The following examples show how to define common CVs for sampling algorithms that derive from the <cite>EnhancedSampling</cite> class.</p>
+<ul class="simple">
+<li><p><strong>Distance</strong> between two atoms or groups of atoms:</p></li>
+</ul>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="linenos">1</span><span class="c1"># Distance between two atoms</span>
+<span class="linenos">2</span><span class="n">cv_type</span> <span class="o">=</span> <span class="s1">&#39;distance&#39;</span>
+<span class="linenos">3</span>
+<span class="linenos">4</span><span class="c1"># Indices of atoms for which distance is calculated</span>
+<span class="linenos">5</span><span class="n">cv_def</span> <span class="o">=</span> <span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">]</span>
+<span class="linenos">6</span>
+<span class="linenos">7</span><span class="c1"># or use center of mass of a groups of atoms</span>
+<span class="linenos">8</span><span class="n">cv_def</span> <span class="o">=</span> <span class="p">[[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">],</span> <span class="mi">3</span><span class="p">]</span>
+</pre></div>
+</div>
+<ul class="simple">
+<li><p><strong>Angle</strong> between three atoms or groups of atoms:</p></li>
+</ul>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="linenos">1</span><span class="c1"># Angle between three atoms</span>
+<span class="linenos">2</span><span class="n">cv_type</span> <span class="o">=</span> <span class="s1">&#39;angle&#39;</span>
+<span class="linenos">3</span>
+<span class="linenos">4</span><span class="c1"># Indices of atoms or list of indices to calculate angle between centers of mass</span>
+<span class="linenos">5</span><span class="n">cv_def</span> <span class="o">=</span> <span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">]</span>
+</pre></div>
+</div>
+<ul class="simple">
+<li><p><strong>Torsion</strong> angle between four atoms or groups of atoms:</p></li>
+</ul>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="linenos">1</span><span class="c1"># Torsion angle between four atoms</span>
+<span class="linenos">2</span><span class="n">cv_type</span> <span class="o">=</span> <span class="s1">&#39;torsion&#39;</span>
+<span class="linenos">3</span>
+<span class="linenos">4</span><span class="c1"># Indices of atoms or list of indices to calculate dihedral angle between centers of mass</span>
+<span class="linenos">5</span><span class="n">cv_def</span> <span class="o">=</span> <span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">]</span>
+</pre></div>
+</div>
+<ul class="simple">
+<li><p><strong>Switching function</strong> <span class="math notranslate nohighlight">\(a_{ij}\)</span> between two groups of atoms with switching distance <span class="math notranslate nohighlight">\(\sigma_{ij}\)</span> and exponents <span class="math notranslate nohighlight">\(n\)</span> and <span class="math notranslate nohighlight">\(m\)</span>:</p></li>
+</ul>
+<div class="math notranslate nohighlight">
+\[a_{ij} = \frac{1-(\frac{r_{ij}}{\sigma_{ij}})^n}{1-(\frac{r_{ij}}{\sigma_{ij}})^m}\]</div>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="linenos">1</span><span class="c1"># Switching function between two groups of atoms</span>
+<span class="linenos">2</span><span class="n">cv_type</span> <span class="o">=</span> <span class="s1">&#39;switching_function&#39;</span>
+<span class="linenos">3</span>
+<span class="linenos">4</span><span class="n">sigma_ij</span> <span class="o">=</span> <span class="mf">3.0</span>  <span class="c1"># Switching distance in Angstrom (default: 3.0)</span>
+<span class="linenos">5</span><span class="n">n</span> <span class="o">=</span> <span class="mi">6</span>           <span class="c1"># Exponent nominator (default: 6)</span>
+<span class="linenos">6</span><span class="n">m</span> <span class="o">=</span> <span class="mi">12</span>          <span class="c1"># Exponent denominator (default: 12)</span>
+<span class="linenos">7</span>
+<span class="linenos">8</span><span class="c1"># List containing distance definition and additional parameters of switching function</span>
+<span class="linenos">9</span><span class="n">cv_def</span> <span class="o">=</span> <span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="n">sigma_ij</span><span class="p">,</span> <span class="n">n</span><span class="p">,</span> <span class="n">m</span><span class="p">]</span>
+</pre></div>
+</div>
+<ul class="simple">
+<li><p><strong>Minimum distance</strong> out of a list of distances <cite>d</cite>:</p></li>
+</ul>
+<div class="math notranslate nohighlight">
+\[d_\mathrm{min} = \mathrm{Min}\left[d_0, d_1, \ldots, d_n \right]\]</div>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="linenos">1</span><span class="c1"># Minimum distance between two groups of atoms</span>
+<span class="linenos">2</span><span class="n">cv_type</span> <span class="o">=</span> <span class="s1">&#39;distance_min&#39;</span>
+<span class="linenos">3</span>
+<span class="linenos">4</span><span class="c1"># List of distance definitions, minimum distance out of the list used as CV.</span>
+<span class="linenos">5</span><span class="n">cv_def</span> <span class="o">=</span> <span class="p">[[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">],</span> <span class="p">[</span><span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">]]</span>
+</pre></div>
+</div>
+<ul class="simple">
+<li><p><strong>Linear combinations</strong> of the above CVs:</p></li>
+</ul>
+<div class="math notranslate nohighlight">
+\[f_\mathrm{LC} = \sum_{i=0}^{n} a_i\, f_i\]</div>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="linenos"> 1</span><span class="c1"># Linear combination of CVs, three versions are available:</span>
+<span class="linenos"> 2</span><span class="n">cv_type</span> <span class="o">=</span> <span class="s1">&#39;linear_combination&#39;</span>   <span class="c1"># type of CV is None, so that units are not converted</span>
+<span class="linenos"> 3</span><span class="n">cv_type</span> <span class="o">=</span> <span class="s1">&#39;lin_comb_dists&#39;</span>       <span class="c1"># type of CV is &#39;distance&#39;, so that input and output units are Angstrom</span>
+<span class="linenos"> 4</span><span class="n">cv_type</span> <span class="o">=</span> <span class="s1">&#39;lin_comb_angles&#39;</span>      <span class="c1"># type of CV is &#39;angle&#39;, so that input and output units are degrees</span>
+<span class="linenos"> 5</span>
+<span class="linenos"> 6</span><span class="c1"># Definition of a linear combination containing the CV type, prefactor and individual CV definitions</span>
+<span class="linenos"> 7</span><span class="n">cv_def</span> <span class="o">=</span> <span class="p">[</span>
+<span class="linenos"> 8</span>    <span class="p">[</span><span class="s1">&#39;distance&#39;</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">,</span> <span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">]],</span>
+<span class="linenos"> 9</span>    <span class="p">[</span><span class="s1">&#39;distance&#39;</span><span class="p">,</span><span class="o">-</span><span class="mf">1.0</span><span class="p">,</span> <span class="p">[</span><span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">]],</span>
+<span class="linenos">10</span>    <span class="c1">#... more CVs can be added</span>
+<span class="linenos">11</span><span class="p">]</span>
+</pre></div>
+</div>
+</section>
+<section id="path-cvs-pcvs">
+<h2>Path CVs (PCVs)<a class="headerlink" href="#path-cvs-pcvs" title="Link to this heading"></a></h2>
+<p>In PCVs, the CV is given by the progress <span class="math notranslate nohighlight">\(s\)</span> along a high-dimensional path and the distance <span class="math notranslate nohighlight">\(z\)</span> to the path.
+PCVs are highly useful to map high-dimensional, non-linear transition onto a one dimensional reaction coordinate, as demonstrated <a class="reference external" href="https://doi.org/10.1021/acs.jctc.3c00938">here</a>.</p>
+<p>The <cite>adaptive_sampling.colvars.PathCV</cite> class implements two different types of PCVs:</p>
+<ol class="arabic simple">
+<li><p>The <strong>arithmetic PCV</strong>, as suggested by <a class="reference external" href="https://doi.org/10.1063/1.2432340">Branduardi et al.</a>:</p></li>
+</ol>
+<div class="math notranslate nohighlight">
+\[s(\mathbf{x}) = \frac{1}{P-1}\frac{\sum_{i=0}^{P} (i-1) e^{-\lambda |\mathbf{x}-\mathbf{x}_i|}}{\sum_{i=0}^{P} e^{-\lambda |\mathbf{x}-\mathbf{x}_i|}}\]</div>
+<div class="math notranslate nohighlight">
+\[z(\mathbf{x}) = -\frac{1}{\lambda} \ln\left(\sum_{i=0}^{P} e^{-\lambda |\mathbf{x}-\mathbf{x}_i|}\right)\]</div>
+<p>with <span class="math notranslate nohighlight">\(P\)</span> being the number of nodes along the path, <span class="math notranslate nohighlight">\(\mathbf{x}_i\)</span> the Cartesian coordinates of the <span class="math notranslate nohighlight">\(i\)</span>-th path node, and <span class="math notranslate nohighlight">\(\lambda\)</span> a parameter that ensures that the path is smooth and differentiable.
+Any distance metric can be used to calculate the distance <span class="math notranslate nohighlight">\(|\mathbf{x}-\mathbf{x}_i|\)</span> between the current coordinates <span class="math notranslate nohighlight">\(\mathbf{x}\)</span> and the path nodes <span class="math notranslate nohighlight">\(\mathbf{x}_i\)</span>.</p>
+<ol class="arabic simple" start="2">
+<li><p>The <strong>geometric PCV</strong>, as suggested by <a class="reference external" href="https://doi.org/10.1103/PhysRevLett.109.020601">Leines et al.</a>:</p></li>
+</ol>
+<div class="math notranslate nohighlight">
+\[s(\mathbf{z}) = \frac{m}{M} \pm \frac{1}{2M} \bigg(\frac{\sqrt{\mathbf{v}_1 \cdot \mathbf{v}_3)^2 - |\mathbf{v}_3|^2 (|\mathbf{v}_1|^2-|\mathbf{v}_2|^2)} - (\mathbf{v}_1\cdot\mathbf{v}_3)}{|\mathbf{v}_3|^2} - 1 \bigg) \ ,\]</div>
+<div class="math notranslate nohighlight">
+\[z(\mathbf{z}) = \bigg| \mathbf{v}_1 + \frac{1}{2} \bigg(\frac{ \sqrt{\mathbf{v}_1 \cdot \mathbf{v}_3)^2 - |\mathbf{v}_3|^2 (|\mathbf{v}_1|^2-|\mathbf{v}_2|^2)} - (\mathbf{v}_1\cdot\mathbf{v}_3)}{|\mathbf{v}_3|^2} - 1 \bigg) \mathbf{v}_4 \bigg| \ ,\]</div>
+<p>with index of the first, second and third-closest nodes <span class="math notranslate nohighlight">\(m\)</span>, <span class="math notranslate nohighlight">\(n\)</span>, <span class="math notranslate nohighlight">\(k\)</span>, respectively, and
+vectors <span class="math notranslate nohighlight">\(\textbf{v}_1=\textbf{z}_{m} - \textbf{z}\)</span>, <span class="math notranslate nohighlight">\(\textbf{v}_2=\textbf{z} - \textbf{z}_{m-1}\)</span>,
+<span class="math notranslate nohighlight">\(\textbf{v}_3=\textbf{z}_{m+1} - \textbf{z}_{m}\)</span> and <span class="math notranslate nohighlight">\(\textbf{v}_4=\mathbf{z}_{} - \mathbf{z}_{m-1}\)</span>.
+The <span class="math notranslate nohighlight">\(\pm\)</span> is negative if <span class="math notranslate nohighlight">\(\mathbf{z}\)</span> is left of the closest path node, and positive otherwise.
+Other than the arithmetic PCV, the geometric PCV is always applied in the space <span class="math notranslate nohighlight">\(\mathbf{z}\)</span> of selected CVs.</p>
+<p>PCVs can be defined as outlined below:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="linenos"> 1</span><span class="n">cv_space</span> <span class="o">=</span> <span class="p">[</span>
+<span class="linenos"> 2</span>    <span class="p">[</span><span class="s1">&#39;distance&#39;</span><span class="p">,</span> <span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">]],</span>  <span class="c1"># distance between atoms 0 and 1</span>
+<span class="linenos"> 3</span>    <span class="p">[</span><span class="s1">&#39;distance&#39;</span><span class="p">,</span> <span class="p">[</span><span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">]],</span>  <span class="c1"># distance between atoms 2 and 3</span>
+<span class="linenos"> 4</span>    <span class="c1">#... more CVs can be added</span>
+<span class="linenos"> 5</span><span class="p">]</span>
+<span class="linenos"> 6</span>
+<span class="linenos"> 7</span><span class="c1"># Define parameters of the `adaptive_sampling.colvars.PathCV` class as a dictionary</span>
+<span class="linenos"> 8</span><span class="n">cv_def</span> <span class="o">=</span> <span class="p">{</span>
+<span class="linenos"> 9</span>    <span class="s2">&quot;guess_path&quot;</span><span class="p">:</span> <span class="s2">&quot;path.xyz&quot;</span><span class="p">,</span>           <span class="c1"># Path file containing the path nodes, can be a `.xzy` or `.npy` file.</span>
+<span class="linenos">10</span>    <span class="s2">&quot;coordinate_system&quot;</span><span class="p">:</span> <span class="s2">&quot;cv_space&quot;</span><span class="p">,</span>    <span class="c1"># Coordinate system used by the PCV, e.g. &quot;cv_space&quot; or &quot;cartesian&quot;.</span>
+<span class="linenos">11</span>    <span class="s2">&quot;active&quot;</span><span class="p">:</span> <span class="n">cv_space</span><span class="p">,</span>                 <span class="c1"># If `coordinate_system=&quot;cv_space&quot;`, the CV space used by the PCV. If `coordinate_system=&quot;cartesian&quot;`, indices of atoms that are included in the path CV</span>
+<span class="linenos">12</span>    <span class="s2">&quot;n_interpolate&quot;</span><span class="p">:</span> <span class="mi">0</span><span class="p">,</span>                 <span class="c1"># Number of nodes that are added between original nodes by linear interpolation, if negative, slice path nodes according to `self.path[::abs(n_interpolate)]`</span>
+<span class="linenos">13</span>    <span class="s2">&quot;smooth_damping&quot;</span><span class="p">:</span> <span class="mf">0.1</span><span class="p">,</span>              <span class="c1"># Controls smoothing of path (0: no smoothing, 1: linear interpolation between neighbours).</span>
+<span class="linenos">14</span>    <span class="s2">&quot;reparam_steps&quot;</span><span class="p">:</span> <span class="mi">100</span><span class="p">,</span>               <span class="c1"># Maximum number of steps for reparametrization of the path to ensure equidistant spacing of path nodes.</span>
+<span class="linenos">15</span>    <span class="s2">&quot;reparam_tol&quot;</span><span class="p">:</span> <span class="mf">1e-5</span><span class="p">,</span>                <span class="c1"># Tolerance for reparametrization of the path to ensure equidistant spacing of path nodes.</span>
+<span class="linenos">16</span>    <span class="s2">&quot;metric&quot;</span><span class="p">:</span> <span class="s2">&quot;rmsd&quot;</span><span class="p">,</span>                   <span class="c1"># Distance metric used to calculate distance between current coordinates and path nodes.</span>
+<span class="linenos">17</span>    <span class="s2">&quot;adaptive&quot;</span><span class="p">:</span> <span class="kc">False</span><span class="p">,</span>                  <span class="c1"># If True, the path is adapted during the simulation to converge to the minimum free energy path. Only for the geometric PCV.</span>
+<span class="linenos">18</span>    <span class="s2">&quot;requires_z&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>                 <span class="c1"># If True, the distance to the path is calculated along with the progress along the path. If False, only the progress along the path is calculated.</span>
+<span class="linenos">19</span><span class="p">}</span>
+<span class="linenos">20</span>
+<span class="linenos">21</span><span class="c1"># Definition of the PCV as required for methods derived from the `EnhancedSampling` base class.</span>
+<span class="linenos">22</span><span class="c1">#                           MIN  MAX  BIN_WIDTH</span>
+<span class="linenos">23</span><span class="n">the_cv</span> <span class="o">=</span> <span class="p">[[</span><span class="s2">&quot;gpath&quot;</span><span class="p">,</span> <span class="n">cv_def</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">,</span> <span class="mf">0.01</span><span class="p">]]</span>       <span class="c1"># geometric PCV</span>
+<span class="linenos">24</span><span class="n">the_cv</span> <span class="o">=</span> <span class="p">[[</span><span class="s2">&quot;path&quot;</span><span class="p">,</span> <span class="n">cv_def</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">,</span> <span class="mf">0.01</span><span class="p">]]</span>       <span class="c1"># arithmetic PCV</span>
+<span class="linenos">25</span>
+<span class="linenos">26</span><span class="c1"># Definition of using the both the `s` and `z` values in the simulation. NOT YET TESTED!</span>
+<span class="linenos">27</span><span class="n">the_cv</span> <span class="o">=</span> <span class="p">[</span>
+<span class="linenos">28</span>    <span class="p">[</span><span class="s2">&quot;gpath&quot;</span><span class="p">,</span> <span class="n">cv_def</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">,</span> <span class="mf">0.01</span><span class="p">],</span>
+<span class="linenos">29</span>    <span class="p">[</span><span class="s2">&quot;path_z&quot;</span><span class="p">,</span> <span class="n">cv_def</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">5.0</span><span class="p">,</span> <span class="mf">0.1</span><span class="p">],</span>
+<span class="linenos">30</span><span class="p">]</span>
+</pre></div>
+</div>
+<dl class="simple">
+<dt>In the CV space of PCVs, currently the following CVs are supported:</dt><dd><ul class="simple">
+<li><p><strong>Distance</strong>: Distance between two atoms or groups of atoms.</p></li>
+<li><p><strong>Angle</strong>: Angle between three atoms or groups of atoms.</p></li>
+<li><p><strong>Torsion</strong>: Torsion angle between four atoms or groups of atoms.</p></li>
+<li><p><strong>Conntact</strong>: A switching function between two groups of atoms. (see <cite>Switching function</cite> in the “Common, simple CVs” section)</p></li>
+<li><p><strong>Min_distance</strong>: Minimum distance out of a list of distances.</p></li>
+<li><p><strong>Coordination_number</strong>: Coordination numbers of atoms.</p></li>
+<li><p><strong>CEC</strong>: (Modified) Center-of-Excess Charge (mCEC) coordinate.</p></li>
+</ul>
+</dd>
+</dl>
+</section>
+<section id="machine-learning-cvs-mlcvs">
+<h2>Machine Learning CVs (MLCVs):<a class="headerlink" href="#machine-learning-cvs-mlcvs" title="Link to this heading"></a></h2>
+<p>MLCVs are defined using the <cite>mlcolvars</cite> package, which is based on PyTorch and provides a framework for training a number of popular MLCVs.
+For more information on types of implemented MLCVs, as well on how to train them, please refer to the <a class="reference external" href="https://mlcolvar.readthedocs.io/en/stable/">mlcolvars documentation</a>.</p>
+<p>To use MLCVs together with the <cite>adaptive_sampling</cite> package, pretrained models need to be saved in torchscript format:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="linenos">1</span><span class="n">model</span><span class="o">.</span><span class="n">to_torchscript</span><span class="p">(</span><span class="s1">&#39;model.ptc&#39;</span><span class="p">,</span> <span class="n">method</span><span class="o">=</span><span class="s2">&quot;trace&quot;</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>The <cite>adaptive_sampling.colvars.MLCOLVAR</cite> class can then be used to run simulations with the pretrained CV model:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="linenos"> 1</span><span class="c1"># definition of the CV space the MLCV uses</span>
+<span class="linenos"> 2</span><span class="n">cv_space</span> <span class="o">=</span> <span class="p">[</span>
+<span class="linenos"> 3</span>    <span class="p">[</span><span class="s1">&#39;distance&#39;</span><span class="p">,</span> <span class="p">[</span><span class="mi">1</span><span class="p">,</span><span class="mi">2</span><span class="p">]],</span>  <span class="c1"># distance between atoms 1 and 2</span>
+<span class="linenos"> 4</span>    <span class="p">[</span><span class="s1">&#39;distance&#39;</span><span class="p">,</span> <span class="p">[</span><span class="mi">3</span><span class="p">,</span><span class="mi">4</span><span class="p">]],</span>  <span class="c1"># distance between atoms 3 and 4</span>
+<span class="linenos"> 5</span>    <span class="c1">#...</span>
+<span class="linenos"> 6</span><span class="p">]</span>
+<span class="linenos"> 7</span>
+<span class="linenos"> 8</span><span class="c1"># Define parameters of the `adaptive_sampling.colvars.MLCOLVAR` class as a dictionary</span>
+<span class="linenos"> 9</span><span class="n">cv_def</span> <span class="o">=</span> <span class="p">{</span>
+<span class="linenos">10</span>    <span class="s2">&quot;model&quot;</span><span class="p">:</span> <span class="s2">&quot;model.ptc&quot;</span><span class="p">,</span>                              <span class="c1"># path to the pretrained model in torchscript format.</span>
+<span class="linenos">11</span>    <span class="s2">&quot;coordinate_system&quot;</span><span class="p">:</span> <span class="s2">&quot;cv_space&quot;</span><span class="p">,</span>                   <span class="c1"># coordinate system used by the MLCV, e.g. &quot;cv_space&quot; or &quot;cartesian&quot;.</span>
+<span class="linenos">12</span>    <span class="s2">&quot;cv_def&quot;</span><span class="p">:</span> <span class="n">cv_space</span><span class="p">,</span>                                <span class="c1"># definition of the CV space the MLCV uses.</span>
+<span class="linenos">13</span>    <span class="s2">&quot;cv_idx&quot;</span><span class="p">:</span> <span class="mi">0</span><span class="p">,</span>                                       <span class="c1"># For MLCVs with multiple output nodes, the index of the node to use as CV, e.g., 0 for the first node.</span>
+<span class="linenos">14</span>    <span class="s2">&quot;unit_conversion_factor&quot;</span><span class="p">:</span> <span class="n">units</span><span class="o">.</span><span class="n">BOHR_to_ANGSTROM</span><span class="p">,</span>  <span class="c1"># conversion factor for the CV space, e.g. BOHR_to_ANGSTROM if the MLCV was trained in Angstrom.</span>
+<span class="linenos">15</span>    <span class="s2">&quot;device&quot;</span><span class="p">:</span> <span class="s2">&quot;cpu&quot;</span><span class="p">,</span>                                   <span class="c1"># device to run the model on, e.g. &quot;cpu&quot; or &quot;cuda:0&quot;.</span>
+<span class="linenos">16</span>    <span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="kc">None</span><span class="p">,</span>                                      <span class="c1"># type of CV, None means no unit conversion.</span>
+<span class="linenos">17</span><span class="p">}</span>
+<span class="linenos">18</span>
+<span class="linenos">19</span><span class="c1"># Definition of the MLCV as required for methods derived from the `EnhancedSampling` base class.</span>
+<span class="linenos">20</span><span class="c1">#                               MIN  MAX  BIN_WIDTH</span>
+<span class="linenos">21</span><span class="n">the_cv</span> <span class="o">=</span> <span class="p">[[</span><span class="s2">&quot;mlcolvar&quot;</span><span class="p">,</span> <span class="n">cv_def</span><span class="p">,</span> <span class="o">-</span><span class="mf">1.0</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">,</span> <span class="mf">0.05</span><span class="p">]]</span>
+</pre></div>
+</div>
+<dl class="simple">
+<dt>In the CV space of mlcolvars, currently the following CVs are supported:</dt><dd><ul class="simple">
+<li><p><strong>Distance</strong>: Distance between two atoms or groups of atoms.</p></li>
+<li><p><strong>Angle</strong>: Angle between three atoms or groups of atoms.</p></li>
+<li><p><strong>Torsion</strong>: Torsion angle between four atoms or groups of atoms.</p></li>
+<li><p><strong>Conntact</strong>: A switching function between two groups of atoms. (see <cite>Switching function</cite> in the “Common, simple CVs” section)</p></li>
+<li><p><strong>Min_distance</strong>: Minimum distance out of a list of distances.</p></li>
+<li><p><strong>Coordination_number</strong>: Coordination numbers of atoms.</p></li>
+<li><p><strong>CEC</strong>: (Modified) Center-of-Excess Charge (mCEC) coordinate.</p></li>
+</ul>
+</dd>
+</dl>
+</section>
+<section id="the-modified-center-of-excess-charge-mcec">
+<h2>The Modified Center-of-Excess Charge (mCEC):<a class="headerlink" href="#the-modified-center-of-excess-charge-mcec" title="Link to this heading"></a></h2>
+<p>The mCEC coordinate can be used to model long-range proton transfer (pT), as demonstrated <a class="reference external" href="https://pubs.acs.org/doi/10.1021/acs.jctc.4c00199">here</a>.</p>
+<p>The mCEC reaction coordinate, which was originally suggested by <a class="reference external" href="https://pubs.acs.org/doi/abs/10.1021/jp052328q">König et al.</a>, is given by</p>
+<div class="math notranslate nohighlight">
+\[\zeta_\mathrm{CEC}(\mathbf{x}) = \sum_i^{N_H} \mathbf{x}_i - \sum_j^{N_X} w_j \mathbf{x}_j - \sum_i^{N_H} \sum_j^{N_X} f_\mathrm{SW}(\mid \mathbf{x}_i- \mathbf{x}_j \mid)(\mathbf{x}_i-\mathbf{x}_j)\,,\]</div>
+<p>where <span class="math notranslate nohighlight">\(N_H\)</span>, <span class="math notranslate nohighlight">\(N_X\)</span> are the number of involved protons and heavy atoms, respectively, and <span class="math notranslate nohighlight">\(\mathbf{x}_i\)</span> denotes the Cartesian coordinates of atom <span class="math notranslate nohighlight">\(i\)</span>.
+The weights <span class="math notranslate nohighlight">\(w_j\)</span> are given by the minimal number of protons associated with atom <span class="math notranslate nohighlight">\(j\)</span> during pT, and <span class="math notranslate nohighlight">\(f_\mathrm{SW}\)</span> is the switching function</p>
+<div class="math notranslate nohighlight">
+\[f_\mathrm{SW}(r)= \big(1+e^{(r-r_\mathrm{SW})/d_\mathrm{SW}} \big)\]</div>
+<p>where <span class="math notranslate nohighlight">\(r_\mathrm{SW}\)</span> controls the switching distance and <span class="math notranslate nohighlight">\(d_\mathrm{SW}\)</span> how fast the function switches from one to zero.
+The first two terms of <span class="math notranslate nohighlight">\(\zeta_\mathrm{CEC}\)</span> reflect the position of the excess proton in a water wire, while the third term is a correction that removes all contributions from the CEC that are not relevant to pT.</p>
+<p>As <span class="math notranslate nohighlight">\(\zeta\)</span> is a three-dimensional quantity, it has to be projected to a one dimensional CV, for which we typically use</p>
+<div class="math notranslate nohighlight">
+\[\xi_\mathrm{CEC}(\mathbf{x})=(\zeta_\mathrm{CEC}-\mathbf{x}_d)\cdot \frac{\mathbf{x}_a-\mathbf{x}_d}{\mid \mathbf{x}_a-\mathbf{x}_d \mid} \,,\]</div>
+<p>with coordinates of first donor and last acceptor atom <span class="math notranslate nohighlight">\(\mathbf{x}_d\)</span> and <span class="math notranslate nohighlight">\(\mathbf{x}_a\)</span>, respectively.
+Note, that other projections as described in the original publication are implemented as well.</p>
+<p>The mCEC reaction coordinate can be used as follows:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="linenos"> 1</span><span class="c1"># Define parameters of the `adaptive_sampling.colvars.PT` class as a dictionary</span>
+<span class="linenos"> 2</span><span class="n">cv_def</span> <span class="o">=</span> <span class="p">{</span>
+<span class="linenos"> 3</span>    <span class="s2">&quot;proton_idx&quot;</span><span class="p">:</span> <span class="p">[</span><span class="mi">8</span><span class="p">,</span> <span class="mi">26</span><span class="p">,</span> <span class="mi">27</span><span class="p">,</span> <span class="mi">29</span><span class="p">,</span> <span class="mi">30</span><span class="p">],</span>     <span class="c1"># Indices of protons that participate in pT</span>
+<span class="linenos"> 4</span>    <span class="s2">&quot;heavy_idx&quot;</span><span class="p">:</span> <span class="p">[</span><span class="mi">7</span><span class="p">,</span> <span class="mi">25</span><span class="p">,</span> <span class="mi">28</span><span class="p">,</span> <span class="mi">22</span><span class="p">],</span>          <span class="c1"># Indices of heavy atoms that participate in pT</span>
+<span class="linenos"> 5</span>    <span class="s2">&quot;heavy_weights&quot;</span><span class="p">:</span> <span class="p">[</span><span class="mf">0.0</span><span class="p">,</span> <span class="mf">2.0</span><span class="p">,</span> <span class="mf">2.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">],</span> <span class="c1"># Weights of heavy atoms</span>
+<span class="linenos"> 6</span>    <span class="s2">&quot;ref_idx&quot;</span><span class="p">:</span> <span class="p">[</span><span class="mi">7</span><span class="p">,</span> <span class="mi">22</span><span class="p">],</span>                    <span class="c1"># Indices of reference atoms to define pT vector (usually first donor and last acceptor)</span>
+<span class="linenos"> 7</span>    <span class="s2">&quot;modified&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>                      <span class="c1"># Use modified CEC</span>
+<span class="linenos"> 8</span>    <span class="s2">&quot;d_sw&quot;</span><span class="p">:</span> <span class="mf">0.2</span><span class="p">,</span>                           <span class="c1"># Parameter for the switching function</span>
+<span class="linenos"> 9</span>    <span class="s2">&quot;r_sw&quot;</span><span class="p">:</span> <span class="mf">1.4</span><span class="p">,</span>                           <span class="c1"># Parameter for the switching function</span>
+<span class="linenos">10</span><span class="p">}</span>
+<span class="linenos">11</span>
+<span class="linenos">12</span><span class="c1"># Definition of the CEC as required for methods derived from the `EnhancedSampling` base class.</span>
+<span class="linenos">13</span><span class="c1">#                         MIN  MAX  BIN_WIDTH</span>
+<span class="linenos">14</span><span class="n">the_cv</span> <span class="o">=</span> <span class="p">[[</span><span class="s2">&quot;CEC&quot;</span><span class="p">,</span> <span class="n">cv_def</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">10.0</span><span class="p">,</span> <span class="mf">0.1</span><span class="p">]]</span>
+</pre></div>
+</div>
+</section>
+<section id="graph-based-cvs-graph-cvs">
+<h2>Graph-based CVs (Graph-CVs):<a class="headerlink" href="#graph-based-cvs-graph-cvs" title="Link to this heading"></a></h2>
+<p>Molecular graph-based CVs allow for a means of reaction discovery by enhancing general bond breaking and formation.
+Such CVs associate to the graph a symmetric adjacency matrix <span class="math notranslate nohighlight">\(\mathbf{A}\)</span> whose elements <span class="math notranslate nohighlight">\(a_{ij}\)</span> indicate whether atoms <span class="math notranslate nohighlight">\(i\)</span> and <span class="math notranslate nohighlight">\(j\)</span> are linked by a chemical bond.
+If a chemical bond is present is expressed by the switching function:</p>
+<div class="math notranslate nohighlight">
+\[a_{ij} = \frac{1-(\frac{r_{ij}}{\sigma_{ij}})^n}{1-(\frac{r_{ij}}{\sigma_{ij}})^m} \,,\]</div>
+<p>where <span class="math notranslate nohighlight">\(\sigma_{ij}\)</span> are typical bond length between atoms <span class="math notranslate nohighlight">\(i\)</span> and <span class="math notranslate nohighlight">\(j\)</span>.</p>
+<p>As proposed by <a class="reference external" href="https://doi.org/10.1021/acs.jpclett.1c03993">Raucci et al.</a> the maximal eigenvalue of <span class="math notranslate nohighlight">\(\mathbf{A}\)</span> can be employed as CV to accelerate bond rearrangements:</p>
+<div class="math notranslate nohighlight">
+\[\lambda^\mathbf{max} = \mathrm{max}\big[\mathrm{eig}(\mathbf{A})\big]\]</div>
+<p>Below is an example of using <span class="math notranslate nohighlight">\(\lambda^\mathrm{max}\)</span> as CV:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="linenos"> 1</span><span class="c1"># Define parameters of the `adaptive_sampling.colvars.GRAPH_CV` class as a dictionary</span>
+<span class="linenos"> 2</span><span class="n">cv_def</span> <span class="o">=</span> <span class="p">{</span>
+<span class="linenos"> 3</span>    <span class="s2">&quot;atom_indices&quot;</span><span class="o">=</span><span class="p">[</span><span class="n">i</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">10</span><span class="p">)],</span>  <span class="c1"># Indices of atoms that are included in the Graph CV</span>
+<span class="linenos"> 4</span>    <span class="s2">&quot;atom_types&quot;</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;C&quot;</span> <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">10</span><span class="p">)],</span>  <span class="c1"># Atom types of atoms that are included in the Graph CV. Supported are: &quot;H&quot;, &quot;O&quot;, &quot;C&quot;, &quot;N&quot;, &quot;P&quot;. Otherwise, the value corresponding to a CC bond distance is taken as default.</span>
+<span class="linenos"> 5</span>    <span class="s2">&quot;N&quot;</span><span class="o">=</span><span class="mi">6</span><span class="p">,</span>                                  <span class="c1"># Exponent of switching function N</span>
+<span class="linenos"> 6</span>    <span class="s2">&quot;M&quot;</span><span class="o">=</span><span class="mi">12</span><span class="p">,</span>                                 <span class="c1"># Exponent of switching function M</span>
+<span class="linenos"> 7</span><span class="p">}</span>
+<span class="linenos"> 8</span>
+<span class="linenos"> 9</span><span class="c1"># Definition of the Graph CV as required for methods derived from the `EnhancedSampling` base class.</span>
+<span class="linenos">10</span><span class="c1">#                                 MIN  MAX  BIN_WIDTH</span>
+<span class="linenos">11</span><span class="n">the_cv</span> <span class="o">=</span> <span class="p">[[</span><span class="s2">&quot;lambda_max&quot;</span><span class="p">,</span> <span class="n">cv_def</span><span class="p">,</span> <span class="o">-</span><span class="mf">1.0</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">,</span> <span class="mf">0.05</span><span class="p">]]</span>
+</pre></div>
+</div>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="sampling_tools.html" class="btn btn-neutral float-left" title="Sampling tools" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="exploration_tools.html" class="btn btn-neutral float-right" title="Exploration tools" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2025, MIT License.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

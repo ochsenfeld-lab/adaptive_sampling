@@ -1,0 +1,204 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="./">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Processing tools &mdash; adaptive-sampling 3.0.1 documentation</title>
+      <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=80d5e7a1" />
+      <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=e59714d7" />
+      <link rel="stylesheet" type="text/css" href="_static/copybutton.css?v=76b2166b" />
+
+  
+      <script src="_static/jquery.js?v=5d32c60e"></script>
+      <script src="_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="_static/documentation_options.js?v=08bfcbec"></script>
+      <script src="_static/doctools.js?v=9bcbadda"></script>
+      <script src="_static/sphinx_highlight.js?v=dc90522c"></script>
+      <script src="_static/clipboard.min.js?v=a7894cd8"></script>
+      <script src="_static/copybutton.js?v=f281be69"></script>
+      <script crossorigin="anonymous" integrity="sha256-Ae2Vz/4ePdIu6ZyI/5ZGsYnb+m0JlOmKPjt6XZ9JJkA=" src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.4/require.min.js"></script>
+      <script>window.MathJax = {"tex": {"inlineMath": [["$", "$"], ["\\(", "\\)"]], "processEscapes": true}, "options": {"ignoreHtmlClass": "tex2jax_ignore|mathjax_ignore|document", "processHtmlClass": "tex2jax_process|mathjax_process|math|output_area"}}</script>
+      <script defer="defer" src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+    <script src="_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="Tutorials" href="tutorials.html" />
+    <link rel="prev" title="Exploration tools" href="exploration_tools.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="index.html" class="icon icon-home">
+            adaptive-sampling
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="intro.html">Introduction</a></li>
+<li class="toctree-l1"><a class="reference internal" href="install.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="basics.html">Basic usage</a></li>
+<li class="toctree-l1"><a class="reference internal" href="sampling_tools.html">Sampling tools</a></li>
+<li class="toctree-l1"><a class="reference internal" href="colvars.html">Collective Variables (CVs)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="exploration_tools.html">Exploration tools</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Processing tools</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#extended-system-dynamics">Extended-system dynamics</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="tutorials.html">Tutorials</a></li>
+<li class="toctree-l1"><a class="reference internal" href="code.html">Code Documentation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="publications.html">Scientific articles using the <cite>adaptive_sampling</cite> package</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">adaptive-sampling</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">Processing tools</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="_sources/processing_tools.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="processing-tools">
+<h1>Processing tools<a class="headerlink" href="#processing-tools" title="Link to this heading"></a></h1>
+<p>The <cite>processing_tools</cite> subpackage contains functions for the analysis of free energy or exploratory simulations.</p>
+<section id="extended-system-dynamics">
+<h2>Extended-system dynamics<a class="headerlink" href="#extended-system-dynamics" title="Link to this heading"></a></h2>
+<p>The analysis of extended system dynamics trajectories only requires the trajectories of the CVs and of the coupled degrees of freedom <span class="math notranslate nohighlight">\(\lambda\)</span>.
+Per default, both are stored in the <cite>CV_traj.dat</cite> file during simulations. You can read the <cite>.dat</cite> file for example using numpy:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="linenos">1</span><span class="kn">import</span> <span class="nn">numpy</span> <span class="k">as</span> <span class="nn">np</span>
+<span class="linenos">2</span>
+<span class="linenos">3</span><span class="n">data</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">loadtxt</span><span class="p">(</span><span class="s2">&quot;CV_traj.dat&quot;</span><span class="p">,</span> <span class="n">skiprows</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+<span class="linenos">4</span>
+<span class="linenos">5</span><span class="n">time</span> <span class="o">=</span> <span class="n">data</span><span class="p">[:,</span><span class="mi">0</span><span class="p">]</span>    <span class="c1"># The simulation time</span>
+<span class="linenos">6</span><span class="n">cv</span>   <span class="o">=</span> <span class="n">data</span><span class="p">[:,</span><span class="mi">1</span><span class="p">]</span>    <span class="c1"># The trajectory of the CV</span>
+<span class="linenos">7</span><span class="n">la</span>   <span class="o">=</span> <span class="n">data</span><span class="p">[:,</span><span class="mi">2</span><span class="p">]</span>    <span class="c1"># The trajectory of the fictitious particle</span>
+</pre></div>
+</div>
+<p>A fast estimate of the PMF can be obtained from thermodynamic integration using the corrected z-averaged restraint (CZAR) estimator as described by <a class="reference external" href="https://doi.org/10.1021/acs.jpcb.6b10055">Lesage et al.</a>:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="linenos"> 1</span><span class="kn">import</span> <span class="nn">adaptive_sampling.processing_tools.thermodynamic_integration</span> <span class="k">as</span> <span class="nn">ti</span>
+<span class="linenos"> 2</span>
+<span class="linenos"> 3</span><span class="n">ext_sigma</span> <span class="o">=</span> <span class="mf">0.1</span>                         <span class="c1"># The coupling width of the extended system</span>
+<span class="linenos"> 4</span><span class="n">bin_width</span> <span class="o">=</span> <span class="mf">0.1</span>                         <span class="c1"># Bin width of the grid for the integration and final PMF</span>
+<span class="linenos"> 5</span>
+<span class="linenos"> 6</span><span class="n">grid</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="mf">1.5</span><span class="p">,</span> <span class="mf">4.0</span><span class="p">,</span> <span class="n">bin_width</span><span class="p">)</span>   <span class="c1"># Setup the grid for TI</span>
+<span class="linenos"> 7</span>
+<span class="linenos"> 8</span><span class="n">mean_force</span> <span class="o">=</span> <span class="n">ti</span><span class="o">.</span><span class="n">czar</span><span class="p">(</span>
+<span class="linenos"> 9</span>    <span class="n">grid</span><span class="p">,</span>
+<span class="linenos">10</span>    <span class="n">cv</span><span class="p">,</span>
+<span class="linenos">11</span>    <span class="n">la</span><span class="p">,</span>
+<span class="linenos">12</span>    <span class="n">ext_sigma</span><span class="p">,</span>
+<span class="linenos">13</span>    <span class="n">equil_temp</span><span class="o">=</span><span class="mf">300.0</span><span class="p">,</span>
+<span class="linenos">14</span><span class="p">)</span>
+<span class="linenos">15</span>
+<span class="linenos">16</span><span class="n">pmf</span><span class="p">,</span> <span class="n">rho</span> <span class="o">=</span> <span class="n">ti</span><span class="o">.</span><span class="n">integrate</span><span class="p">(</span>
+<span class="linenos">17</span>    <span class="n">mean_force</span><span class="p">,</span>
+<span class="linenos">18</span>    <span class="n">bin_width</span><span class="o">=</span><span class="n">bin_width</span><span class="p">,</span>
+<span class="linenos">19</span>    <span class="n">equil_temp</span><span class="o">=</span><span class="mf">300.0</span><span class="p">,</span>
+<span class="linenos">20</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>Unbiased statistical weights of data frames can be obtained from the MBAR estimator as described <a class="reference external" href="https://doi.org/10.1063/5.0095554">here</a>.
+For this purpose the continuous trajectories of CVs and <span class="math notranslate nohighlight">\(\lambda\)</span>’s are transformed into static simulation windows, to which the MBAR estimator is applied:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="linenos"> 1</span><span class="kn">from</span> <span class="nn">adaptive_sampling.processing_tools</span> <span class="kn">import</span> <span class="n">mbar</span>
+<span class="linenos"> 2</span>
+<span class="linenos"> 3</span><span class="c1"># obtain simulation windows from continous trajectory</span>
+<span class="linenos"> 4</span><span class="n">traj_list</span><span class="p">,</span> <span class="n">indices</span><span class="p">,</span> <span class="n">meta_f</span> <span class="o">=</span> <span class="n">mbar</span><span class="o">.</span><span class="n">get_windows</span><span class="p">(</span>
+<span class="linenos"> 5</span>    <span class="n">grid</span><span class="p">,</span>
+<span class="linenos"> 6</span>    <span class="n">cv</span><span class="p">,</span>
+<span class="linenos"> 7</span>    <span class="n">la</span><span class="p">,</span>
+<span class="linenos"> 8</span>    <span class="n">ext_sigma</span><span class="p">,</span>
+<span class="linenos"> 9</span>    <span class="n">equil_temp</span><span class="o">=</span><span class="mf">300.0</span>
+<span class="linenos">10</span><span class="p">)</span>
+<span class="linenos">11</span>
+<span class="linenos">12</span><span class="c1"># run the MBAR estimator to get the statistical weights of simulation frames</span>
+<span class="linenos">13</span><span class="n">exp_U</span><span class="p">,</span> <span class="n">frames_per_traj</span> <span class="o">=</span> <span class="n">mbar</span><span class="o">.</span><span class="n">build_boltzmann</span><span class="p">(</span>
+<span class="linenos">14</span>    <span class="n">traj_list</span><span class="p">,</span>
+<span class="linenos">15</span>    <span class="n">meta_f</span><span class="p">,</span>
+<span class="linenos">16</span>    <span class="n">equil_temp</span><span class="o">=</span><span class="mf">300.0</span><span class="p">,</span>
+<span class="linenos">17</span><span class="p">)</span>
+<span class="linenos">18</span>
+<span class="linenos">19</span><span class="n">weights</span> <span class="o">=</span> <span class="n">mbar</span><span class="o">.</span><span class="n">run_mbar</span><span class="p">(</span>
+<span class="linenos">20</span>    <span class="n">exp_U</span><span class="p">,</span>
+<span class="linenos">21</span>    <span class="n">frames_per_traj</span><span class="p">,</span>
+<span class="linenos">22</span>    <span class="n">max_iter</span><span class="o">=</span><span class="mi">10000</span><span class="p">,</span>
+<span class="linenos">23</span>    <span class="n">conv</span><span class="o">=</span><span class="mf">1.0e-4</span><span class="p">,</span>
+<span class="linenos">24</span>    <span class="n">conv_errvec</span><span class="o">=</span><span class="mf">1.0</span><span class="p">,</span>
+<span class="linenos">25</span>    <span class="n">outfreq</span><span class="o">=</span><span class="mi">100</span><span class="p">,</span>
+<span class="linenos">26</span>    <span class="n">device</span><span class="o">=</span><span class="s1">&#39;cpu&#39;</span><span class="p">,</span>
+<span class="linenos">27</span><span class="p">)</span>
+<span class="linenos">28</span>
+<span class="linenos">29</span><span class="c1"># obtain the PMF from the statistical weights</span>
+<span class="linenos">30</span><span class="n">pmf</span><span class="p">,</span> <span class="n">rho</span> <span class="o">=</span> <span class="n">mbar</span><span class="o">.</span><span class="n">pmf_from_weights</span><span class="p">(</span>
+<span class="linenos">31</span>    <span class="n">grid</span><span class="p">,</span>
+<span class="linenos">32</span>    <span class="n">cv</span><span class="p">[</span><span class="n">indices</span><span class="p">],</span> <span class="c1"># order according to `indices`, such that frames in `weights` match frames in `cv` arrays</span>
+<span class="linenos">33</span>    <span class="n">weights</span><span class="p">,</span>
+<span class="linenos">34</span>    <span class="n">equil_temp</span><span class="o">=</span><span class="mf">300.0</span><span class="p">,</span>
+<span class="linenos">35</span><span class="p">)</span>
+</pre></div>
+</div>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="exploration_tools.html" class="btn btn-neutral float-left" title="Exploration tools" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="tutorials.html" class="btn btn-neutral float-right" title="Tutorials" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2025, MIT License.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

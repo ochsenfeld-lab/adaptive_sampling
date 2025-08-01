@@ -1,0 +1,384 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="./">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Sampling tools &mdash; adaptive-sampling 3.0.1 documentation</title>
+      <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=80d5e7a1" />
+      <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=e59714d7" />
+      <link rel="stylesheet" type="text/css" href="_static/copybutton.css?v=76b2166b" />
+
+  
+      <script src="_static/jquery.js?v=5d32c60e"></script>
+      <script src="_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="_static/documentation_options.js?v=08bfcbec"></script>
+      <script src="_static/doctools.js?v=9bcbadda"></script>
+      <script src="_static/sphinx_highlight.js?v=dc90522c"></script>
+      <script src="_static/clipboard.min.js?v=a7894cd8"></script>
+      <script src="_static/copybutton.js?v=f281be69"></script>
+      <script crossorigin="anonymous" integrity="sha256-Ae2Vz/4ePdIu6ZyI/5ZGsYnb+m0JlOmKPjt6XZ9JJkA=" src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.4/require.min.js"></script>
+      <script>window.MathJax = {"tex": {"inlineMath": [["$", "$"], ["\\(", "\\)"]], "processEscapes": true}, "options": {"ignoreHtmlClass": "tex2jax_ignore|mathjax_ignore|document", "processHtmlClass": "tex2jax_process|mathjax_process|math|output_area"}}</script>
+      <script defer="defer" src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+    <script src="_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="Collective Variables (CVs)" href="colvars.html" />
+    <link rel="prev" title="Basic usage" href="basics.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="index.html" class="icon icon-home">
+            adaptive-sampling
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="intro.html">Introduction</a></li>
+<li class="toctree-l1"><a class="reference internal" href="install.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="basics.html">Basic usage</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Sampling tools</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#the-enhancedsampling-base-class">The <cite>EnhancedSampling</cite> Base Class</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#well-tempered-metadynamics-wtm">(Well-tempered) metadynamics (WTM)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#on-the-fly-probability-enhanced-sampling-opes">On-the-fly probability enhanced sampling (OPES)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#extended-system-dynamics">Extended-system dynamics</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#accelerated-molecular-dynamics-amd">Accelerated molecular dynamics (aMD)</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="colvars.html">Collective Variables (CVs)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="exploration_tools.html">Exploration tools</a></li>
+<li class="toctree-l1"><a class="reference internal" href="processing_tools.html">Processing tools</a></li>
+<li class="toctree-l1"><a class="reference internal" href="tutorials.html">Tutorials</a></li>
+<li class="toctree-l1"><a class="reference internal" href="code.html">Code Documentation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="publications.html">Scientific articles using the <cite>adaptive_sampling</cite> package</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">adaptive-sampling</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">Sampling tools</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="_sources/sampling_tools.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="sampling-tools">
+<h1>Sampling tools<a class="headerlink" href="#sampling-tools" title="Link to this heading"></a></h1>
+<p>The <cite>sampling_tools</cite> subpackage provides a set of tools for importance sampling of molecular transitions.</p>
+<section id="the-enhancedsampling-base-class">
+<h2>The <cite>EnhancedSampling</cite> Base Class<a class="headerlink" href="#the-enhancedsampling-base-class" title="Link to this heading"></a></h2>
+<p>The <cite>EnhancedSampling</cite> class is the base class for all adaptive enhanced sampling methods in the <cite>sampling_tools</cite> subpackage.</p>
+<p>It implements basic functionalities for running adaptive sampling simulations. Parameters of the <cite>EnhancedSampling</cite>, which are relevant for all derived subclasses are:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="linenos"> 1</span><span class="n">EnhancedSampling</span><span class="p">(</span>
+<span class="linenos"> 2</span>    <span class="n">the_md</span><span class="p">,</span>                     <span class="c1"># The MD interface from `adaptive_sampling.interface`</span>
+<span class="linenos"> 3</span>    <span class="n">the_cv</span><span class="p">,</span>                     <span class="c1"># The definition of collective variables (CV) from `adaptive_sampling.colvars`</span>
+<span class="linenos"> 4</span>    <span class="n">equil_temp</span><span class="o">=</span><span class="mf">300.0</span><span class="p">,</span>           <span class="c1"># Equilibrium temperature of the MD</span>
+<span class="linenos"> 5</span>    <span class="n">kinetics</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>              <span class="c1"># Calculate and output necessary metrics to obtain accurate kinetics</span>
+<span class="linenos"> 6</span>    <span class="n">f_conf</span><span class="o">=</span><span class="mf">100.0</span><span class="p">,</span>               <span class="c1"># Force constant for confinement of CVs to the range of interest with harmonic walls in kJ/mol/(CV units)^2</span>
+<span class="linenos"> 7</span>    <span class="n">output_freq</span><span class="o">=</span><span class="mi">100</span><span class="p">,</span>            <span class="c1"># Frequency of writing outputs in MD steps</span>
+<span class="linenos"> 8</span>    <span class="n">multiple_walker</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>      <span class="c1"># Use shared bias multiple walker implementation to synchronize time dependent biasing potentials with other simulations via buffer file</span>
+<span class="linenos"> 9</span>    <span class="n">periodicity</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>           <span class="c1"># Periodic boundary conditions for periodic CVs, list of boundaries of `shape(len(CVs),2)`, [[lower_boundary0, upper_boundary0], ...]</span>
+<span class="linenos">10</span>    <span class="n">verbose</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>               <span class="c1"># Print verbose information</span>
+<span class="linenos">11</span><span class="p">)</span>
+</pre></div>
+</div>
+</section>
+<section id="well-tempered-metadynamics-wtm">
+<h2>(Well-tempered) metadynamics (WTM)<a class="headerlink" href="#well-tempered-metadynamics-wtm" title="Link to this heading"></a></h2>
+<p>In WTM the bias potential is constructed from a superposition of Gaussian hills of the form</p>
+<div class="math notranslate nohighlight">
+\[G(\textbf{z},\textbf{z}_t) = h_\mathrm{G}\: e^{-(\mathbf{z}-\mathbf{z}_t)^2 / 2\sigma_\mathrm{G}^2} \,,\]</div>
+<p>where <span class="math notranslate nohighlight">\(\mathbf{z}\)</span> is the current value of the collective variable (CV), <span class="math notranslate nohighlight">\(\mathbf{z}_t\)</span> is the CV vector at time <span class="math notranslate nohighlight">\(t\)</span>, <span class="math notranslate nohighlight">\(h_\mathrm{G}\)</span> is the height of the Gaussian, and <span class="math notranslate nohighlight">\(\sigma_\mathrm{G}\)</span> is the width of the Gaussian.
+The bias potential is then given by</p>
+<div class="math notranslate nohighlight">
+\[U^\mathrm{WTM}(\mathbf{z}, t) = \sum_{t=0,\tau_\mathrm{G}, 2\tau_\mathrm{G},...} e^{- \beta U^\mathrm{WTM}(\mathbf{z},t-1)/(\gamma-1)}\: G(\textbf{z},\textbf{z}_t) \,,\]</div>
+<p>where Gaussian hills are added at regular time intervals <span class="math notranslate nohighlight">\(t = 0, \tau_\mathrm{G}, 2\tau_\mathrm{G}, ...\)</span> to the bias potential <span class="math notranslate nohighlight">\(U^\mathrm{WTM}(\mathbf{z},t)\)</span>.
+If the well-tempered version of metadynamics is used, the height of new Gaussian hills is scaled with the factor <span class="math notranslate nohighlight">\(e^{- \beta U^\mathrm{WTM}(\mathbf{z},t-1)/(\gamma-1)}\)</span>, such that Gaussian hills shrink over time ensuring smooth convergence.
+For <span class="math notranslate nohighlight">\(\gamma = \infty\)</span> the scaling factor is 1 and standard metadynamics is recovered, where the height of Gaussian hills is constant over time.</p>
+<p>The WTM algorithm can be used as follows:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="linenos"> 1</span><span class="kn">from</span> <span class="nn">adaptive_sampling.sampling_tools</span> <span class="kn">import</span> <span class="n">WTM</span>
+<span class="linenos"> 2</span>
+<span class="linenos"> 3</span><span class="n">the_md</span> <span class="o">=</span> <span class="o">...</span> <span class="c1"># initialize the molecular dynamics interface using the `adaptive_sampling.interface` module</span>
+<span class="linenos"> 4</span><span class="n">the_cv</span> <span class="o">=</span> <span class="o">...</span> <span class="c1"># define the collective variable (CV) using the `adaptive_sampling.colvars` module</span>
+<span class="linenos"> 5</span>
+<span class="linenos"> 6</span><span class="n">the_bias</span> <span class="o">=</span> <span class="n">WTM</span><span class="p">(</span>
+<span class="linenos"> 7</span>    <span class="n">the_md</span><span class="p">,</span>
+<span class="linenos"> 8</span>    <span class="n">the_cv</span><span class="p">,</span>
+<span class="linenos"> 9</span>    <span class="n">hill_height</span><span class="o">=</span><span class="mf">1.0</span><span class="p">,</span>            <span class="c1"># Height of the Gaussian hills in kJ/mol</span>
+<span class="linenos">10</span>    <span class="n">hill_std</span><span class="o">=</span><span class="mf">0.2</span><span class="p">,</span>               <span class="c1"># Standard deviation of the Gaussian hills in units of the CV (e.g. Angstrom for distance CVs, degree for angle CVs), can also be a list of floats for 2D CVs</span>
+<span class="linenos">11</span>    <span class="n">hill_drop_freq</span><span class="o">=</span><span class="mi">100</span><span class="p">,</span>         <span class="c1"># Frequency of adding new Gaussian hills in MD steps (e.g. every 100 steps)</span>
+<span class="linenos">12</span>    <span class="n">bias_factor</span><span class="o">=</span><span class="mi">20</span><span class="p">,</span>             <span class="c1"># The bias factor gamma, which controls the shrinking of Gaussian hills over time, Default: None</span>
+<span class="linenos">13</span>    <span class="n">well_tempered_temp</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>    <span class="c1"># The bias temperature DeltaT is an alternative to setting gamma. Note, that setting DeltaT always overwrites gamma! gamma=DeltaT/(T+1) with temperature of the MD simulation T. Default: np.inf (standard metadynamics)</span>
+<span class="linenos">14</span>    <span class="n">force_from_grid</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>       <span class="c1"># Always recommended. If True, bias potentials and forces are accumulated on a grid, if False, the sum of Gaussian hills is calculated in every step, which can be expensive for long runs.</span>
+<span class="linenos">15</span>    <span class="c1">#...,                       # Additional inherited keyword arguments from the `EnhancedSampling` class.</span>
+<span class="linenos">16</span><span class="p">)</span>
+</pre></div>
+</div>
+<dl class="simple">
+<dt>For more information on MtD and WTM, refer to the original publications:</dt><dd><ul class="simple">
+<li><p>MtD: <a class="reference external" href="https://doi.org/10.1103/PhysRevLett.96.090601">https://doi.org/10.1103/PhysRevLett.96.090601</a></p></li>
+<li><p>WTM: <a class="reference external" href="https://doi.org/10.1103/PhysRevLett.100.020603">https://doi.org/10.1103/PhysRevLett.100.020603</a></p></li>
+</ul>
+</dd>
+</dl>
+</section>
+<section id="on-the-fly-probability-enhanced-sampling-opes">
+<h2>On-the-fly probability enhanced sampling (OPES)<a class="headerlink" href="#on-the-fly-probability-enhanced-sampling-opes" title="Link to this heading"></a></h2>
+<p>OPES uses a similar superposition of Gaussian hills than WTM, but instead of the PMF the probability density is estimated from the Gaussian hills.
+The kernel density estimation of the probability density is given by</p>
+<div class="math notranslate nohighlight">
+\[\widetilde{\rho}(\mathbf{z}, t) = \frac{\sum_{t=\tau_\mathrm{G}, 2\tau_\mathrm{G},...} w_t\,G(\textbf{z},\textbf{z}_t)}{\sum_{t=\tau_\mathrm{G}, 2\tau_\mathrm{G},...}w_t} \,,\]</div>
+<p>where <span class="math notranslate nohighlight">\(w_t = e^{\beta U^\mathrm{OPES}(\mathbf{z}_t, t-1)}\)</span> is the weight of the new Gaussian hill at time <span class="math notranslate nohighlight">\(t\)</span>.
+Note that unlike before the height of Gaussian hills <span class="math notranslate nohighlight">\(h_\mathrm{G}\)</span> is no free parameter as changing it only corresponds to changing the normalization of the probability density.
+From the estimated probability density the bias potential is calculated as</p>
+<div class="math notranslate nohighlight">
+\[U^\mathrm{OPES}(\mathbf{z},t)= \left(1-\frac{1}{\gamma}\right) \beta^{-1} \log \left(\frac{\widetilde{\rho}(\mathbf{z}, t)}{Z_t} + \epsilon\right) \,,\]</div>
+<p>where <span class="math notranslate nohighlight">\(Z_t\)</span> is a normalization factor and <span class="math notranslate nohighlight">\(\epsilon\)</span> is a small constant to avoid numerical instabilities.
+By choosing <span class="math notranslate nohighlight">\(\epsilon=e^{-\beta \Delta E / (1-1/\gamma)}\)</span>, OPES allows for setting an upper bound to the biasing potential, which is given by the parameter <span class="math notranslate nohighlight">\(\Delta E\)</span>.
+As for WTM, <span class="math notranslate nohighlight">\(\gamma\)</span> corresponds to the bias factor, which controls how much the original probability distribution is smoothed out by the bias potential.
+A full example of setting up OPES simulations is given below:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="linenos"> 1</span><span class="kn">from</span> <span class="nn">adaptive_sampling.sampling_tools</span> <span class="kn">import</span> <span class="n">OPES</span>
+<span class="linenos"> 2</span>
+<span class="linenos"> 3</span><span class="n">the_md</span> <span class="o">=</span> <span class="o">...</span> <span class="c1"># initialize the molecular dynamics interface using the `adaptive_sampling.interface` module</span>
+<span class="linenos"> 4</span><span class="n">the_cv</span> <span class="o">=</span> <span class="o">...</span> <span class="c1"># define the collective variable (CV) using the `adaptive_sampling.colvars` module</span>
+<span class="linenos"> 5</span>
+<span class="linenos"> 6</span><span class="n">the_bias</span> <span class="o">=</span> <span class="n">OPES</span><span class="p">(</span>
+<span class="linenos"> 7</span>    <span class="n">the_md</span><span class="p">,</span>
+<span class="linenos"> 8</span>    <span class="n">the_cv</span><span class="p">,</span>
+<span class="linenos"> 9</span>    <span class="n">kernel_std</span><span class="o">=</span><span class="mf">0.1</span><span class="p">,</span>             <span class="c1"># Initial standard deviation of OPES kernels, if None, kernel_std will be estimated from initial MD with `adaptive_std_freq*update_freq` steps</span>
+<span class="linenos">10</span>    <span class="n">update_freq</span><span class="o">=</span><span class="mi">100</span><span class="p">,</span>            <span class="c1"># Frequency of adding new Gaussian kernels in MD steps (e.g. every 100 steps)</span>
+<span class="linenos">11</span>    <span class="n">energy_barr</span><span class="o">=</span><span class="mf">20.0</span><span class="p">,</span>           <span class="c1"># Barrier factor in kJ/mol, which sets an upper bound to the bias potential, should roughly correspond to the energy barrier of the transition to be sampled.</span>
+<span class="linenos">12</span>    <span class="n">bandwidth_rescaling</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>   <span class="c1"># If True, the kernel standard deviation shrinks over time to converge finer details of the PMF.</span>
+<span class="linenos">13</span>    <span class="n">bias_factor</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>           <span class="c1"># The bias factor gamma, which controls the smoothing of the probability density, Default: default is `beta * energy_barr`</span>
+<span class="linenos">14</span>    <span class="n">adaptive_std</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>         <span class="c1"># If True, the kernel standard deviation is adapted based on the standard deviation of the CV, useful for simulations using poor CVs.</span>
+<span class="linenos">15</span>    <span class="n">adaptive_std_freq</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span>       <span class="c1"># Exponential decay time for running estimate of the CVs standard deviation</span>
+<span class="linenos">16</span>    <span class="n">explore</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>              <span class="c1"># If True, use the exploration mode of OPES.</span>
+<span class="linenos">17</span>    <span class="n">normalize</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>             <span class="c1"># Always recommended. Normalize OPES probability density over explored space.</span>
+<span class="linenos">18</span>    <span class="n">approximate_norm</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>      <span class="c1"># Always recommended. Enables linear scaling approximation of the normalization factor, which is faster.</span>
+<span class="linenos">19</span>    <span class="n">merge_threshold</span><span class="o">=</span><span class="mf">1.0</span><span class="p">,</span>        <span class="c1"># Threshold for merging Gaussian kernels, if the Mahalanobis distance between two kernels is smaller than this threshold, they are merged.</span>
+<span class="linenos">20</span>    <span class="n">recursive_merge</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>       <span class="c1"># Always recommended. If True, recursively merge Gaussian kernels until no more kernels can be merged.</span>
+<span class="linenos">21</span>    <span class="n">force_from_grid</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>       <span class="c1"># Always recommended. If True, bias potentials and forces are accumulated on a grid, if False, the sum of Gaussian hills is calculated in every step, which can be expensive for long runs.</span>
+<span class="linenos">22</span>    <span class="c1">#...,                       # Additional inherited keyword arguments from the `EnhancedSampling` class.</span>
+<span class="linenos">23</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>While the OPES implementation features many options, most of them are not critical and should almost always be left at the default option. For the subset of parameters that toggle the features of the present OPES implementationthe default settings have been shown to provide the best results in general. These include the linear scaling normalization (<cite>approximate_norm=True</cite> and <cite>normalize=True</cite>), the saturating number of Gaussian kernels by recursive merging (<cite>recursive_merge=True</cite>, <cite>merge_threshold=1.0</cite>), and the efficient refinement over time (<cite>bandwidth_rescaling=True</cite>, <cite>adaptive_std=True</cite>).
+Furthermore, there are parameters that can affect the simulation within a given choice of features.</p>
+<blockquote>
+<div><ul class="simple">
+<li><p>The <cite>kernel_std</cite> parameter controls the intial standard deviation of the kernels and significantly enhances the efficiency if being set to provide fast escape from the intial basin. However, if there is no preliminary knowledge about the PMF one can set <cite>kernel_std=None</cite> to automatically estimate the initial standard deviation from an unbiased MD trajectory in the starting basin.</p></li>
+<li><p>The <cite>update_freq</cite> parameter controls how often new Gaussian kernels are added to the bias potential. A value of 100 to 500 steps is a good default, but it can be adjusted based on the system and the desired sampling rate.</p></li>
+<li><p>The <cite>energy_barr</cite> parameter sets the barrier height for the bias potential. This value should be chosen based on the expected energy barrier of the transition being sampled.</p></li>
+</ul>
+</div></blockquote>
+<p>A more minimalistic example of using OPES is given below:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="linenos"> 1</span><span class="kn">from</span> <span class="nn">adaptive_sampling.sampling_tools</span> <span class="kn">import</span> <span class="n">OPES</span>
+<span class="linenos"> 2</span>
+<span class="linenos"> 3</span><span class="n">the_md</span> <span class="o">=</span> <span class="o">...</span> <span class="c1"># initialize the molecular dynamics interface from adaptive_sampling.interface</span>
+<span class="linenos"> 4</span><span class="n">the_cv</span> <span class="o">=</span> <span class="o">...</span> <span class="c1"># define the collective variable (CV) using adaptive_sampling.colvars</span>
+<span class="linenos"> 5</span>
+<span class="linenos"> 6</span><span class="n">the_bias</span> <span class="o">=</span> <span class="n">OPES</span><span class="p">(</span>
+<span class="linenos"> 7</span>    <span class="n">the_md</span><span class="p">,</span>
+<span class="linenos"> 8</span>    <span class="n">the_cv</span><span class="p">,</span>
+<span class="linenos"> 9</span>    <span class="n">kernel_std</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>            <span class="c1"># Estimate initial standard deviation from `adaptive_std_freq*update_freq` initial steps</span>
+<span class="linenos">10</span>    <span class="n">update_freq</span><span class="o">=</span><span class="mi">100</span><span class="p">,</span>            <span class="c1"># Frequency of adding new Gaussian kernels in MD steps (e.g. every 100 steps)</span>
+<span class="linenos">11</span>    <span class="n">energy_barr</span><span class="o">=</span><span class="mf">20.0</span><span class="p">,</span>           <span class="c1"># Expected energy barrier in kJ/mol</span>
+<span class="linenos">12</span>    <span class="n">adaptive_std_freq</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span>       <span class="c1"># Initial kernel standard deviation obtained from `adaptive_std_freq*update_freq` MD steps (1000 steps).</span>
+<span class="linenos">13</span>    <span class="c1">#...,                       # Additional inherited keyword arguments from the `EnhancedSampling` class.</span>
+<span class="linenos">14</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>A variant of the OPES method is <cite>OPES_Explore</cite>, which is designed to maximize sampling of the CV space. Exploration can come to halt if the algorithm discovers a new meta-stable state in an already explored CV region for a suboptimal variable. This would not lead to a significant change in the normalization factor Zn , which should refer to the exploration history and contribute to pushing the system out of local minima. In the case of exploring a already sampled space, the bias needs to change, so that an exit can effectively be accelerated. With OPESexplore, the bias is built from an on-the-fly estimate of the sampled distribution where for this variant the target distribution <span class="math notranslate nohighlight">\(p^{target}(\xi)= p^{WT}(\xi)\)</span> is well tempered. This altered target distribution leads to a sacrifice in convergence efficiency and can even prevent the system from converging to the correct PMF. It can be used to sample an unknown CV space efficiently when accuracy is not the primary concern, but rather the exploration of the CV space. Then again, OPES can be used to refine the sampling and provide accurate results.</p>
+<dl class="simple">
+<dt>For more information on OPES and OPES explore, refer to the original publications:</dt><dd><ul class="simple">
+<li><p>OPES: <a class="reference external" href="https://doi.org/10.1021/acs.jpclett.0c00497">https://doi.org/10.1021/acs.jpclett.0c00497</a></p></li>
+<li><p>OPES_Explore: <a class="reference external" href="https://doi.org/10.1021/acs.jctc.2c00152">https://doi.org/10.1021/acs.jctc.2c00152</a></p></li>
+</ul>
+</dd>
+</dl>
+</section>
+<section id="extended-system-dynamics">
+<h2>Extended-system dynamics<a class="headerlink" href="#extended-system-dynamics" title="Link to this heading"></a></h2>
+<p>In extended system dynamics, additional degrees of freedom, which are suspect of the same dynamics as the physical system, are harmonically coupled to the CVs and act as proxies for the application of time-dependent bias potentials.</p>
+<div class="math notranslate nohighlight">
+\[U^\mathrm{ext}(\mathbf{x}, \lambda) = U(\mathbf{x})+\sum_{i=1}^d \frac{1}{2 \beta\sigma_i^2}\left(\xi_i(\mathbf{x})-\lambda_i\right)^2 + U^\mathrm{bias}(\lambda,t)\,,\]</div>
+<p>where <span class="math notranslate nohighlight">\(\lambda\)</span> denotes additional degrees of freedom (extended system), <span class="math notranslate nohighlight">\(\xi_i(\mathbf{x})\)</span> are the CVs, and <span class="math notranslate nohighlight">\(\sigma_i\)</span> is the coupling width of the extended system to CVs and <span class="math notranslate nohighlight">\(U^{bias}(\lambda,t)\)</span> can be any time-dependent bias potantial acting on <span class="math notranslate nohighlight">\(\lambda\)</span>.</p>
+<p>Multiple methods based on extended system dynamics are implemented, with differ in how the bias potential <span class="math notranslate nohighlight">\(U^{bias}(\lambda,t)\)</span> is constructed:</p>
+<blockquote>
+<div><ul class="simple">
+<li><p><cite>eABF</cite>: extended adaptive biasing force (Ref: <a class="reference external" href="https://doi.org/10.1021/acs.jpcb.6b10055">https://doi.org/10.1021/acs.jpcb.6b10055</a>)</p></li>
+<li><p><cite>WTMeABF</cite>: applies both the WTM and ABF bias potentials to the extended system (Ref: <a class="reference external" href="https://doi.org/10.1021/acs.accounts.9b00473">https://doi.org/10.1021/acs.accounts.9b00473</a>)</p></li>
+<li><p><cite>OPESeABF</cite>: applies both the OPES and ABF bias potentials to the extended system (Ref: <a class="reference external" href="https://doi.org/10.1021/acs.jctc.5c00395">https://doi.org/10.1021/acs.jctc.5c00395</a>)</p></li>
+</ul>
+</div></blockquote>
+<p>The different types of extended-system dynamics can be used as follows:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="linenos"> 1</span><span class="kn">from</span> <span class="nn">adaptive_sampling.sampling_tools</span> <span class="kn">import</span> <span class="n">eABF</span><span class="p">,</span> <span class="n">WTMeABF</span><span class="p">,</span> <span class="n">OPESeABF</span>
+<span class="linenos"> 2</span>
+<span class="linenos"> 3</span><span class="n">the_md</span> <span class="o">=</span> <span class="o">...</span> <span class="c1"># initialize the molecular dynamics interface using the `adaptive_sampling.interface` module</span>
+<span class="linenos"> 4</span><span class="n">the_cv</span> <span class="o">=</span> <span class="o">...</span> <span class="c1"># define the collective variable (CV) using the `adaptive_sampling.colvars` module</span>
+<span class="linenos"> 5</span>
+<span class="linenos"> 6</span><span class="n">the_bias</span> <span class="o">=</span> <span class="n">eABF</span><span class="p">(</span>
+<span class="linenos"> 7</span>    <span class="n">the_md</span><span class="p">,</span>
+<span class="linenos"> 8</span>    <span class="n">the_cv</span><span class="p">,</span>
+<span class="linenos"> 9</span>    <span class="n">ext_sigma</span><span class="o">=</span><span class="mf">0.1</span><span class="p">,</span>          <span class="c1"># Coupling width of the extended system to CVs in units of the CV (e.g. Angstrom for distance CVs, degree for angle CVs)</span>
+<span class="linenos">10</span>    <span class="n">ext_mass</span><span class="o">=</span><span class="mi">100</span><span class="p">,</span>           <span class="c1"># The bias factor gamma, which controls the smoothing of the bias potential, Default: None</span>
+<span class="linenos">11</span>    <span class="n">nfull</span><span class="o">=</span><span class="mi">100</span><span class="p">,</span>              <span class="c1"># Defines linear ramp for scaling up the adaptive biasing force (ABF), at `nfull` samples the full force is applied.</span>
+<span class="linenos">12</span>    <span class="c1">#...,                   # Additional inherited keyword arguments from the `ABF`, and `EnhancedSampling` class.</span>
+<span class="linenos">13</span><span class="p">)</span>
+<span class="linenos">14</span>
+<span class="linenos">15</span><span class="n">the_bias</span> <span class="o">=</span> <span class="n">WTMeABF</span><span class="p">(</span>
+<span class="linenos">16</span>    <span class="n">the_md</span><span class="p">,</span>
+<span class="linenos">17</span>    <span class="n">the_cv</span><span class="p">,</span>
+<span class="linenos">18</span>    <span class="n">ext_sigma</span><span class="o">=</span><span class="mf">0.1</span><span class="p">,</span>          <span class="c1"># Coupling width of the extended system to CVs in units of the CV (e.g. Angstrom for distance CVs, degree for angle CVs)</span>
+<span class="linenos">19</span>    <span class="n">ext_mass</span><span class="o">=</span><span class="mi">100</span><span class="p">,</span>           <span class="c1"># The bias factor gamma, which controls the smoothing of the bias potential, Default: None</span>
+<span class="linenos">20</span>    <span class="n">enable_abf</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>        <span class="c1"># If True, the ABF bias is applied to the extended system</span>
+<span class="linenos">21</span>    <span class="n">nfull</span><span class="o">=</span><span class="mi">100</span><span class="p">,</span>              <span class="c1"># Defines linear ramp for scaling up the adaptive biasing force (ABF), at `nfull` samples the full force is applied.</span>
+<span class="linenos">22</span>    <span class="n">hill_height</span><span class="o">=</span><span class="mf">1.0</span><span class="p">,</span>        <span class="c1"># Height of the Gaussian hills in kJ/mol</span>
+<span class="linenos">23</span>    <span class="n">hill_std</span><span class="o">=</span><span class="mf">0.2</span><span class="p">,</span>           <span class="c1"># Standard deviation of the Gaussian hills in units of the CV (e.g. Angstrom for distance CVs, degree for angle CVs), can also be a list of floats for 2D CVs</span>
+<span class="linenos">24</span>    <span class="n">hill_drop_freq</span><span class="o">=</span><span class="mi">100</span><span class="p">,</span>     <span class="c1"># Frequency of adding new Gaussian hills in MD steps (e.g. every 100 steps)</span>
+<span class="linenos">25</span>    <span class="c1">#...,                   # Additional inherited keyword arguments from the `WTM`, `ABF` and `EnhancedSampling` class.</span>
+<span class="linenos">26</span><span class="p">)</span>
+<span class="linenos">27</span>
+<span class="linenos">28</span><span class="n">the_bias</span> <span class="o">=</span> <span class="n">OPESeABF</span><span class="p">(</span>
+<span class="linenos">29</span>    <span class="n">the_md</span><span class="p">,</span>
+<span class="linenos">30</span>    <span class="n">the_cv</span><span class="p">,</span>
+<span class="linenos">31</span>    <span class="n">ext_sigma</span><span class="o">=</span><span class="mf">0.1</span><span class="p">,</span>          <span class="c1"># Coupling width of the extended system to CVs in units of the CV (e.g. Angstrom for distance CVs, degree for angle CVs)</span>
+<span class="linenos">32</span>    <span class="n">ext_mass</span><span class="o">=</span><span class="mi">100</span><span class="p">,</span>           <span class="c1"># The bias factor gamma, which controls the smoothing of the bias potential, Default: None</span>
+<span class="linenos">33</span>    <span class="n">enable_abf</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>        <span class="c1"># If True, the ABF bias is applied to the extended system</span>
+<span class="linenos">34</span>    <span class="n">nfull</span><span class="o">=</span><span class="mi">100</span><span class="p">,</span>              <span class="c1"># Defines linear ramp for scaling up the adaptive biasing force (ABF), at `nfull` samples the full force is applied.</span>
+<span class="linenos">35</span>    <span class="n">kernel_std</span><span class="o">=</span><span class="mf">0.1</span><span class="p">,</span>         <span class="c1"># Initial standard deviation of OPES kernels, if None, kernel_std will be estimated from initial MD with `adaptive_std_freq*update_freq` steps</span>
+<span class="linenos">36</span>    <span class="n">update_freq</span><span class="o">=</span><span class="mi">100</span><span class="p">,</span>        <span class="c1"># Frequency of adding new Gaussian kernels in MD steps (e.g. every 100 steps)</span>
+<span class="linenos">37</span>    <span class="n">energy_barr</span><span class="o">=</span><span class="mf">20.0</span><span class="p">,</span>       <span class="c1"># Expected energy barrier in kJ/mol</span>
+<span class="linenos">38</span>    <span class="c1">#...,                   # Additional inherited keyword arguments from the `OPES`, `ABF` and `EnhancedSampling` class.</span>
+<span class="linenos">39</span><span class="p">)</span>
+</pre></div>
+</div>
+</section>
+<section id="accelerated-molecular-dynamics-amd">
+<h2>Accelerated molecular dynamics (aMD)<a class="headerlink" href="#accelerated-molecular-dynamics-amd" title="Link to this heading"></a></h2>
+<p>Accelerated molecular dynamics (aMD) is a method to enhance the sampling of rare events by globally modifying the potential energy surface of the system to lower the energy barriers of transitions.
+Especially, aMD methods do not require a CV, but instead apply a bias potential to the entire system.</p>
+<p>The bias potential is given by:</p>
+<div class="math notranslate nohighlight">
+\[\begin{split}U^\mathrm{aMD}(\mathbf{x}, U) =
+    \begin{cases}
+        U(\mathbf{x}) &amp; \mathrm{if} \; U(\mathbf{x}) \geq E, \\
+        U(\mathbf{x}) + \Delta U(U(\mathbf{x})) &amp; \mathrm{if} \; U(\mathbf{x}) &lt;  E \:.
+    \end{cases}\end{split}\]</div>
+<p>where <span class="math notranslate nohighlight">\(E\)</span> is a threshold energy and <span class="math notranslate nohighlight">\(\Delta U(U(\mathbf{x}))\)</span> is the boost energy.
+For the boost energy, different options are available:</p>
+<blockquote>
+<div><ul class="simple">
+<li><p><cite>aMD</cite>: accelerated MD as introduced by Hamelberg et al. * <cite>aMD</cite>: accelerated MD as introduced by Hamelberg et al. (<a class="reference external" href="https://doi.org/10.1063/1.1755656">https://doi.org/10.1063/1.1755656</a>)</p></li>
+<li><p><cite>GaMD</cite>: Gaussian accelerated MD as introduced by Miao et al. (<a class="reference external" href="https://doi.org/10.1021/acs.jctc.5b00436">https://doi.org/10.1021/acs.jctc.5b00436</a>)</p></li>
+<li><p><cite>SaMD</cite>: Sigmoid accelerated MD as introduced by Zhao et al. (<a class="reference external" href="https://doi.org/10.1021/acs.jpclett.2c03688">https://doi.org/10.1021/acs.jpclett.2c03688</a>)</p></li>
+</ul>
+</div></blockquote>
+<p>The different types of aMD can be used as follows:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="linenos"> 1</span><span class="kn">from</span> <span class="nn">adaptive_sampling.sampling_tools</span> <span class="kn">import</span> <span class="n">aMD</span>
+<span class="linenos"> 2</span>
+<span class="linenos"> 3</span><span class="n">the_md</span> <span class="o">=</span> <span class="o">...</span> <span class="c1"># initialize the molecular dynamics interface using the `adaptive_sampling.interface` module</span>
+<span class="linenos"> 4</span><span class="n">the_cv</span> <span class="o">=</span> <span class="o">...</span> <span class="c1"># define the collective variable (CV) using the `adaptive_sampling.colvars` module</span>
+<span class="linenos"> 5</span>
+<span class="linenos"> 6</span><span class="n">the_bias</span> <span class="o">=</span> <span class="n">aMD</span><span class="p">(</span>
+<span class="linenos"> 7</span>    <span class="n">amd_parameter</span><span class="p">,</span>             <span class="c1"># Acceleration parameter; SaMD, GaMD == sigma0; aMD == alpha</span>
+<span class="linenos"> 8</span>    <span class="n">init_step</span><span class="p">,</span>                 <span class="c1"># Initial steps where no bias is applied to estimate min, max and var of potential energy</span>
+<span class="linenos"> 9</span>    <span class="n">equil_steps</span><span class="p">,</span>               <span class="c1"># Equilibration steps, min, max and var of potential energy is still updated, force constant of coupling is calculated from previous steps</span>
+<span class="linenos">10</span>    <span class="n">the_md</span><span class="p">,</span>                    <span class="c1"># The MD interface from `adaptive_sampling.interface`</span>
+<span class="linenos">11</span>    <span class="n">the_cv</span><span class="p">,</span>                    <span class="c1"># The CV does not affect sampling in aMD, but is still required for the `EnhancedSampling` base class. Can be used to monitor CVs of interest.</span>
+<span class="linenos">12</span>    <span class="n">amd_method</span><span class="o">=</span><span class="s1">&#39;GaMD_lower&#39;</span><span class="p">,</span>   <span class="c1"># &#39;aMD&#39;: accelerated MD, &#39;GaMD_lower&#39;: lower bound of Gaussian accelerated MD, &#39;GaMD_upper&#39;: upper bound of Gaussian accelerated MD, &#39;SaMD&#39;: sigmoid accelerated MD</span>
+<span class="linenos">13</span>    <span class="n">confine</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>             <span class="c1"># If system should be confined at boundaries of the CV definition with harmonic walls.</span>
+<span class="linenos">14</span>    <span class="c1">#...,                      # Additional inherited keyword arguments from the `EnhancedSampling` class.</span>
+<span class="linenos">15</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>The global conformational sampling as provided by <cite>aMD</cite> can be combined with local sampling acceleration of the selected CVs in the <cite>WTMeABF</cite> method (Ref: <a class="reference external" href="https://doi.org/10.1021/acs.jctc.1c00103">https://doi.org/10.1021/acs.jctc.1c00103</a>):</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="linenos"> 1</span><span class="kn">from</span> <span class="nn">adaptive_sampling.sampling_tools</span> <span class="kn">import</span> <span class="n">aWTMeABF</span>
+<span class="linenos"> 2</span>
+<span class="linenos"> 3</span><span class="n">the_md</span> <span class="o">=</span> <span class="o">...</span> <span class="c1"># initialize the molecular dynamics interface using the `adaptive_sampling.interface` module</span>
+<span class="linenos"> 4</span><span class="n">the_cv</span> <span class="o">=</span> <span class="o">...</span> <span class="c1"># define the collective variable (CV) using the `adaptive_sampling.colvars` module</span>
+<span class="linenos"> 5</span>
+<span class="linenos"> 6</span><span class="n">the_bias</span> <span class="o">=</span> <span class="n">aWTMeABF</span><span class="p">(</span>
+<span class="linenos"> 7</span>    <span class="n">amd_parameter</span><span class="p">,</span>             <span class="c1"># Acceleration parameter; SaMD, GaMD == sigma0; aMD == alpha</span>
+<span class="linenos"> 8</span>    <span class="n">init_step</span><span class="p">,</span>                 <span class="c1"># Initial steps where no bias is applied to estimate min, max and var of potential energy</span>
+<span class="linenos"> 9</span>    <span class="n">equil_steps</span><span class="p">,</span>               <span class="c1"># Equilibration steps, min, max and var of potential energy is still updated, force constant of coupling is calculated from previous steps</span>
+<span class="linenos">10</span>    <span class="n">the_md</span><span class="p">,</span>                    <span class="c1"># The MD interface from `adaptive_sampling.interface`</span>
+<span class="linenos">11</span>    <span class="n">the_cv</span><span class="p">,</span>                    <span class="c1"># The CV does not affect sampling in aWTMeABF, but is still required for the `EnhancedSampling` base class. Can be used to monitor CVs of interest.</span>
+<span class="linenos">12</span>    <span class="n">amd_method</span><span class="o">=</span><span class="s1">&#39;GaMD_lower&#39;</span><span class="p">,</span>   <span class="c1"># &#39;aMD&#39;: accelerated MD, &#39;GaMD_lower&#39;: lower bound of Gaussian accelerated MD, &#39;GaMD_upper&#39;: upper bound of Gaussian accelerated MD, &#39;SaMD&#39;: sigmoid accelerated MD</span>
+<span class="linenos">13</span>    <span class="n">confine</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>              <span class="c1"># If system should be confined at boundaries of the CV definition with harmonic walls.</span>
+<span class="linenos">14</span>    <span class="n">ext_sigma</span><span class="o">=</span><span class="mf">0.1</span><span class="p">,</span>             <span class="c1"># Coupling width of the extended system to CVs in units of the CV (e.g. Angstrom for distance CVs, degree for angle CVs)</span>
+<span class="linenos">15</span>    <span class="n">ext_mass</span><span class="o">=</span><span class="mi">100</span><span class="p">,</span>              <span class="c1"># The bias factor gamma, which controls the smoothing of the bias potential, Default: None</span>
+<span class="linenos">16</span>    <span class="n">nfull</span><span class="o">=</span><span class="mi">100</span><span class="p">,</span>                 <span class="c1"># Defines linear ramp for scaling up the adaptive biasing force (ABF), at `nfull` samples the full force is applied.</span>
+<span class="linenos">17</span>    <span class="n">hill_height</span><span class="o">=</span><span class="mf">1.0</span><span class="p">,</span>           <span class="c1"># Height of the Gaussian hills in kJ/mol</span>
+<span class="linenos">18</span>    <span class="n">hill_std</span><span class="o">=</span><span class="mf">0.2</span><span class="p">,</span>              <span class="c1"># Standard deviation of the Gaussian hills in units of the CV (e.g. Angstrom for distance CVs, degree for angle CVs), can also be a list of floats for 2D CVs</span>
+<span class="linenos">19</span>    <span class="n">hill_drop_freq</span><span class="o">=</span><span class="mi">100</span><span class="p">,</span>        <span class="c1"># Frequency of adding new Gaussian hills in MD</span>
+<span class="linenos">20</span>    <span class="c1">#...,                      # Additional inherited keyword arguments from the `aMD`, `WTM`, `ABF` and `EnhancedSampling` classes.</span>
+<span class="linenos">21</span><span class="p">)</span>
+</pre></div>
+</div>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="basics.html" class="btn btn-neutral float-left" title="Basic usage" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="colvars.html" class="btn btn-neutral float-right" title="Collective Variables (CVs)" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2025, MIT License.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

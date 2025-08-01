@@ -1,0 +1,394 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Compute the alanine dipeptide [\(\Phi,\Psi\)] transition using OpenMM and OPES &mdash; adaptive-sampling 3.0.1 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../_static/pygments.css?v=80d5e7a1" />
+      <link rel="stylesheet" type="text/css" href="../../_static/css/theme.css?v=e59714d7" />
+      <link rel="stylesheet" type="text/css" href="../../_static/copybutton.css?v=76b2166b" />
+      <link rel="stylesheet" type="text/css" href="../../_static/nbsphinx-code-cells.css?v=2aa19091" />
+
+  
+      <script src="../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../_static/documentation_options.js?v=08bfcbec"></script>
+      <script src="../../_static/doctools.js?v=9bcbadda"></script>
+      <script src="../../_static/sphinx_highlight.js?v=dc90522c"></script>
+      <script src="../../_static/clipboard.min.js?v=a7894cd8"></script>
+      <script src="../../_static/copybutton.js?v=f281be69"></script>
+      <script crossorigin="anonymous" integrity="sha256-Ae2Vz/4ePdIu6ZyI/5ZGsYnb+m0JlOmKPjt6XZ9JJkA=" src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.4/require.min.js"></script>
+      <script>window.MathJax = {"tex": {"inlineMath": [["$", "$"], ["\\(", "\\)"]], "processEscapes": true}, "options": {"ignoreHtmlClass": "tex2jax_ignore|mathjax_ignore|document", "processHtmlClass": "tex2jax_process|mathjax_process|math|output_area"}}</script>
+      <script defer="defer" src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+    <script src="../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../genindex.html" />
+    <link rel="search" title="Search" href="../../search.html" />
+    <link rel="next" title="Code Documentation" href="../../code.html" />
+    <link rel="prev" title="Compute the alanine dipeptide [\(\Phi,\Psi\)] transition using OpenMM and OPES-eABF" href="../alanine-dipeptide-vacuum-opeseabf/alanine-dipeptide-opeseabf-2d.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../index.html" class="icon icon-home">
+            adaptive-sampling
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="../../intro.html">Introduction</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../install.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../basics.html">Basic usage</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../sampling_tools.html">Sampling tools</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../colvars.html">Collective Variables (CVs)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../exploration_tools.html">Exploration tools</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../processing_tools.html">Processing tools</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="../../tutorials.html">Tutorials</a><ul class="current">
+<li class="toctree-l2"><a class="reference internal" href="../alanine-dipeptide-vacuum-opeseabf/alanine-dipeptide-opeseabf-2d.html">Compute the alanine dipeptide [<span class="math notranslate nohighlight">\(\Phi,\Psi\)</span>] transition using OpenMM and OPES-eABF</a></li>
+<li class="toctree-l2 current"><a class="current reference internal" href="#">Compute the alanine dipeptide [<span class="math notranslate nohighlight">\(\Phi,\Psi\)</span>] transition using OpenMM and OPES</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#Importance-sampling-of-the-[\Phi,\Psi]-plane-with-OPES">Importance sampling of the [<span class="math notranslate nohighlight">\(\Phi,\Psi\)</span>] plane with OPES</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#Analysis-of-Results">Analysis of Results</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#Visualize-the-trajectory-with-NGlView">Visualize the trajectory with NGlView</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#Trajectory-of-CVs">Trajectory of CVs</a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../../code.html">Code Documentation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../publications.html">Scientific articles using the <cite>adaptive_sampling</cite> package</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../index.html">adaptive-sampling</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../../tutorials.html">Tutorials</a></li>
+      <li class="breadcrumb-item active">Compute the alanine dipeptide [<span class="math notranslate nohighlight">\(\Phi,\Psi\)</span>] transition using OpenMM and OPES</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../../_sources/tutorials/alanine-dipeptide-vacuum-opes/alanine-dipeptide-opes-2d.ipynb.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="Compute-the-alanine-dipeptide-[\Phi,\Psi]-transition-using-OpenMM-and-OPES">
+<h1>Compute the alanine dipeptide [<span class="math notranslate nohighlight">\(\Phi,\Psi\)</span>] transition using OpenMM and OPES<a class="headerlink" href="#Compute-the-alanine-dipeptide-[\Phi,\Psi]-transition-using-OpenMM-and-OPES" title="Link to this heading"></a></h1>
+<p>In this brief tutorial, we calculate the Ramachandran [<span class="math notranslate nohighlight">\(\Phi\)</span>,<span class="math notranslate nohighlight">\(\Psi\)</span>] plot of alanine dipeptide in vacuum using the OPES method.</p>
+<p>Alanine dipeptide is a popular test system for enhanced sampling algorithms because it is a minimal example of sampling challenges that are posed by many biological systems. The slow motions of the molecule are largely governed by the <span class="math notranslate nohighlight">\(\Psi\)</span> (backbone N-C-C-N) and <span class="math notranslate nohighlight">\(\Phi\)</span> (backbone C-N-C-C) dihedrals.</p>
+<p>An interactive visualization of the alanine dipeptide molecule can be shown with nglview. Atoms involved in the [<span class="math notranslate nohighlight">\(\Phi\)</span>,<span class="math notranslate nohighlight">\(\Psi\)</span>] collective variable (CV) are shown in ball and stick representation, while other atoms are transparent.</p>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[2]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>import pytraj as pt
+import nglview as ngl
+
+traj = pt.load(&quot;../data/alanine-dipeptide.pdb&quot;, top=&#39;../data/alanine-dipeptide.prmtop&#39;)
+
+view = ngl.show_pytraj(traj)
+view.clear_representations()
+view.add_ball_and_stick(&#39;@6,8,14,16&#39;, opacity=1.0) # CV atoms of phi torsion
+view.add_ball_and_stick(&#39;@4,6,8,14&#39;, opacity=1.0)  # CV atoms of psi torsion
+#view.add_ball_and_stick(&#39;@1,4,6,8&#39;, opacity=1.0)   # CV atoms of theta torsion
+
+view.add_licorice(opacity=0.5)
+
+# uncomment for interactive visualization in a notebook
+#view
+</pre></div>
+</div>
+</div>
+<p>While the interactive visualization is not possible on the web page, this is what you should see in a notebook:</p>
+<p><img alt="image1" src="tutorials/alanine-dipeptide-vacuum-opes/nglview_snapshot.png" /></p>
+<section id="Importance-sampling-of-the-[\Phi,\Psi]-plane-with-OPES">
+<h2>Importance sampling of the [<span class="math notranslate nohighlight">\(\Phi,\Psi\)</span>] plane with OPES<a class="headerlink" href="#Importance-sampling-of-the-[\Phi,\Psi]-plane-with-OPES" title="Link to this heading"></a></h2>
+<p>Below, the OPES sampling algorithm is applied to enhance sampling in the [<span class="math notranslate nohighlight">\(\Phi,\Psi\)</span>] plane. For this purpose, an OpenMM simulation object is created using AMBER parameter and coordinate files and the OpenMM interface to the adaptive sampling package.</p>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[3]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>from sys import stdout
+import numpy as np
+
+from openmm import *
+from openmm.app import *
+from openmm.unit import *
+
+from adaptive_sampling.interface.interface_openmm import AdaptiveSamplingOpenMM
+
+# ------------------------------------------------------------------------------------
+# define collective variables
+cv_atoms_psi    = [6, 8, 14, 16]  # backbone N-C-C-N torsion
+cv_atoms_phi    = [4, 6, 8, 14]   # backbone C-N-C-C torsion
+minimum         = -180.0          # minimum of the CV
+maximum         = 180.0           # maximum of the CV
+bin_width       = 5.0             # bin width along the CV
+periodicity     = [               # define periodicity of CVs (needs to be given in radians as units are not converted)
+    [-np.pi, np.pi],
+    [-np.pi, np.pi],
+]
+
+collective_var = [
+    [&quot;torsion&quot;, cv_atoms_psi, minimum, maximum, bin_width],
+    [&quot;torsion&quot;, cv_atoms_phi, minimum, maximum, bin_width],
+]
+
+# ------------------------------------------------------------------------------------
+# Setup OpenMM
+prmtop = AmberPrmtopFile(f&quot;../data/alanine-dipeptide.prmtop&quot;)
+crd = AmberInpcrdFile(f&quot;../data/alanine-dipeptide.crd&quot;)
+system = prmtop.createSystem(
+    nonbondedMethod=NoCutoff,
+    constraints=HBonds,
+)
+
+# Initialize the `AdaptiveSamplingOpenMM` interface to couple the OpenMM simulation to a bias potential
+# The OpenMM `simulation` object is set up internally, but can still be modified by calling `the_md.simulation` or `the_md.integrator`
+the_md = AdaptiveSamplingOpenMM(
+    crd.positions,
+    prmtop.topology,
+    system,
+    dt=2.0,                                       # timestep in fs
+    equil_temp=300.0,                             # temperature of simulation
+    langevin_damping=1.0,                         # langevin damping in 1/ps
+    cv_atoms=np.unique(cv_atoms_phi+cv_atoms_psi) # specifying CV atoms significantly speeds up simulation of large systems, as the bias force will only be calculated for those
+)
+the_md.integrator.setConstraintTolerance(0.00001)
+
+# Append OpenMM reporters to simulation for output
+the_md.simulation.reporters.append(DCDReporter(&#39;alanine-dipeptide.dcd&#39;, 100))
+the_md.simulation.reporters.append(StateDataReporter(
+    stdout,
+    100,
+    step=True,
+    time=True,
+    potentialEnergy=True,
+    kineticEnergy=True,
+    totalEnergy=True,
+    temperature=True,
+    speed=False,
+    separator=&#39;\t&#39;)
+)
+</pre></div>
+</div>
+</div>
+<p>OpenMM then is provided with an instance of the <code class="docutils literal notranslate"><span class="pre">OPES</span></code> class as the bias. Although the OPES implementation let the user toggle between different variants of various features, the defaults for the corresponding settings have turned out to be sufficient for most cases. This minimizes the user input to a small set of parameters. Below is an example of an OPES instance that relies on this implementation’s defaults for efficient computation but provides the possibility to take a deeper look into
+OPES’ behaviour for the parameters, that can directly affect the simulations quality.</p>
+<ul class="simple">
+<li><p>Compare the results when providing OPES with a small initial <code class="docutils literal notranslate"><span class="pre">opes_kernel_std</span></code> in comparison to automatically estimating it to fit the starting basin.</p></li>
+<li><p>Compare the effects of different barriere heights <code class="docutils literal notranslate"><span class="pre">opes_barrier</span></code> and how limiting the OPES bias to smaller barriers than the system’s one.</p></li>
+</ul>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[4]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>from adaptive_sampling.sampling_tools.opes import OPES
+# --------------------------------------------------------------------------------------
+# Setup the sampling algorithm
+
+opes_kernel_std   = None          # kernel standard deviation
+opes_frequency    = 500           # frequency of kernel creation in MD steps
+opes_barrier      = 50.0          # Barrier parameter in kJ/mol
+
+the_bias = OPES(
+    the_md,
+    collective_var,               # collective variable
+    # OPES parameters
+    kernel_std   = opes_kernel_std,
+    update_freq  = opes_frequency,
+    energy_barr  = opes_barrier,
+
+    # general parameters
+    output_freq  = 1000,             # frequency of writing outputs
+    f_conf       = 0.0,               # confinement force of CV at boundaries
+    equil_temp   = 300.0,             # equilibrium temperature of simulation
+    periodicity  = periodicity,      # periodicity of CVs
+    verbose      = True,                 # print verbose output
+)
+the_md.set_sampling_algorithm(the_bias) # to take effect the sampling algorithm has to be set in the MD interface
+</pre></div>
+</div>
+</div>
+<div class="nboutput docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+
+ &gt;&gt;&gt; INFO: Initialize torsion as collective variable:
+         Minimum0:      -180.0 Degree
+         Maximum0:      180.0 Degree
+         Bin width0:    5.0 Degree
+
+ &gt;&gt;&gt; INFO: Initialize torsion as collective variable:
+         Minimum1:      -180.0 Degree
+         Maximum1:      180.0 Degree
+         Bin width1:    5.0 Degree
+        ----------------------------------------------
+         Total number of bins:          5184
+
+ &gt;&gt;&gt; INFO: OPES Parameters:
+         ---------------------------------------------
+         Kernel_std:    estimate from 5000 steps
+         Rescaling:     True
+         Adaptive:      False   (5000 steps)
+         Normalize:     True    (approximated: True)
+         Explore:       False
+         Barrier:       11.9503 kcal/mol
+         Bias factor:   20.045403709021212
+         Read force:    True
+         Kernel merge:  True    (threshold: 1.0)
+         ---------------------------------------------
+</pre></div></div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area stderr docutils container">
+<div class="highlight"><pre>
+&gt;&gt;&gt; adaptive-sampling: Module &#39;ase&#39; not found, will not import &#39;FENEB&#39;
+/home/robert/Bachelor_Thesis/Code/adaptive_sampling/adaptive_sampling/colvars/colvars.py:215: UserWarning: Using torch.cross without specifying the dim arg is deprecated.
+Please either pass the dim explicitly or simply use torch.linalg.cross.
+The default value of dim will change to agree with that of linalg.cross in a future release. (Triggered internally at /opt/conda/conda-bld/pytorch_1720538438750/work/aten/src/ATen/native/Cross.cpp:62.)
+  self.cv = torch.atan2(torch.dot(torch.cross(q23_u, n1), n2), torch.dot(n1, n2))
+</pre></div></div>
+</div>
+<div class="nbinput docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[8]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span># WARNING: For long simulations, this can become expensive, and it is recommended to perform the computation on an HPC cluster.
+if os.path.isfile(&#39;CV_traj.dat&#39;):
+    os.system(&quot;rm CV_traj.dat opeseabf.out&quot;)
+the_md.run(nsteps=1000) # 500000 * 2 fs = 1 ns
+</pre></div>
+</div>
+</div>
+<div class="nboutput nblast docutils container">
+<div class="prompt empty docutils container">
+</div>
+<div class="output_area docutils container">
+<div class="highlight"><pre>
+1100    2.1999999999999793      -77.484027451166        70.72776178943762       -6.756265661728378      333.5919402869253
+1200    2.3999999999999573      -63.594587427905225     51.409461789394186      -12.185125638511039     242.4759623878226
+1300    2.5999999999999353      -70.42487310290143      53.21313727800854       -17.21173582489289      250.9831113583515
+1400    2.7999999999999132      -52.20514107819585      50.758430490201945      -1.4467105879939055     239.40533228741566
+1500    2.999999999999891       -52.521335364644656     55.41707830529658       2.895742940651921       261.3781379358894
+1600    3.199999999999869       -49.08489702289795      62.4755462465003        13.390649223602352      294.66984626067983
+1700    3.399999999999847       -46.31697749196262      59.84464743883469       13.527669946872074      282.26104643805064
+1800    3.599999999999825       -55.343389270210565     71.54269934628653       16.19931007607596       337.43564456829716
+1900    3.799999999999803       -59.52420207082332      75.13378924961816       15.60958717879484       354.37324613080114
+2000    3.999999999999781       -60.86357611569707      48.45052394606737       -12.413052169629701     228.51994580578491
+</pre></div></div>
+</div>
+</section>
+<section id="Analysis-of-Results">
+<h2>Analysis of Results<a class="headerlink" href="#Analysis-of-Results" title="Link to this heading"></a></h2>
+<section id="Visualize-the-trajectory-with-NGlView">
+<h3>Visualize the trajectory with NGlView<a class="headerlink" href="#Visualize-the-trajectory-with-NGlView" title="Link to this heading"></a></h3>
+<p>The following will create an interactive visualization of the trajectory:</p>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[10]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>path = &#39;.&#39;
+traj = pt.iterload(f&quot;{path}/alanine-dipeptide.dcd&quot;, top=&quot;../data/alanine-dipeptide.pdb&quot;)
+
+view = ngl.show_pytraj(traj)
+view.clear_representations()
+view.add_ball_and_stick(&#39;@6,8,14,16&#39;, opacity=1.0) # CV atoms of phi torsion
+view.add_ball_and_stick(&#39;@4,6,8,14&#39;, opacity=1.0)  # CV atoms of psi torsion
+#view.add_ball_and_stick(&#39;@1,4,6,8&#39;, opacity=1.0)   # CV atoms of theta torsion
+
+view.add_licorice(opacity=0.5)
+#view
+</pre></div>
+</div>
+</div>
+</section>
+<section id="Trajectory-of-CVs">
+<h3>Trajectory of CVs<a class="headerlink" href="#Trajectory-of-CVs" title="Link to this heading"></a></h3>
+<p>All important information for post/processing of the trajectory is stored in <code class="docutils literal notranslate"><span class="pre">CV_traj.dat</span></code>.</p>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[11]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>cv_traj = np.loadtxt(f&#39;{path}/CV_traj.dat&#39;, skiprows=1)
+cv_phi = cv_traj[:,1] # Phi trajectory (first CV)
+cv_psi = cv_traj[:,2] # Psi trajectory (second CV))
+</pre></div>
+</div>
+</div>
+<div class="nbinput nblast docutils container">
+<div class="prompt highlight-none notranslate"><div class="highlight"><pre><span></span>[ ]:
+</pre></div>
+</div>
+<div class="input_area highlight-ipython3 notranslate"><div class="highlight"><pre><span></span>
+</pre></div>
+</div>
+</div>
+</section>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="../alanine-dipeptide-vacuum-opeseabf/alanine-dipeptide-opeseabf-2d.html" class="btn btn-neutral float-left" title="Compute the alanine dipeptide [\(\Phi,\Psi\)] transition using OpenMM and OPES-eABF" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="../../code.html" class="btn btn-neutral float-right" title="Code Documentation" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2025, MIT License.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>
