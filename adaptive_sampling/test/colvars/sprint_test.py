@@ -3,13 +3,13 @@ import torch
 from math import isclose
 
 from adaptive_sampling.colvars.graph_cv import GRAPH_CV
-
+from adaptive_sampling import units
 
 def test_sprint_A_matrix():
 
     the_sprint = GRAPH_CV(
         atom_indices=[0, 1, 2, 3],
-        atom_types=["C", "C", "C", "C"],
+        atom_types=["H", "H", "H", "H"],
         N=30,
         requires_grad=False,
         parallel=False,
@@ -22,7 +22,7 @@ def test_sprint_A_matrix():
             [3.0, 0.0, 0.0],
             [4.5, 0.0, 0.0],
         ]
-    )
+    ) / units.BOHR_to_ANGSTROM
 
     _ = the_sprint.calc(z)
     A = torch.tensor(
@@ -33,6 +33,7 @@ def test_sprint_A_matrix():
             [0.0, 0.0, 1.0, 0.0],
         ]
     )
+    print(A, the_sprint.A)
     assert torch.allclose(the_sprint.A, A, atol=0.1)
 
 
@@ -53,7 +54,7 @@ def test_sprint_cv():
             [3.0, 0.0, 0.0],
             [4.5, 0.0, 0.0],
         ]
-    )
+    ) / units.BOHR_to_ANGSTROM
 
     cv = the_sprint.calc(z)
     assert isclose(float(cv), 1.875, abs_tol=1e-2)
@@ -76,7 +77,7 @@ def test_sprint_grad():
             [4.0, 0.0, 0.0],
             [6.0, 0.0, 0.0],
         ]
-    )
+    ) / units.BOHR_to_ANGSTROM
 
     _ = the_sprint.calc(z)
 
@@ -109,7 +110,7 @@ def test_sprint_A_matrix_parallel():
             [3.0, 0.0, 0.0],
             [4.5, 0.0, 0.0],
         ]
-    )
+    ) / units.BOHR_to_ANGSTROM
 
     _ = the_sprint.calc(z)
     A = torch.tensor(

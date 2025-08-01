@@ -255,7 +255,7 @@ class CV:
             elif cv[0].lower() == "torsion":
                 x = self.torsion(cv[2])
 
-            elif cv[0].lower() == "coordination_number":
+            elif cv[0].lower() == "switching_function":
                 x = self.coordination_number(cv[2])
 
             else:
@@ -293,10 +293,12 @@ class CV:
                 "CV ERROR: Invalid number of centers in definition of distance!"
             )
 
-        r_0 /= BOHR_to_ANGSTROM
-
         p1 = self._get_com(cv_def[0])
         p2 = self._get_com(cv_def[1])
+        r_0 = cv_def[2] if len(cv_def) > 2 else r_0 # switching distance in Angstrom
+        r_0 /= BOHR_to_ANGSTROM # convert to Bohr
+        n = cv_def[3] if len(cv_def) > 3 else 6     # exponent nominator
+        m = cv_def[4] if len(cv_def) > 4 else 12    # exponent denominator
 
         # get distance
         r12 = p2 - p1
@@ -307,7 +309,7 @@ class CV:
         else:
             d = norm / r_0
 
-        self.cv = (1.0 - torch.pow(d, 6)) / (1.0 - torch.pow(d, 12))
+        self.cv = (1.0 - torch.pow(d, n)) / (1.0 - torch.pow(d, m))
 
         # get forces
         if self.requires_grad:
@@ -358,7 +360,7 @@ class CV:
         return float(self.cv)
 
     def distance_min(self, cv_def: list) -> float:
-        """distorted distance between two mass centers in range(0, inf) mapped to range(1,0)
+        """Minimum of a list of distances
 
         Args:
             cv_def (list):
@@ -368,9 +370,6 @@ class CV:
             distorted distance (float): computed distance
         """
         self.update_coords()
-
-        p1 = self._get_com(cv_def[0])
-        p2 = self._get_com(cv_def[1])
 
         # get distances
         dists = []
@@ -719,7 +718,7 @@ class CV:
         elif cv.lower() == "linear_combination":
             xi = self.linear_combination(atoms)
             self.type = None
-        elif cv.lower() == "distorted_distance":
+        elif cv.lower() == "switching_function":
             xi = self.distorted_distance(atoms, **kwargs)
             self.type = None
         elif cv.lower() == "coordination_number":

@@ -521,10 +521,13 @@ class PathCV:
 
     def _calc_lambda(self):
         """get lambda parameter for smoothing of arithmetic path"""
-        sumlen = 0.0
-        for i, coords in enumerate(self.path[1:]):
-            sumlen += self.get_distance(coords, self.path[i], metric=self.metric)
-        return 1.0 / (sumlen / (self.nnodes - 1))
+        #sumlen = 0.0
+        #for i, coords in enumerate(self.path[1:]):
+            #sumlen += self.get_distance(coords, self.path[i], metric=self.metric, periodicity=self.periodicity)
+        #return 1. / (sumlen / (self.nnodes-1))
+        return 1.0 / self.get_distance(
+            self.path[1], self.path[0], metric=self.metric, periodicity=self.periodicity
+            )
 
     def _get_distance_to_path(self, z: torch.tensor) -> list:
         """Calculates distance according to chosen metric

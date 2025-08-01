@@ -39,7 +39,7 @@ class OPES(EnhancedSampling):
         self,
         *args,
         kernel_std: np.array = None,
-        update_freq: int = 500,
+        update_freq: int = 100,
         energy_barr: float = 30.0 / 0.239006,  # 30 kcal/mol
         bandwidth_rescaling: bool = True,
         adaptive_std: bool = False,

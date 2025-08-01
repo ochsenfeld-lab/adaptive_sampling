@@ -125,7 +125,7 @@ def get_msd(
         V = V[indices]
         W = W[indices]
     d = diff_periodic(V, W, periodicity=periodicity)
-    return torch.sum(d * d) / len(V)
+    return torch.mean(d * d)
 
 
 def kabsch_rmsd(

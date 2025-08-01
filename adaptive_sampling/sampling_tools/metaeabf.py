@@ -36,6 +36,7 @@ class WTMeABF(eABF, WTM, EnhancedSampling):
         bias_factor: bias factor for WTM, if not None, overwrites `well_tempered_temp`
         force_from_grid: forces are accumulated on grid for performance (recommended),
                          if False, forces are calculated from sum of Gaussians in every step
+        enable_abf: if the ABF bias should be applied to the extended system
         equil_temp: equilibrium temperature of MD
         verbose: print verbose information
         kinetic: calculate necessary data to obtain kinetics of reaction
