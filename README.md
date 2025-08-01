@@ -2,6 +2,10 @@ Adaptive Sampling
 =================
 
 This package implements various sampling algorithms for the calculation of free energy profiles of molecular transitions. 
+
+## Documentation:
+Visit the full documentation at [https://ochsenfeld-lab.github.io/adaptive_sampling/](https://ochsenfeld-lab.github.io/adaptive_sampling/).
+
 ## Available Sampling Methods Include:
 *	Adaptive Biasing Force (ABF) method [1] 
 	
@@ -37,9 +41,6 @@ To install adaptive_sampling type:
 $ pip install git+https://github.com/ochsenfeld-lab/adaptive_sampling.git
 ```
 WARNING: The package version that can be installed from PyPI using `pip install adaptive_sampling` is outdated and no longer supported.
-
-## Documentation:
-Visit the full documentation at [https://ochsenfeld-lab.github.io/adaptive_sampling/](https://ochsenfeld-lab.github.io/adaptive_sampling/).
 
 ## References:
 1.  Comer et al., J. Phys. Chem. B (2015); <https://doi.org/10.1021/jp506633n> 
