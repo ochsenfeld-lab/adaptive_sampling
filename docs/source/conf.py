@@ -25,7 +25,6 @@ extensions = [
     "sphinx.ext.viewcode", 
     "sphinx.ext.autodoc",
     "sphinx_copybutton",
-    "sphinx-prompt",
     "nbsphinx",
 ]
 
