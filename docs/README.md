@@ -1,7 +1,8 @@
 Build the Documentation:
 =========================
 
-To create the documentation install the sphinx package, the read-the-docs theme and sphinx extensions:
+Make sure that the [pandoc](https://pandoc.org/installing.html) package is installed on your system. 
+To create the documentation install the sphinx package, the read-the-docs theme and other sphinx extensions:
 ```
 $ pip install sphinx sphinx-rtd-theme sphinx-prompt sphinx-copybutton
 ```

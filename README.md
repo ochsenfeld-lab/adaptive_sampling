@@ -36,7 +36,7 @@ To install adaptive_sampling type:
 ```shell
 $ pip install git+https://github.com/ochsenfeld-lab/adaptive_sampling.git
 ```
-
+WARNING: The package version that can be installed from PyPI using `pip install adaptive_sampling` is outdated and no longer supported.
 
 ## Requirements:
 * python >= 3.8

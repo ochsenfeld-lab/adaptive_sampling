@@ -47,7 +47,7 @@ A fast estimate of the PMF can be obtained from thermodynamic integration using 
     )
 
 Unbiased statistical weights of data frames can be obtained from the MBAR estimator as described `here <https://doi.org/10.1063/5.0095554>`_.
-For this purpose the continuous trajectory of CVs and :math:`\lambda`s is transformed into static simulation windows, to which the MBAR estimator is applied:
+For this purpose the continuous trajectories of CVs and :math:`\lambda`'s are transformed into static simulation windows, to which the MBAR estimator is applied:
 
 .. code-block:: python
     :linenos:
