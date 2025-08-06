@@ -1,19 +1,24 @@
 import ase
-from ase.io import read
+from ase.io import read, write
 from ase.units import Bohr, Hartree
 
 import glob
 from sella import Sella
 
+import pyGSM
 from pyGSM.utilities import manage_xyz, elements
 from pyGSM.coordinate_systems import MyG, Topology
+
+import networkx as nx
 
 import subprocess as sp
 import os
 import shutil
 import re
 
+# general opt method for all working ASE calculators
 def sella_opt(calculator: ase.calculators, mol_file: str, order: int, fmax: float=1e-3, nsteps: float=1e3):
+
     charge = 0
     mult = 1
     # Read charge and multiplicity from the extracted pattern
@@ -28,10 +33,10 @@ def sella_opt(calculator: ase.calculators, mol_file: str, order: int, fmax: floa
 
     opt = Sella(
         mol,
-        internal=True,                    # use internal coordinates
+        internal=True,                 # use internal coordinates
         trajectory=f"optimizer_{mol_file}.traj",  # trajectory file, if exists steps will be appended 
-        order=order,                      # 0: Minimum, 1: Transition state
-        logfile=f"logfile_{mol_file}",
+        order=order,                   # 0: Minimum, 1: Transition state
+        logfile=None,#f"logfile_{mol_file}",
     )
     opt.run(fmax=fmax, steps=nsteps)
     print('Opt done!')
@@ -58,8 +63,8 @@ def find_minima():
         if not d.startswith('PAT') or not os.path.isdir(d):
             continue
 
-        start_path = os.path.join(d, 'start_opt/freq_analyt/vibfreqs.out')
-        end_path = os.path.join(d, 'end_opt/freq_analyt/vibfreqs.out')
+        start_path = os.path.join(d, 'start_opt/orca.out')
+        end_path = os.path.join(d, 'end_opt/orca.out')
 
         start_count = confirm_freq(start_path)
         end_count = confirm_freq(end_path)
@@ -68,11 +73,9 @@ def find_minima():
             print(f"Moving {d} to MIN_FOUND/")
             shutil.move(d, os.path.join("MIN_FOUND", d))
 
-def find_viable_rcts():
+def find_viable_rcts(min_threshold: float=0.001, max_threshold: float=50.0):
     
     # Thresholds
-    min_threshold = 0.001
-    max_threshold = 50.0
     count = 0
 
     # Source files to copy into ts_opt/
@@ -88,7 +91,8 @@ def find_viable_rcts():
         if not d.startswith("PAT") or not os.path.isdir(d):
             continue
 
-        log_path = os.path.join(d, "log")
+        log_path = os.path.join(d, "logfile")
+        print(log_path)
         if not os.path.isfile(log_path):
             continue
 
@@ -97,10 +101,12 @@ def find_viable_rcts():
 
         if "Finished GSM!" in log_text and "Ran out of iterations" not in log_text:
             # Extract energy from line like: "TS energy <value>"
-            match = re.search(r'TS energy\s+([-+]?\d*\.?\d+(?:[eE][-+]?\d+)?)', log_text)
+            match = re.search(r' TS energy:\s+([0-9.]+)', log_text)
+            print(match)
             if match:
                 try:
                     energy = float(match.group(1))
+                    print(energy)
                 except ValueError:
                     continue
 
@@ -129,8 +135,37 @@ def find_viable_rcts():
 
     print(f"Total matching directories: {count}")
 
+def convert_geom_rm_X(input_file):
+    mol = read(input_file, index=":") 
+    write(f"{input_file[:-5]}", mol[-1], format='xyz')
+    natoms = 0
 
-def rearrange_top(raw_input_file: str, gsm_input_file: str):
+    with open(f"{input_file[:-5]}", "r") as xyzr:
+        with open('tmp.txt', "w") as xyzw:
+            lines = iter(xyzr)
+            for i, line in enumerate(lines):
+                words = line.strip().split()
+                if i == 0:
+                    xyzw.write(line)
+                elif len(words) == 0:
+                    xyzw.write(line)
+                elif words[0] != 'X':
+                    natoms += 1
+                    xyzw.write(line)
+
+    with open('tmp.txt', "r") as xyzr:
+        with open('tmp2.txt', "w") as xyzw:
+            lines = iter(xyzr)
+            for i, line in enumerate(lines):
+                if i == 0:
+                    xyzw.write(f"{natoms}\n")
+                else:
+                    xyzw.write(line)
+
+    os.replace('tmp2.txt', f"{input_file[:-5]}")
+
+
+def rearrange_top(raw_input_file: str):#, gsm_input_file: str):
     geoms = manage_xyz.read_xyzs(raw_input_file)
 
     # Build the topology
@@ -190,12 +225,12 @@ def rearrange_top(raw_input_file: str, gsm_input_file: str):
     reordered_lines = [lines[i] for i in new_order]
 
     # Write reordered lines to the output file
-    with open(gsm_input_file, 'w') as f:
+    with open(f"reordered_{raw_input_file}", 'w') as f:
         f.writelines(reordered_lines)
 
     return
 
-def de_gsm(add_args_file: str, out_file:str):
+def de_gsm(add_args_file: str, out_file:str, index: int=0):
     charge = 0
     mult = 1
     # Read charge and multiplicity from the extracted pattern
@@ -213,24 +248,27 @@ def de_gsm(add_args_file: str, out_file:str):
     import shlex
     with open(add_args_file, 'r') as f:
         add_args = shlex.split(f.read())
-
+        f.close()
     # Here, we will use the provided gsm binary from pyGSM
-    #with open(add_args_file, "r") as input:
+    os.environ["PBS_JOBID"] = str(index)
 
-    #from ase.calculators.orca import OrcaProfile
-    #import json
-    #profile = OrcaProfile(command='which orca')
-    #print(profile)
-    #json_dict = json.dumps({"profile": f"{profile}", "orcasimpleinput": "HF STO-3G"})
-    #json_dict = json.dumps({"orcasimpleinput": "HF STO-3G"})
-    #print(json_dict)
     with open(out_file, "a+") as f:
-        sp.run(args=["gsm", "-mode", "DE_GSM", "-charge", f"{charge}", "-multiplicity", f"{mult}"] +  add_args, stdout=f)
-    #with open(out_file, "a+") as f:
-    #    sp.run(args=["gsm", "-mode", "DE_GSM", "-charge", f"{charge}", "-multiplicity", f"{mult}", "-package", "ase", "--ase-class", "ase.calculators.orca.ORCA", "--ase-kwargs", f"{json_dict}"] +  add_args, stdout=f)
+        sp.run(args=["gsm", "-xyzfile", "reordered_init_geom.xyz", "-mode", "DE_GSM", "-charge", f"{charge}", "-multiplicity", f"{mult}"] +  add_args, stdout=f)
+
+    shutil.rmtree("/tmp/0")
+    shutil.rmtree("scratch")
 
     return
 
+def ase_freq(calculator: ase.calculators, mol_file: str):
+    mol = read(mol_file)
+    mol.calc = calculator
+
+    mol.get_potential_energy()
+
+    return
+
+# additional functions
 def orca_calc(inp_file: str, temp: float, out_file="orca.out"):
     # here do evth with ORCA in this case
     # call ORCA do to freq analysis on an already opt structure
@@ -238,6 +276,10 @@ def orca_calc(inp_file: str, temp: float, out_file="orca.out"):
         sp.run(args=["orca", inp_file], stdout=f)
 
     return
+
+
+
+
 
 
 
