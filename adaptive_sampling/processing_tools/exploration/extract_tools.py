@@ -160,15 +160,15 @@ def extract_reactions(root_dir: str,  patterns: list, rct_indices: list):
                                         break
                                 if found and not iso:
                                     get_reaction_traj(traj_file, df_file, reaction_file, event_group, 
-                                    f"{root_dir}/extracted_missing/pattern{i_pattern}_traj_sim{index_sim}")
+                                    f"{root_dir}/extracted/pattern{i_pattern}_traj_sim{index_sim}")
 
                                 else: # this is the case where (found is True, but isomerization)
                                     for _, event in enumerate(event_group):
                                         get_reaction_traj(traj_file, df_file, reaction_file, [event], 
-                                        f"{root_dir}/extracted_missing/pattern{i_pattern}_traj_sim{index_sim}")
+                                        f"{root_dir}/extracted/pattern{i_pattern}_traj_sim{index_sim}")
                             else:
                                 get_reaction_traj(traj_file, df_file, reaction_file, event_group, 
-                                f"{root_dir}/extracted_missing/pattern{i_pattern}_traj_sim{index_sim}")
+                                f"{root_dir}/extracted/pattern{i_pattern}_traj_sim{index_sim}")
                                 
     print("DONE!")
 
