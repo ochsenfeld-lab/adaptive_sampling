@@ -1,15 +1,13 @@
-import os
 import json
 from ast import literal_eval
 from .read_write_utils import get_reaction_traj, read_reaction_list
 import networkx as nx
 import numpy as np
 from itertools import product
-
-def absoluteFilePaths(directory):
-    for dirpath,_,filenames in os.walk(directory):
-        for f in sorted(filenames):
-            yield os.path.abspath(os.path.join(dirpath, f))
+from .utils import absoluteFilePaths
+import os
+from pathlib import Path
+import shutil
 
 def get_reaction_patterns(pattern_json: str, freq_threshold: int = 25):
     
@@ -96,6 +94,17 @@ def check_if_whole_pattern(pattern: list, reaction_collection: list) -> bool:
     return check_is_subset
 
 def extract_reactions(root_dir: str,  patterns: list, rct_indices: list):
+    if not os.path.isdir("extracted"):
+        print(f"Creating directory: extracted")
+        os.makedirs("extracted", exist_ok=True)
+    else:
+        print(f"Directory already exists: extracted")
+
+
+    if not os.path.isdir("reactions_lists") or not os.path.isdir("dfs") or not os.path.isdir("trajs"):
+        print("Please move the reactions lists to a directory named reactions_lists before starting and make sure that dfs/ and trajs/ are available in this folder!")
+        return
+
     for reaction_file in absoluteFilePaths(f"{root_dir}/reactions_lists/"):
         reaction_list = read_reaction_list(reaction_file)   
         index_sim = reaction_file[-8:-5]
@@ -169,7 +178,25 @@ def extract_reactions(root_dir: str,  patterns: list, rct_indices: list):
                             else:
                                 get_reaction_traj(traj_file, df_file, reaction_file, event_group, 
                                 f"{root_dir}/extracted/pattern{i_pattern}_traj_sim{index_sim}")
-                                
+
+    os.chdir("extracted/")
+    extracted_dir = Path(os.getcwd())
+    for txt_file in extracted_dir.glob("*.txt"):
+        base = txt_file.stem  # filename without extension
+        xyz_file = extracted_dir / f"{base}.xyz"
+
+        # create unique folder for this pair
+        target_dir = extracted_dir / base
+        target_dir.mkdir(exist_ok=True)
+
+        # rename txt with prefix
+        new_txt_name = f"charge_mult_{txt_file.name}"
+        shutil.move(str(txt_file), target_dir / new_txt_name)
+
+        # move xyz if it exists
+        if xyz_file.exists():
+            shutil.move(str(xyz_file), target_dir / xyz_file.name)
+
     print("DONE!")
 
 def find_conn_events(event_list, atomic_indices):
@@ -192,7 +219,7 @@ def find_conn_events(event_list, atomic_indices):
 
     return event_groups, atomic_indices_groups
 
-def extract_first_last_structure(input_file, first_output, last_output):
+def extract_reactant_product(input_file, first_output, last_output):
 
     with open(input_file, "r") as f:
         lines = f.readlines()

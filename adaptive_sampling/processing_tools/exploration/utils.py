@@ -4,6 +4,7 @@ import json
 import pandas as pd
 import numpy as np
 from typing import Tuple
+import os
 
 # list of element symbols
 global __elements__
@@ -532,3 +533,9 @@ def construct_reactions_list(
         json.dump(reactions_list, fp)
 
     return reactions_list
+
+def absoluteFilePaths(directory):
+    for dirpath,_,filenames in os.walk(directory):
+        for f in sorted(filenames):
+            yield os.path.abspath(os.path.join(dirpath, f))
+

@@ -60,7 +60,8 @@ def find_minima():
     os.makedirs("MIN_FOUND", exist_ok=True)
 
     for d in os.listdir('.'):
-        if not d.startswith('PAT') or not os.path.isdir(d):
+        print(d)
+        if not d.startswith('pattern') or not os.path.isdir(d):
             continue
 
         start_path = os.path.join(d, 'start_opt/orca.out')
@@ -88,10 +89,10 @@ def find_viable_rcts(min_threshold: float=0.001, max_threshold: float=50.0):
     os.makedirs("VIABLE_RCTS", exist_ok=True)
 
     for d in os.listdir('.'):
-        if not d.startswith("PAT") or not os.path.isdir(d):
+        if not d.startswith("pattern") or not os.path.isdir(d):
             continue
 
-        log_path = os.path.join(d, "logfile")
+        log_path = os.path.join(d, "log")
         print(log_path)
         if not os.path.isfile(log_path):
             continue
@@ -102,7 +103,7 @@ def find_viable_rcts(min_threshold: float=0.001, max_threshold: float=50.0):
         if "Finished GSM!" in log_text and "Ran out of iterations" not in log_text:
             # Extract energy from line like: "TS energy <value>"
             match = re.search(r' TS energy:\s+([0-9.]+)', log_text)
-            print(match)
+            #print(match)
             if match:
                 try:
                     energy = float(match.group(1))
@@ -164,7 +165,6 @@ def convert_geom_rm_X(input_file):
 
     os.replace('tmp2.txt', f"{input_file[:-5]}")
 
-
 def rearrange_top(raw_input_file: str):#, gsm_input_file: str):
     geoms = manage_xyz.read_xyzs(raw_input_file)
 
@@ -225,7 +225,7 @@ def rearrange_top(raw_input_file: str):#, gsm_input_file: str):
     reordered_lines = [lines[i] for i in new_order]
 
     # Write reordered lines to the output file
-    with open(f"reordered_{raw_input_file}", 'w') as f:
+    with open(f"reordered_init_geom.xyz", 'w') as f:
         f.writelines(reordered_lines)
 
     return
@@ -244,7 +244,6 @@ def de_gsm(add_args_file: str, out_file:str, index: int=0):
     print(f"Charge: {charge}")
     print(f"Multiplicity: {mult}")
 
-
     import shlex
     with open(add_args_file, 'r') as f:
         add_args = shlex.split(f.read())
@@ -255,12 +254,12 @@ def de_gsm(add_args_file: str, out_file:str, index: int=0):
     with open(out_file, "a+") as f:
         sp.run(args=["gsm", "-xyzfile", "reordered_init_geom.xyz", "-mode", "DE_GSM", "-charge", f"{charge}", "-multiplicity", f"{mult}"] +  add_args, stdout=f)
 
-    shutil.rmtree("/tmp/0")
+    shutil.rmtree(f"/tmp/{index}")
     shutil.rmtree("scratch")
 
     return
 
-def ase_freq(calculator: ase.calculators, mol_file: str):
+def ase_calc(calculator: ase.calculators, mol_file: str):
     mol = read(mol_file)
     mol.calc = calculator
 
