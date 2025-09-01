@@ -3,7 +3,24 @@ from .reactor import Reactor
 from ..units import *
 
 class Nanoreactor(Reactor):
-
+    """ Nanoreactor class for exploratory simulations. Inherits from the Reactor class.
+    Implements a spherical confinement potential with time-dependent radius and a
+    elevated temperature to enhance sampling of reaction events.
+    
+    see:
+        Stan et. al., J. Chem. Theory Comput. 18, 6700 (2022); https://doi.org/10.1021/acs.jctc.2c00754
+        
+    Args:
+        boost_temperature : float
+            Elevated temperature for the nanoreactor simulation (in Kelvin).
+        t_total : float
+            Total period of the confinement potential oscillation (in femtoseconds).
+        k_conf : float
+            Force constant for the confinement potential (in kcal/(mol A^2)).
+        confinement_method : str
+            Method for confinement potential variation. Options are "step", "smooth-step", or "smooth".
+        Other parameters are inherited from the Reactor class.
+    """
     def __init__(
         self,
         boost_temperature: float,

@@ -8,9 +8,21 @@ from .utils import absoluteFilePaths
 import os
 from pathlib import Path
 import shutil
+from typing import Tuple
 
-def get_reaction_patterns(pattern_json: str, freq_threshold: int = 25):
-    
+def get_reaction_patterns(
+    pattern_json: str,
+    freq_threshold: int = 25
+) -> Tuple[list, dict, list, dict, list]:
+    """Helper function to read reaction patterns from a JSON file and filter them based on frequency.
+
+    Args:
+        pattern_json: Path to the JSON file containing reaction patterns and their frequencies.
+        freq_threshold: Minimum frequency for a pattern to be included in the output.
+
+    Returns:
+        -
+    """
     with open(pattern_json, 'r') as file:
         data = json.load(file)
     
@@ -53,7 +65,19 @@ def get_reaction_patterns(pattern_json: str, freq_threshold: int = 25):
 
     return small_rxn_set, small_rxn_dict, complete_rxn_set, rxn_freq_dict, pattern_indices
 
-def search_pattern(pattern: str, patterns_list: list):
+def search_pattern(
+    pattern: str, 
+    patterns_list: list
+) -> Tuple[int, bool]:
+    """Search for a specific reaction pattern in a list of patterns.
+    
+    Args:
+        pattern: The reaction pattern to search for, represented as a string.
+        patterns_list: A list of reaction patterns, where each pattern is a list of reactions.
+    
+    Returns:
+        A tuple containing the index of the found pattern and a boolean indicating if it was found.
+    """
     found = False
     index = -1
     rct = literal_eval(pattern)
@@ -67,7 +91,19 @@ def search_pattern(pattern: str, patterns_list: list):
                 pass
     return index,found
 
-def check_if_whole_pattern(pattern: list, reaction_collection: list) -> bool:
+def check_if_whole_pattern(
+    pattern: list, 
+    reaction_collection: list
+)-> bool:
+    """Check if all reactions in a given pattern are present in a collection of reactions.
+    
+    Args:
+        pattern: A list of reactions, where each reaction is represented as a list containing reactants and products.
+        reaction_collection: A list of reactions to check against, formatted similarly to the pattern.
+
+    Returns:
+        A boolean indicating whether all reactions in the pattern are found in the reaction collection.
+    """
     check_is_subset = False
     reactions_pattern = []
     for i_reaction, reaction in enumerate(pattern):
@@ -82,9 +118,6 @@ def check_if_whole_pattern(pattern: list, reaction_collection: list) -> bool:
         reactants.sort()
         products.sort()
         reactions_pattern.append([reactants,products])
-    #print(reactions_pattern)
-
-    #reactions_pattern = [[reaction[0], reaction[1]] for i_reaction, reaction in enumerate(pattern)]
 
     if all(element in reaction_collection for element in reactions_pattern):
         check_is_subset = True
@@ -93,7 +126,21 @@ def check_if_whole_pattern(pattern: list, reaction_collection: list) -> bool:
     
     return check_is_subset
 
-def extract_reactions(root_dir: str,  patterns: list, rct_indices: list):
+def extract_reactions(
+    root_dir: str,
+    patterns: list, 
+    rct_indices: list
+) -> None:
+    """Extracts reaction trajectories based on specified reaction patterns from simulation data.
+    
+    Args:
+        root_dir: The root directory containing subdirectories with the reaction lists, dataframes, and trajectories.
+        patterns: A list of reaction patterns to search for.
+        rct_indices: Indices of the reaction patterns to be extracted.
+        
+    Returns:
+        None
+    """
     if not os.path.isdir("extracted"):
         print(f"Creating directory: extracted")
         os.makedirs("extracted", exist_ok=True)
@@ -118,12 +165,10 @@ def extract_reactions(root_dir: str,  patterns: list, rct_indices: list):
                                                                           # to make sure we find the patterns and 
                                                                           # match them
             for i_pattern in rct_indices:
-                #print(f"Pattern: {i_pattern}")
                 pattern = patterns[i_pattern]
                 event_pattern_list = []
                 atomic_indices = []
                 if check_if_whole_pattern(pattern, reaction_collection):
-                    #print("yay")
                     for i_reaction, reaction in enumerate(pattern):
                         reactants = []
                         for i_react, coeff in enumerate(reaction[2]):
@@ -137,7 +182,6 @@ def extract_reactions(root_dir: str,  patterns: list, rct_indices: list):
                         products.sort()
                         event_indices = [i + 1 for i, elem in enumerate(reaction_collection) if 
                                           [reactants, products] == elem]
-                        #for event_elem in event_indices:
                         event_pattern_list.append(event_indices)
 
                     event_collection = list(product(*event_pattern_list))
@@ -146,10 +190,8 @@ def extract_reactions(root_dir: str,  patterns: list, rct_indices: list):
                     event_collection = [list(tup) for tup in event_collection]
 
                     for event_list in event_collection:
-                        #print("Events: " + str(event_list))
                         atomic_indices = []
                         for event in event_list:
-                            #print(reaction_list[event - 1])
                             atomic_indices.append(set(reaction_list[event - 1][4]))
 
                         event_groups, atomic_indices_groups = find_conn_events(event_list, atomic_indices)
@@ -199,11 +241,22 @@ def extract_reactions(root_dir: str,  patterns: list, rct_indices: list):
 
     print("DONE!")
 
-def find_conn_events(event_list, atomic_indices):
+def find_conn_events(
+    event_list: list,
+    atomic_indices: list
+) -> Tuple[list, list]:
+    """Find connected events based on shared atomic indices.
+
+    Args:
+        event_list: A list of events, where each event is represented by its index.
+        atomic_indices: A list of sets, where each set contains atomic indices involved in the corresponding event.
+    Returns:
+        A tuple containing:
+            - A list of groups of events that share atomic indices.
+            - A list of groups of atomic indices corresponding to the event groups.
+    """
     # Create a graph to find events sharing atoms
     G = nx.Graph()
-
-    # Add nodes
     G.add_nodes_from(range(len(atomic_indices)))
 
     # Add edges between reactions that share atoms
@@ -219,8 +272,21 @@ def find_conn_events(event_list, atomic_indices):
 
     return event_groups, atomic_indices_groups
 
-def extract_reactant_product(input_file, first_output, last_output):
+def extract_reactant_product(
+    input_file: str,
+    first_output: str="start.xyz", 
+    last_output:str="end.xyz"
+) -> None:
+    """Extracts the first and last structures from a multi-structure XYZ file.
 
+    Args:
+        input_file: Path to the input XYZ file containing multiple structures.
+        first_output: Name of the file to be created which contains the dirst structure.
+        last_output: Name of the file to be created which contains the last structure.
+        
+    Returns:
+        None
+    """
     with open(input_file, "r") as f:
         lines = f.readlines()
 

@@ -1,11 +1,30 @@
+import ast
 import os, shutil
 import json 
 import networkx as nx
 from collections import defaultdict
 import warnings
+from math import log, lgamma
+from scipy.stats import fisher_exact
+from scipy.stats.contingency import odds_ratio
 
-def find_freq_patterns(rct_folder: str, collection_name: str, frequency: int):
+import statsmodels
+
+def find_freq_patterns(
+    rct_folder: str, 
+    collection_name: str, 
+    frequency: int
+) -> None:
+    """Find frequent hypergraph patterns in a collection of reactions.
     
+    Args:
+        rct_folder (str): Path to the folder containing reaction_list JSON files.
+        collection_name (str): Base name for output files.
+        frequency (int): Minimum frequency threshold for patterns to be considered frequent, i.e., number of distinct simulations they appear in.
+        
+    Returns:
+        None. Outputs results to `<collection_name>.out.json`.
+    """   
     miner_path = shutil.which("lcm1")
     if miner_path is None:
         warnings.warn(f"Required mining program lcm1 not found in PATH.", UserWarning)
@@ -155,10 +174,22 @@ def find_freq_patterns(rct_folder: str, collection_name: str, frequency: int):
     os.system(f'rm {collection_name}.trns {collection_name}.frq')
 
 
-def find_freq_patterns_pair(rct_folder1: str, rct_folder2: str, collection_name: str, frequency: int):
-    #abs_rct_folder1 = absoluteFilePaths(rct_folder1)
-    #abs_rct_folder2 = absoluteFilePaths(rct_folder2)
-
+def find_freq_patterns_pair(
+    rct_folder1: str, 
+    rct_folder2: str, 
+    collection_name: str, 
+    frequency: int
+) -> None:
+    """Find frequent hypergraph patterns in two collections of reactions so they share the same indices and can be compared more easily.
+    Args:
+        rct_folder1 (str): Path to the folder containing reaction_list JSON files for the first collection.
+        rct_folder2 (str): Path to the folder containing reaction_list JSON files for the second collection.
+        collection_name (str): Base name for output files.
+        frequency (int): Minimum frequency threshold for patterns to be considered frequent, i.e., number of distinct simulations they appear in.
+        
+    Returns:
+        None. Outputs results to `<collection_name>.out_1.json` and `<collection_name>.out_2.json`.
+    """
     miner_path = shutil.which("lcm1")
     if miner_path is None:
         warnings.warn(f"Required mining program lcm1 not found in PATH.", UserWarning)
@@ -370,3 +401,120 @@ def find_freq_patterns_pair(rct_folder1: str, rct_folder2: str, collection_name:
         json.dump(output_2, out)
 
     os.system(f'rm {collection_name}.trns {collection_name}.frq')
+
+    return
+
+def find_significant_patterns(
+    pattern_file_pos: str, 
+    pattern_file_neg: str, 
+    no_sim_pos: int,
+    no_sim_neg: int,
+    alpha: float,
+    use_fdr: bool,
+    bestsup: int = 0
+) -> None:
+
+    pattern2freqs = {}
+
+    num_trans_1 = int(no_sim_pos) # number positives n1
+    num_trans_2 = int(no_sim_neg) # number negatives n0
+
+    n1 = num_trans_1
+    n = num_trans_1+num_trans_2
+    use_fdr = ast.literal_eval(use_fdr)
+    print('Use FDR:', use_fdr)
+
+    # first dataset: positives
+    with open(pattern_file_pos, 'r') as file: 
+        data = json.load(file)
+
+    for pattern in data:
+        freq = pattern[1] # frequency
+        pattern[0].sort()
+        hypergraph = str(pattern[0])
+        if hypergraph not in pattern2freqs:
+            pattern2freqs[hypergraph] = [0,0]
+        pattern2freqs[hypergraph][0] = freq
+
+    # second dataset: negatives
+    with open(pattern_file_neg, 'r') as file:
+        data = json.load(file)
+
+    for pattern in data:
+        freq = pattern[1] # frequency
+        pattern[0].sort()
+        hypergraph = str(pattern[0])
+        if hypergraph not in pattern2freqs:
+            pattern2freqs[hypergraph] = [0,0]
+        pattern2freqs[hypergraph][1] = freq
+
+
+    bestsup = int(bestsup) # filtering by support
+    if bestsup == 0:
+        for minsup in range(50, 0, -1): # disregard patterns with supp < minsup    
+            cnt = 0
+            for patt in pattern2freqs:
+                frqs = pattern2freqs[patt]
+                if frqs[0] + frqs[1] >= minsup: cnt += 1
+            
+            nmin = min(n1, n-n1)
+            # minumum att p-value for fisher test at minusp = r is
+            # phi(r) =  (nmin choose r) / (n choose r) = (nmin! (n-r)!) / (n! (nmin-r)!)  if r < nmin
+            #           1 / (n choose n1)
+            if minsup < nmin: log_phi = lgamma(nmin+1) + lgamma(n-minsup+1) - lgamma(n+1) - lgamma(nmin-minsup+1)
+            else:           log_phi = lgamma(nmin+1) + lgamma(n-nmin+1) - lgamma(n+1)
+            
+            if use_fdr: # Benjamini-Yekutieli 
+                if log(log(cnt+1)+1) + log_phi > log(alpha):
+                    bestsup = minsup+1
+                    break
+            else: # use FWER: Tarone
+                if log(cnt+1) + log_phi > log(alpha):
+                    bestsup = minsup+1
+                    break
+
+    print("Minimum (combined) frequency:", bestsup)
+
+    # get patterns that could be significant
+    pattern_list = []
+    pval_list = []
+    effect_list = []
+    freqs_list = []
+
+    for pattern in pattern2freqs:
+        if pattern2freqs[pattern][0] + pattern2freqs[pattern][1] < bestsup:
+            continue # discarded 
+        
+        pattern_list.append(pattern)
+
+        table =[[ pattern2freqs[pattern][0] , n1 - pattern2freqs[pattern][0]],  
+                [ pattern2freqs[pattern][1] , n-n1-pattern2freqs[pattern][1]]]
+        
+        pval = fisher_exact(table, alternative='two-sided').pvalue
+        odds = odds_ratio(table, kind='conditional').statistic
+
+        pval_list.append(pval)
+        effect_list.append(odds)
+        freqs_list.append([pattern2freqs[pattern][0], pattern2freqs[pattern][1]])
+
+    print("Num patterns:", len(pval_list))
+
+    if use_fdr:
+        sign, qvals, _, _ = statsmodels.stats.multitest.multipletests(pval_list, alpha=alpha, method='fdr_by', is_sorted=False, returnsorted=False)
+    else:
+        sign, qvals, _, _ = statsmodels.stats.multitest.multipletests(pval_list, alpha=alpha, method='bonferroni', is_sorted=False, returnsorted=False)
+
+
+    out_list = [[eval(pattern), freqs_list[i][0], freqs_list[i][1], bool(sign[i])] for i, pattern in enumerate(pattern_list)]
+
+    with open(pattern_file_pos.split('.')[0]+'.sign.json', 'w') as out:
+        json.dump(out_list, out)
+
+    print("Significant patterns")
+    for i in range(len(pattern_list)):
+        if not sign[i]: continue
+        print(pattern_list[i])
+        print('Positive/negative freq:', freqs_list[i][0], freqs_list[i][1])
+        print('P-value and odds ratio:', pval_list[i], effect_list[i])
+        print()
+    

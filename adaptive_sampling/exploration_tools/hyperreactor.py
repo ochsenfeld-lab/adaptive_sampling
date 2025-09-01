@@ -4,7 +4,22 @@ from ..sampling_tools.amd import aMD
 from ..units import *
 
 class Hyperreactor(Reactor, aMD):
+    """ Hyperreactor class for exploratory simulations. Inherits from the Reactor and aMD classes.
+    Implements a spherical confinement potential with time-dependent radius and applies
+    accelerated molecular dynamics (aMD) to enhance sampling of reaction events.
+    
+    see:
+        Hyperreactor Dynamics: Stan-Bernhardt et. al., ACS Cent. Sci. 10, 302 (2024); https://doi.org/10.1021/acscentsci.3c01403
 
+    Args:
+        t_total : float
+            Total period of the confinement potential oscillation (in femtoseconds).
+        k_conf : float
+            Force constant for the confinement potential (in kcal/(mol A^2)).
+        mode : str
+            Mode of aMD to apply. Options are "aHRD", "GaHRD_lower", "GaHRD_upper", or "SaHRD".
+        Other parameters are inherited from the Reactor and aMD classes.
+    """
     def __init__(
         self,
         t_total: float,
