@@ -133,5 +133,3 @@ dmypy.json
 *.pth
 *.pt
 *.dcd
-
-tutorials/HRD_TBLite/hyperreactor_refinement.ipynb

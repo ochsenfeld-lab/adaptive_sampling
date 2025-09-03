@@ -5,17 +5,31 @@ from ase.units import Bohr, Hartree
 import glob
 from sella import Sella
 
-import pyGSM
+import os
+from collections import Counter
+
+from rdkit import Chem
+from rdkit.Chem import rdmolfiles
+from rdkit.Chem import Draw
+from rdkit.Chem import rdDetermineBonds
+import rdkit.Chem.rdmolops as rdmolops
+import rdkit.Chem.rdmolfiles as rdmolfiles
+
+import json
+
 from pyGSM.utilities import manage_xyz, elements
 from pyGSM.coordinate_systems import MyG, Topology
 
 import networkx as nx
 
 import subprocess as sp
-import os
 import shutil
 import re
 from pathlib import Path
+from typing import Tuple
+
+HARTREE_TO_KCAL_MOL = 627.503
+number_pattern = re.compile(r"[-+]?\d*\.\d+|\d+")
 
 # Opt/Calc functions
 
@@ -52,9 +66,9 @@ def sella_opt(
     opt = Sella(
         mol,
         internal=True,                 # use internal coordinates
-        trajectory=f"{mol_file}.traj", # trajectory file, if exists steps will be appended 
+        trajectory=f"opt_{mol_file}.traj", # trajectory file, if exists steps will be appended 
         order=order,                   # 0: Minimum, 1: Transition state
-        logfile=f"opt_logfile.out",    # optimization log file
+        logfile=None#f"opt_logfile.out",    # optimization log file
     )
     opt.run(fmax=fmax, steps=nsteps)
     print('Opt done!')
@@ -387,6 +401,237 @@ def find_viable_rcts(
     os.chdir("VIABLE_RCTS")
 
     return
+
+def find_successful_reactions() -> None:
+    """Identify directories with successful GSM runs and confirmed stationary points and move them to the 'SUCCESSFUL_RCTS' directory.
+    """
+    os.makedirs("SUCCESSFUL_RCTS", exist_ok=True)
+    for d in os.listdir('.'):
+        print(d)
+        if not d.startswith('pattern') or not os.path.isdir(d):
+            continue
+
+        ts_path = os.path.join(d, 'ts_opt/orca.out')
+
+        ts_count = confirm_freq(ts_path)
+
+        if ts_count == 1:
+            print(f"Moving {d} to SUCCESSFUL_RCTS/")
+            shutil.move(d, os.path.join("SUCCESSFUL_RCTS", d))
+
+    generate_refined_network("SUCCESSFUL_RCTS")
+
+    return
+
+def write_file(
+    content: str, 
+    filepath: str
+) -> None:
+    """Write content to a specified file, creating directories as needed.
+    
+    Args:
+        content (str): The content to write to the file.
+        filepath (str): The path to the file where the content should be written.
+        
+    Returns:
+        None. The content is written to the specified file.
+    """
+    path = Path(filepath)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with open(path, "w") as f:
+        f.write(content)
+    print(f"File written to {path}")
+
+def generate_refined_network(
+    directory: str
+) -> None:
+    """Generate a refined reaction network from successful reactions.
+    This function processes the 'SUCCESSFUL_RCTS' directory to create a refined reaction network.
+    
+    Args:
+        directory (str): The path to the directory containing successful reactions.
+        
+    Returns:
+        None. The refined reaction network is generated and saved in a JSON format.
+    """
+    print(f"Generating refined reaction network for {directory}")
+    reactions_list = extract_refined_reactions(directory)
+
+    with open("reactions_list_refined.json", "w+") as f:
+        json.dump(reactions_list, f)
+    f.close()
+
+    return
+
+# Open the file and read line by line
+def determine_charge(
+    dirname: str, 
+    pattern="charge_mult*"
+) -> Tuple[int, int]:
+    """Determine the charge and multiplicity from a specified file in a directory.
+    
+    Args:
+        dirname (str): The directory to search for the file.
+        pattern (str, optional): The filename pattern to search for. Defaults to "charge_mult*".
+        
+    Returns:
+        Tuple[int, int]: A tuple containing the charge and multiplicity.
+    """
+    for filename in dirname.glob(pattern):
+        with open(filename, "r") as f:
+            for line in f:
+                charge, mult = map(int, line.strip().split("\t"))  # Split by tab and convert to integers
+    return charge, mult
+
+def extract_refined_reactions(root_dir: Path="SUCCESSFUL_RCTS", prefixes: tuple=("start", "end", "ts")):
+    reactions_list = []
+    event_counter = 1
+    for d in root_dir.glob("PAT*"):
+        #print(d)
+        energies = []
+        reaction = []
+        for f in d.glob("pattern*"):
+            reaction.append(f"Event {event_counter}")
+            reaction.append(get_reaction_time(f))
+        transition_state = []
+        for prefix in prefixes:
+            prefix_path = d / f"{prefix}_opt" / "freq_analyt" / "vibfreqs.out"
+            if prefix_path.exists():  # Check if the file exists
+                with prefix_path.open() as file:
+                    for line in file:
+                        if "Electronic energy + free energy:" in line:
+                            match = number_pattern.findall(line)
+                            if len(match) == 1:
+                                extracted_number = float(match[0])  # Convert to float
+                                energies.append(extracted_number)
+
+            charge, mult = determine_charge(d)
+            smiles = xyz2mol(d / f"{prefix}_opt" / "freq_analyt" / "optimizer.xyz", charge=charge)
+            if "ts" not in prefix:
+                reaction.append(smiles.split("."))
+            else:
+                transition_state = smiles.split(".")
+
+        count1, count2 = Counter(reaction[2]), Counter(reaction[3])
+
+        # Determine the number of times to remove each common element
+        if count1 != count2:
+            cat = count1 & count2  # This gets the minimum count directly
+            # Create filtered lists
+            reaction[2] = remove_common_occurrences(reaction[2], cat.copy())  # Use copy to avoid modifying original
+            reaction[3] = remove_common_occurrences(reaction[3], cat.copy())
+        else:
+            cat = Counter()
+
+        # remove atom maps from SMILES as we have already determined the catalysts
+        for i, smiles in enumerate(reaction[2]):
+            reaction[2][i] = removeAtomMap(smiles)
+            #print(elem)
+        #print(reaction[2])
+
+        for i, smiles in enumerate(reaction[3]):
+            reaction[3][i] = removeAtomMap(smiles)
+
+        new_cat=[]
+        for smiles in cat:
+            new_smiles = removeAtomMap(smiles)
+            new_cat.append(new_smiles)
+
+        cat = Counter(new_cat)
+
+        # add important parameters to the dictionary
+        reaction_free_energy = (energies[1] - energies[0]) * HARTREE_TO_KCAL_MOL
+        activation_free_energy = (energies[-1] - energies[0]) * HARTREE_TO_KCAL_MOL
+        reaction.append({"rxn_free_energy": reaction_free_energy, "rxn_barrier": activation_free_energy, "ts": transition_state, "cat": cat, "energies": energies, "dir": str(d)})
+        reaction[0] = "".join(reaction[0])
+        reactions_list.append(reaction)
+        event_counter += 1
+
+    return reactions_list
+
+def get_reaction_time(
+    raw_rct_list: str
+) -> list:
+    """Extract reaction times from a specified file.
+    
+    Args:
+        pattern_file (str): Path to the file containing reaction time information.
+        
+    Returns:
+        list: A list of reaction times extracted from the file.
+    """
+    ts = []
+    if raw_rct_list.exists():  # Check if the file exists
+        with raw_rct_list.open() as file:
+            for line in file:
+                if "TIME:" in line:
+                    match = number_pattern.findall(line)
+                    ts.append(int(float(match[0]) / 0.5 / 50.0))
+    return ts
+
+def xyz2mol(
+    xyz_file: str=None,
+    charge: int = 0
+) -> str:
+    """Convert an XYZ file to a SMILES string using RDKit.
+    
+    Args:
+        xyz_file (str): Path to the XYZ file.
+        charge (int, optional): The charge of the molecule. Defaults to 0.
+        
+    Returns:
+        str: The SMILES representation of the molecule.
+    """
+    mol = rdmolfiles.MolFromXYZFile(str(xyz_file))
+    conn_mol = Chem.Mol(mol)
+    rdDetermineBonds.DetermineBonds(conn_mol, charge=charge, useAtomMap=True)
+    smiles = Chem.MolToSmiles(conn_mol)
+    return smiles
+
+def removeAtomMap(
+    smiles: str
+) -> str:
+    """Remove atom mapping numbers from a SMILES string.
+    
+    Args:
+        smiles (str): The input SMILES string with atom mapping numbers.
+        
+    Returns:
+        str: The SMILES string without atom mapping numbers.
+    """
+    # transform smiles to mol again and back for uniformization and avoid adjustHs
+    params = rdmolfiles.SmilesParserParams()
+    params.removeHs=False
+    params.sanitize = False
+    mol = rdmolfiles.MolFromSmiles(smiles, params)
+
+    for atom in mol.GetAtoms():
+        atom.SetAtomMapNum(0)
+
+    mol.UpdatePropertyCache(strict=False)
+    rdmolops.SanitizeMol(mol, Chem.SanitizeFlags.SANITIZE_ALL ^ Chem.SanitizeFlags.SANITIZE_ADJUSTHS, catchErrors=True)
+    smiles = rdmolfiles.MolToSmiles(mol)
+    return smiles
+
+def remove_common_occurrences(
+    lst: list, 
+    common_counts: Counter
+) -> list:
+    """Remove common occurrences from a list based on a Counter of common elements.
+    Args:
+        lst (list): The input list from which to remove common occurrences.
+        common_counts (Counter): A Counter object containing elements to remove and their counts.
+
+    Returns:
+        list: A new list with common occurrences removed.
+    """
+    new_list = []
+    for item in lst:
+        if common_counts[item] > 0:
+            common_counts[item] -= 1
+        else:
+            new_list.append(item)
+    return new_list
 
 
 
