@@ -133,3 +133,5 @@ dmypy.json
 *.pth
 *.pt
 *.dcd
+!compressed_*.npz
+!mols.dat
