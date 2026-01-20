@@ -68,7 +68,8 @@ class NanoNetwork(nx.DiGraph):
             if edge_tuple not in time_edge_dict:
                 time_edge_dict[edge_tuple] = [ts*0.5*50 for ts in elem[1]] 
             else:
-                time_edge_dict[edge_tuple].append(ts*0.5*50 for ts in elem[1])
+                pass
+                #time_edge_dict[edge_tuple].append(ts*0.5*50 for ts in elem[1])
 
         # define color palette based on event number
         RGB_tuples = sns.color_palette("Spectral", n_colors=len(edges_list))
@@ -139,6 +140,8 @@ class NanoNetwork(nx.DiGraph):
         for u, v, data in self.graph.edges(data=True):
             data['width'] = data.get('weight', 1)  # use 'weight' or set custom width
 
+        x = self.graph.nodes()
+        print(type(x))
         pickle.dump(self.graph, open('star_exp_graph.pickle', 'wb'))
         pickle.dump(hypergraph, open('hypergraph.pickle', 'wb'))
                        
@@ -203,7 +206,8 @@ class NanoNetwork(nx.DiGraph):
             if edge_tuple not in time_edge_dict:
                 time_edge_dict[edge_tuple] = [ts*0.5*50 for ts in elem[1]] 
             else:
-                time_edge_dict[edge_tuple].append(ts*0.5*50 for ts in elem[1])
+                pass
+                #time_edge_dict[edge_tuple].append(ts*0.5*50 for ts in elem[1])
 
         # define color palette based on event number
         RGB_tuples = sns.color_palette("Spectral", n_colors=len(edges_list))

@@ -469,11 +469,13 @@ def construct_reactions_list(
                
                 set_reactants = set(smiles_reaction[0])
                 set_products = set(smiles_reaction[1])
-                if [set_reactants, set_products] not in reactions:
+                if [[0, start_ts_index], set_reactants, set_products, atom_list_sorted] not in reactions:
+                #if [set_reactants, set_products] not in reactions:
                     event_counter += 1
                     events.append(event_counter)
                     time_steps.append([0, start_ts_index])
                     reactions.append([set_reactants, set_products])
+                    reactions.append([[0, start_ts_index], set_reactants, set_products, atom_list_sorted])
                     atom_indices.append(atom_index_list)
 
                     reactions_list.append(
@@ -504,11 +506,13 @@ def construct_reactions_list(
                     )
                     set_reactants = set(smiles_reaction[0])
                     set_products = set(smiles_reaction[1])
-                    if [set_reactants, set_products] not in reactions:
+                    #if [set_reactants, set_products] not in reactions:
+                    if [[ts, ts + period_ts_steps], set_reactants, set_products, atom_list_sorted] not in reactions:
                         event_counter += 1
                         events.append(event_counter)
                         time_steps.append([ts, ts + period_ts_steps])
-                        reactions.append([set_reactants, set_products])
+                        #reactions.append([set_reactants, set_products])
+                        reactions.append([[ts, ts + period_ts_steps], set_reactants, set_products, atom_list_sorted])
                         atom_indices.append(atom_index_list)
 
                         reactions_list.append(
