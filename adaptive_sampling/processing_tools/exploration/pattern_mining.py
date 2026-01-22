@@ -59,7 +59,8 @@ def find_freq_patterns(
             if hyperedge not in hyperedge2id:
                 hyperedge2id[hyperedge] = len(hyperedge2id)
 
-            transaction.append(hyperedge2id[hyperedge])
+            if hyperedge2id[hyperedge] not in transaction:
+                transaction.append(hyperedge2id[hyperedge])
         
         transaction.sort()
         with open(collection_name+'.trns', 'a') as out:
@@ -227,7 +228,8 @@ def find_freq_patterns_pair(
             if hyperedge not in hyperedge2id:
                 hyperedge2id[hyperedge] = len(hyperedge2id)
 
-            transaction.append(hyperedge2id[hyperedge])
+            if hyperedge2id[hyperedge] not in transaction:
+                transaction.append(hyperedge2id[hyperedge])
         
         transaction.sort()
         transactions_1.append(transaction)
@@ -256,7 +258,8 @@ def find_freq_patterns_pair(
             if hyperedge not in hyperedge2id:
                 hyperedge2id[hyperedge] = len(hyperedge2id)
 
-            transaction.append(hyperedge2id[hyperedge])
+            if hyperedge2id[hyperedge] not in transaction:
+                transaction.append(hyperedge2id[hyperedge])
         
         transaction.sort()
         transactions_2.append(transaction)

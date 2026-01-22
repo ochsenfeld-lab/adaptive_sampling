@@ -207,7 +207,6 @@ class NanoNetwork(nx.DiGraph):
                 time_edge_dict[edge_tuple] = [ts*0.5*50 for ts in elem[1]] 
             else:
                 pass
-                #time_edge_dict[edge_tuple].append(ts*0.5*50 for ts in elem[1])
 
         # define color palette based on event number
         RGB_tuples = sns.color_palette("Spectral", n_colors=len(edges_list))
