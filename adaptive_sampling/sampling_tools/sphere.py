@@ -114,12 +114,9 @@ class Sphere():
                     dbase = (f * self.k_conf_max * mass * (r - self.r_max) / r
                         + (1. - f) * self.k_conf_min * mass * (r - self.r_min) / r)
 
-            elif self.confinement_method == "smooth-step":
+            elif self.confinement_method in ["smooth", "smooth-step"]:
                 dbase = self._calc_dbase(r, mass)
 
-            elif self.confinement_method == "smooth":
-                dbase = self._calc_dbase(r, mass)
-            
             bias_force[3*i+0] += dbase * xx
             bias_force[3*i+1] += dbase * yy
             bias_force[3*i+2] += dbase * zz
