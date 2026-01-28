@@ -2,7 +2,17 @@ import numpy as np
 from .. import units
 
 class Sphere():
+    """Class to apply spherical confinement potential during MD simulation.
 
+    Args:
+        the_md (object): Molecular dynamics object that provides sampling data.
+        k_conf (float): Confinement force constant in kcal/(mol·Å²).
+        r_min (float): Minimum radius for spherical confinement in Å.
+        r_max (float): Maximum radius for spherical confinement in Å.
+        t_period (float): Period for contraction/expansion of spherical confinement in fs.
+        t_shift (float): Time shift to start the confinement in fs.
+        confinement_method (str): Method for confinement ('smooth-step', 'smooth', 'step', 'constant').
+    """ 
     def __init__(
         self, 
         the_md: object=None, 
@@ -13,7 +23,6 @@ class Sphere():
         t_shift: float = 0.0,
         confinement_method: str = 'smooth-step'
     ):
-
         if the_md is None:
             raise ValueError(" >>> ERROR: Molecular dynamics object has to be provided for spherical confinment.")
         self.the_md = the_md
@@ -31,10 +40,10 @@ class Sphere():
         self.t_shift = t_shift
 
         # minimum and maximum radius for spherical confinment in atomic units
-        if self.r_min is 0.0 or self.r_max is 0.0:
+        if r_min == 0.0 or r_max == 0.0:
             raise ValueError(" >>> ERROR: Both minimum and maximum radius for spherical confinment have to be provided and > 0.")
-        self.r_min = r_min * units.BOHR_to_ANGSTROM
-        self.r_max = r_max * units.BOHR_to_ANGSTROM
+        self.r_min = r_min / units.BOHR_to_ANGSTROM
+        self.r_max = r_max / units.BOHR_to_ANGSTROM
 
         # confinement method
         if confinement_method.lower() not in ['smooth-step', 'smooth', 'step', 'constant']:
@@ -56,12 +65,13 @@ class Sphere():
             f_conf: Confinement force in atomic units.
         """
         md_state = self.the_md.get_sampling_data()
+        self.bias_pot = 0.0
         bias_force = np.zeros_like(md_state.coords)
         
         t = md_state.step * md_state.dt - self.t_shift  # current time in fs, starting at time shift
-
+        
         # get atom wise confinement forces
-        for i in self.atoms:
+        for i in range(int(md_state.natoms)):
             xx = md_state.coords[3*i+0]
             yy = md_state.coords[3*i+1]
             zz = md_state.coords[3*i+2]
@@ -69,29 +79,33 @@ class Sphere():
             mass = self.the_md.mass[i]
 
             if self.confinement_method == "constant" or t < 0.0:
-                maxr = np.max([0,r-self.r_max])
-                self.bias_pot += 0.5e0 * self.k_conf_max * np.power(maxr,2.e0) * mass
-                dbase = self.k_conf_max * maxr / r * mass
-
-            if self.confinement_method == "step":
-                f = np.heaviside(np.floor(t / (self.t_contract + self.t_expand)) 
-                    - t / (self.t_contract + self.t_expand) 
-                    + self.t_expand / (self.t_contract + self.t_expand))
-                U_max = mass * self.k_conf_max / 2.e0 * np.power((r - self.r_max),2) * np.heaviside(r - self.r_max)
-                U_min = mass * self.k_conf_min / 2.e0 * np.power((r - self.r_min),2) * np.heaviside(r - self.r_min)
-                self.bias_pot += f * U_max + (1 - f) * U_min
-
-                dbase = (f * self.k_conf_max * mass * (r - self.r_max) / r
-                    + (1 - f) * self.k_conf_min * mass * (r - self.r_min) / r)
-
-            elif self.confinement_method == "smooth-step":
-                radius = np.min(self.r_max + (self.r_max - self.r_min) * np.sin(np.pi/2*np.cos(t/(self.t_expand + self.t_contract)*2*np.pi)) , self.r_max)   
                 if r == 0.e0:
                     dbase = 0.e0
                 else:
-                    maxr = np.max([0,r-radius/units.BOHR_to_ANGSTROM])
+                    maxr = np.max([0.0,r-self.r_max])
                     self.bias_pot += 0.5e0 * self.k_conf_max * np.power(maxr,2.e0) * mass
+                    dbase = self.k_conf_max * maxr / r * mass
 
+            elif self.confinement_method == "step":
+                f = np.heaviside(np.floor(t / (self.t_contract + self.t_expand)) 
+                    - t / (self.t_contract + self.t_expand) 
+                    + self.t_expand / (self.t_contract + self.t_expand), 0.0)
+                U_max = mass * self.k_conf_max / 2.e0 * np.power((r - self.r_max),2) * np.heaviside(r - self.r_max, 0.0)
+                U_min = mass * self.k_conf_min / 2.e0 * np.power((r - self.r_min),2) * np.heaviside(r - self.r_min, 0.0)
+                self.bias_pot += f * U_max + (1 - f) * U_min
+                if r == 0.e0:
+                    dbase = 0.e0
+                else:
+                    dbase = (f * self.k_conf_max * mass * (r - self.r_max) / r
+                        + (1. - f) * self.k_conf_min * mass * (r - self.r_min) / r)
+
+            elif self.confinement_method == "smooth-step":
+                radius = np.min([self.r_max + (self.r_max - self.r_min) * np.sin(np.pi/2*np.cos(t/(self.t_expand + self.t_contract)*2*np.pi)) , self.r_max])   
+                if r == 0.e0:
+                    dbase = 0.e0
+                else:
+                    maxr = np.max([0.0,r-radius])
+                    self.bias_pot += 0.5e0 * self.k_conf_max * np.power(maxr,2.e0) * mass
                     dbase = self.k_conf_max * maxr/r * mass
 
             elif self.confinement_method == "smooth":
@@ -99,9 +113,8 @@ class Sphere():
                 if r == 0.e0:
                     dbase = 0.e0
                 else:
-                    maxr = np.max([0,r-radius/units.BOHR_to_ANGSTROM])
+                    maxr = np.max([0.0,r-radius])
                     self.bias_pot += 0.5e0 * self.k_conf_max * np.power(maxr,2.e0) * mass
-
                     dbase = self.k_conf_max * maxr / r * mass
 
             bias_force[3*i+0] += dbase * xx
