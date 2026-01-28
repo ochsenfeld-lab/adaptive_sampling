@@ -12,6 +12,7 @@ class Sphere():
         t_period (float): Period for contraction/expansion of spherical confinement in fs.
         t_shift (float): Time shift to start the confinement in fs.
         confinement_method (str): Method for confinement ('smooth-step', 'smooth', 'step', 'constant').
+        diffusion_assisted (bool): Whether to use diffusion assisted expansion.
     """ 
     def __init__(
         self, 
@@ -21,7 +22,8 @@ class Sphere():
         r_max: float = 0.0, 
         t_period: float = None, 
         t_shift: float = 0.0,
-        confinement_method: str = 'smooth-step'
+        confinement_method: str = 'smooth-step',
+        diffusion_assisted: bool = False,
     ):
         if the_md is None:
             raise ValueError(" >>> ERROR: Molecular dynamics object has to be provided for spherical confinment.")
@@ -53,7 +55,9 @@ class Sphere():
             print(" >>> WARNING: 'constant' confinement method does not depend on time period. Setting time period to None.")
             self.t_period = None
 
+        self.diffusion_assisted = diffusion_assisted
         self.bias_pot = 0.0
+        self.radius = self.r_max
 
     def step_bias(self) -> np.array:
         """Calculates the spherical confinement potential and force.
@@ -100,26 +104,43 @@ class Sphere():
                         + (1. - f) * self.k_conf_min * mass * (r - self.r_min) / r)
 
             elif self.confinement_method == "smooth-step":
-                radius = np.min([self.r_max + (self.r_max - self.r_min) * np.sin(np.pi/2*np.cos(t/(self.t_expand + self.t_contract)*2*np.pi)) , self.r_max])   
-                if r == 0.e0:
-                    dbase = 0.e0
-                else:
-                    maxr = np.max([0.0,r-radius])
-                    self.bias_pot += 0.5e0 * self.k_conf_max * np.power(maxr,2.e0) * mass
-                    dbase = self.k_conf_max * maxr/r * mass
+                self.radius = np.min([self.r_max + (self.r_max - self.r_min) * np.sin(np.pi/2*np.cos(t/(self.t_expand + self.t_contract)*2*np.pi)) , self.r_max])   
+                dbase = self._calc_dbase(r, mass)
 
             elif self.confinement_method == "smooth":
-                radius = self.r_min + (self.r_max - self.r_min) * (1e0 + np.cos(t/(self.t_expand + self.t_contract)*2*np.pi))
-                if r == 0.e0:
-                    dbase = 0.e0
-                else:
-                    maxr = np.max([0.0,r-radius])
-                    self.bias_pot += 0.5e0 * self.k_conf_max * np.power(maxr,2.e0) * mass
-                    dbase = self.k_conf_max * maxr / r * mass
-
+                self.radius = self.r_min + (self.r_max - self.r_min) * (1e0 + np.cos(t/(self.t_expand + self.t_contract)*2*np.pi))
+                dbase = self._calc_dbase(r, mass)
+            
             bias_force[3*i+0] += dbase * xx
             bias_force[3*i+1] += dbase * yy
             bias_force[3*i+2] += dbase * zz
         
         return bias_force
+
+    def _calc_dbase(self, r, mass) -> float:
+        """Calculate dbase with diffusion assisted expansion option.
+        """
+        if self.confinement_method not in ['smooth-step', 'smooth'] and self.diffusion_assisted:
+            raise ValueError(" >>> ERROR: Diffusion assisted expansion can only be applied with 'smooth-step' or 'smooth' confinement methods.")
+
+        if r == 0.e0:
+            dbase = 0.e0
+        else:
+            if self.diffusion_assisted:
+                if self.radius < self.r_max: # confine
+                    rconf = np.max([0.e0,r-self.radius])
+                else:
+                    if r < self.r_min:
+                        rconf = r - self.r_min
+                    elif r > self.r_max:
+                        rconf = r - self.r_max
+                    else:
+                        rconf = 0.e0
+            else:
+                rconf = np.max([0.e0,r-self.radius])
+
+            self.bias_pot += 0.5e0 * self.k_conf_max * np.power(rconf,2.e0) * mass
+            dbase = self.k_conf_max * rconf/r * mass
+
+        return dbase
         
