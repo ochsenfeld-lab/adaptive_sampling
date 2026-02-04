@@ -257,8 +257,8 @@ def get_reaction_traj(traj_file: str, sim_df_file: str, reactions_list_file: str
     t_end = max(timesteps)
 
     # get XYZ between the time steps and write file
-    f_traj = open(path + "_" + str(event_no[0]) + "_" + str(event_no[-1]) + ".xyz", "a+")
-    f_spin_mult = open(path + "_" + str(event_no[0]) + "_" + str(event_no[-1]) + ".txt", "a+")
+    f_traj = open(path + "_" + str(event_no[0]) + "_" + str(event_no[-1]) + ".xyz", "w")
+    f_charge_mult = open(path + "_" + str(event_no[0]) + "_" + str(event_no[-1]) + ".txt", "w")
 
     #total_charge = np.array(len(ts_range))
     #total_spin = 0
@@ -354,8 +354,8 @@ def get_reaction_traj(traj_file: str, sim_df_file: str, reactions_list_file: str
     #print(total_charge)
     #print(total_spin)
 
-    f_spin_mult.write(str(np.sum(total_charge)) + "\t")
-    f_spin_mult.write(str(np.sum(total_spin) + 1))
+    f_charge_mult.write(str(np.sum(total_charge)) + "\t")
+    f_charge_mult.write(str(np.sum(total_spin) + 1))
     
     f_traj.close()
-    f_spin_mult.close()
+    f_charge_mult.close()

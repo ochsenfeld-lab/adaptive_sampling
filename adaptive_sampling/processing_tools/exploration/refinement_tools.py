@@ -1,6 +1,5 @@
 import ase
 from ase.io import read, write
-from ase.units import Bohr, Hartree
 
 import glob
 from sella import Sella
@@ -10,10 +9,8 @@ from collections import Counter
 
 from rdkit import Chem
 from rdkit.Chem import rdmolfiles
-from rdkit.Chem import Draw
 from rdkit.Chem import rdDetermineBonds
 import rdkit.Chem.rdmolops as rdmolops
-import rdkit.Chem.rdmolfiles as rdmolfiles
 
 import json
 
@@ -282,7 +279,8 @@ def rearrange_top(
     return
 
 def confirm_freq(
-    output_file: str
+    output_file: str,
+    search_term: str
 ) -> int:
     """Check the output file for imaginary frequencies.
     
@@ -295,30 +293,38 @@ def confirm_freq(
     try:
         with open(output_file, 'r') as f:
             for line in f:
-                if 'imaginary' in line.lower():
-                    match = re.search(r'imaginary perturbations\s+\.+\s+(\d+)', line)
+                if search_term in line.lower():
+                    # Try number before term
+                    match = re.search(rf'(\d+)\s+{re.escape(search_term)}', line)
+                    if match:
+                        return int(match.group(1))
+                    # Try term then dots then number
+                    match = re.search(rf'{re.escape(search_term)}\s+\.+\s+(\d+)', line)
                     if match:
                         return int(match.group(1))
     except FileNotFoundError:
         pass
     return 
 
-def find_minima():
+def find_minima(start_output: str='start_opt/orca.out',
+                end_output: str='end_opt/orca.out',
+                search_term: str='imaginary perturbations'
+                ) -> None:
     """Identify directories where both start and end structures are minima (no imaginary frequencies).
     Moves such directories to a new directory named 'MIN_FOUND'.
     """
     os.makedirs("MIN_FOUND", exist_ok=True)
 
     for d in os.listdir('.'):
-        print(d)
         if not d.startswith('pattern') or not os.path.isdir(d):
             continue
 
-        start_path = os.path.join(d, 'start_opt/orca.out')
-        end_path = os.path.join(d, 'end_opt/orca.out')
+        print(d)
+        start_path = os.path.join(d, start_output)
+        end_path = os.path.join(d, end_output)
 
-        start_count = confirm_freq(start_path)
-        end_count = confirm_freq(end_path)
+        start_count = confirm_freq(start_path, search_term)
+        end_count = confirm_freq(end_path, search_term)
 
         if start_count == 0 and end_count == 0:
             print(f"Moving {d} to MIN_FOUND/")
@@ -391,7 +397,10 @@ def find_viable_rcts(
                     for pattern in files_to_copy:              
                         for file_path in sorted(Path().glob(pattern)):
                             if file_path.is_file():
-                                shutil.copy(file_path, f"ts_opt/{file_path.name}")
+                                if file_path.name.startswith("TSnode"):
+                                    shutil.copy(file_path, f"ts_opt/ts.xyz")
+                                else:
+                                    shutil.copy(file_path, f"ts_opt/{file_path.name}")
 
                     os.chdir("../..")
                     #print(os.getcwd())
@@ -402,7 +411,7 @@ def find_viable_rcts(
 
     return
 
-def find_successful_reactions() -> None:
+def find_successful_reactions(search_term: str='imaginary perturbations') -> None:
     """Identify directories with successful GSM runs and confirmed stationary points and move them to the 'SUCCESSFUL_RCTS' directory.
     """
     os.makedirs("SUCCESSFUL_RCTS", exist_ok=True)
@@ -413,7 +422,7 @@ def find_successful_reactions() -> None:
 
         ts_path = os.path.join(d, 'ts_opt/orca.out')
 
-        ts_count = confirm_freq(ts_path)
+        ts_count = confirm_freq(ts_path, search_term)
 
         if ts_count == 1:
             print(f"Moving {d} to SUCCESSFUL_RCTS/")
@@ -483,11 +492,13 @@ def determine_charge(
                 charge, mult = map(int, line.strip().split("\t"))  # Split by tab and convert to integers
     return charge, mult
 
-def extract_refined_reactions(root_dir: Path="SUCCESSFUL_RCTS", prefixes: tuple=("start", "end", "ts")):
+def extract_refined_reactions(root_dir: Path="SUCCESSFUL_RCTS", prefixes: tuple=("start", "end", "ts"), 
+                              search_term: str="Final Gibbs free energy") -> list:
+    root_dir = Path(root_dir).resolve()
     reactions_list = []
     event_counter = 1
-    for d in root_dir.glob("PAT*"):
-        #print(d)
+    for d in root_dir.glob("pattern*"):
+        print(d)
         energies = []
         reaction = []
         for f in d.glob("pattern*"):
@@ -495,22 +506,24 @@ def extract_refined_reactions(root_dir: Path="SUCCESSFUL_RCTS", prefixes: tuple=
             reaction.append(get_reaction_time(f))
         transition_state = []
         for prefix in prefixes:
-            prefix_path = d / f"{prefix}_opt" / "freq_analyt" / "vibfreqs.out"
+            prefix_path = d / f"{prefix}_opt" / "orca.out"
             if prefix_path.exists():  # Check if the file exists
                 with prefix_path.open() as file:
                     for line in file:
-                        if "Electronic energy + free energy:" in line:
+                        if search_term in line:
                             match = number_pattern.findall(line)
                             if len(match) == 1:
                                 extracted_number = float(match[0])  # Convert to float
                                 energies.append(extracted_number)
 
             charge, mult = determine_charge(d)
-            smiles = xyz2mol(d / f"{prefix}_opt" / "freq_analyt" / "optimizer.xyz", charge=charge)
+            smiles = xyz2mol(d / f"{prefix}_opt" / f"opt_{prefix}.xyz", charge=charge)
             if "ts" not in prefix:
                 reaction.append(smiles.split("."))
             else:
                 transition_state = smiles.split(".")
+                for i,smiles in enumerate(transition_state):
+                    transition_state[i] = removeAtomMap(smiles)
 
         count1, count2 = Counter(reaction[2]), Counter(reaction[3])
 
@@ -526,8 +539,6 @@ def extract_refined_reactions(root_dir: Path="SUCCESSFUL_RCTS", prefixes: tuple=
         # remove atom maps from SMILES as we have already determined the catalysts
         for i, smiles in enumerate(reaction[2]):
             reaction[2][i] = removeAtomMap(smiles)
-            #print(elem)
-        #print(reaction[2])
 
         for i, smiles in enumerate(reaction[3]):
             reaction[3][i] = removeAtomMap(smiles)
