@@ -8,7 +8,7 @@ from math import log, lgamma
 from scipy.stats import fisher_exact
 from scipy.stats.contingency import odds_ratio
 
-import statsmodels
+import statsmodels.stats.multitest
 
 def find_freq_patterns(
     rct_folder: str, 
@@ -413,7 +413,7 @@ def find_significant_patterns(
     no_sim_pos: int,
     no_sim_neg: int,
     alpha: float,
-    use_fdr: bool,
+    use_fdr: str = 'False',
     bestsup: int = 0
 ) -> None:
 

@@ -2,8 +2,10 @@ import ase
 from ase.io import read, write
 
 import glob
-from sella import Sella
-
+try:
+    from sella import Sella
+except (ImportError, RuntimeError) as e:
+    print(f"Sella not imported due to incompatibilities: {e}")
 import os
 from collections import Counter
 
@@ -411,24 +413,25 @@ def find_viable_rcts(
 
     return
 
-def find_successful_reactions(search_term: str='imaginary perturbations') -> None:
+def find_successful_reactions(search_term_freq: str='imaginary perturbations',
+                              search_term_gibbs: str='Final Gibbs free energy',
+                              out_file: str="orca.out") -> None:
     """Identify directories with successful GSM runs and confirmed stationary points and move them to the 'SUCCESSFUL_RCTS' directory.
     """
     os.makedirs("SUCCESSFUL_RCTS", exist_ok=True)
     for d in os.listdir('.'):
-        print(d)
         if not d.startswith('pattern') or not os.path.isdir(d):
             continue
 
-        ts_path = os.path.join(d, 'ts_opt/orca.out')
+        ts_path = os.path.join(d, f'ts_opt/{out_file}')
 
-        ts_count = confirm_freq(ts_path, search_term)
+        ts_count = confirm_freq(ts_path, search_term_freq)
 
         if ts_count == 1:
             print(f"Moving {d} to SUCCESSFUL_RCTS/")
             shutil.move(d, os.path.join("SUCCESSFUL_RCTS", d))
 
-    generate_refined_network("SUCCESSFUL_RCTS")
+    generate_refined_network(directory="SUCCESSFUL_RCTS", search_term=search_term_gibbs, out_file=out_file)
 
     return
 
@@ -452,7 +455,10 @@ def write_file(
     print(f"File written to {path}")
 
 def generate_refined_network(
-    directory: str
+    directory: str,
+    prefixes: tuple=("start", "end", "ts"),
+    search_term: str="Final Gibbs free energy",
+    out_file: str="orca.out"
 ) -> None:
     """Generate a refined reaction network from successful reactions.
     This function processes the 'SUCCESSFUL_RCTS' directory to create a refined reaction network.
@@ -464,7 +470,8 @@ def generate_refined_network(
         None. The refined reaction network is generated and saved in a JSON format.
     """
     print(f"Generating refined reaction network for {directory}")
-    reactions_list = extract_refined_reactions(directory)
+    reactions_list = extract_refined_reactions(root_dir=directory, prefixes=prefixes, 
+                                               search_term=search_term, out_file=out_file)
 
     with open("reactions_list_refined.json", "w+") as f:
         json.dump(reactions_list, f)
@@ -493,7 +500,7 @@ def determine_charge(
     return charge, mult
 
 def extract_refined_reactions(root_dir: Path="SUCCESSFUL_RCTS", prefixes: tuple=("start", "end", "ts"), 
-                              search_term: str="Final Gibbs free energy") -> list:
+                              search_term: str="Final Gibbs free energy", out_file: str="orca.out") -> list:
     root_dir = Path(root_dir).resolve()
     reactions_list = []
     event_counter = 1
@@ -506,7 +513,7 @@ def extract_refined_reactions(root_dir: Path="SUCCESSFUL_RCTS", prefixes: tuple=
             reaction.append(get_reaction_time(f))
         transition_state = []
         for prefix in prefixes:
-            prefix_path = d / f"{prefix}_opt" / "orca.out"
+            prefix_path = d / f"{prefix}_opt" / out_file
             if prefix_path.exists():  # Check if the file exists
                 with prefix_path.open() as file:
                     for line in file:
