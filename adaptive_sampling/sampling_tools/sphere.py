@@ -94,7 +94,7 @@ class Sphere():
             yy = md_state.coords[3*i+1]
             zz = md_state.coords[3*i+2]
             r  = np.sqrt(xx*xx+yy*yy+zz*zz)
-            mass = self.the_md.mass[i]
+            mass = md_state.mass[i]
 
             if self.confinement_method == "constant" or t < 0.0:
                 if r == 0.e0:
