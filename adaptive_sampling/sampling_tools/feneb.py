@@ -4,7 +4,7 @@ from typing import List, Tuple
 
 try:
     from ase import io
-    from ase.neb import NEB
+    from ase.mep import NEB
 except ImportError:
     import sys as _sys
 
