@@ -23,7 +23,7 @@ class Sphere():
         t_period: float = None, 
         t_shift: float = 0.0,
         confinement_method: str = 'smooth-step',
-        diffusion_assisted: bool = False,
+        diffusion_assisted: bool = True,
     ):
         if the_md is None:
             raise ValueError(" >>> ERROR: Molecular dynamics object has to be provided for spherical confinment.")
