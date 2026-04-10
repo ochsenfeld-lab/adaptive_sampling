@@ -11,6 +11,7 @@ from .harmonic_constraint import *
 from .utils import *
 from .opes import *
 from .opeseabf import *
+from .sphere import *
 
 __all__ = [
     "ABF",
@@ -25,4 +26,5 @@ __all__ = [
     "OPES",
     "OPESeABF",
     "Harmonic_Constraint",
+    "Sphere"
 ]
